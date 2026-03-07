@@ -1,6 +1,6 @@
 services:
   - type: web
     name: player-beat
-    runtime: static
-    buildCommand: echo "No build needed"
-    staticPublishPath: .
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
