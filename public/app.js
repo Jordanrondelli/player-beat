@@ -297,9 +297,10 @@ function drawWaveform(currentTime) {
   waveformCtx.lineWidth = 1;
   waveformCtx.stroke();
 
-  // Glow elements — intensify blur + opacity on kicks
-  if (glow1El) { glow1El.style.opacity = .3 + kickDecay * 1.4; glow1El.style.filter = `blur(${35 + kickDecay * 25}px)`; }
-  if (glow2El) { glow2El.style.opacity = .15 + kickDecay * 1.1; glow2El.style.filter = `blur(${20 + kickDecay * 15}px)`; }
+  // Glow elements — intensify blur + opacity on kicks, clip to played side only
+  const glowClip = `inset(0 ${100 - (playheadX / w) * 100}% 0 0)`;
+  if (glow1El) { glow1El.style.opacity = .3 + kickDecay * 1.4; glow1El.style.filter = `blur(${35 + kickDecay * 25}px)`; glow1El.style.clipPath = glowClip; }
+  if (glow2El) { glow2El.style.opacity = .15 + kickDecay * 1.1; glow2El.style.filter = `blur(${20 + kickDecay * 15}px)`; glow2El.style.clipPath = glowClip; }
 
   // Background kick pump (scale only, no brightness flash)
   const bgPump = 1 + kickDecay * .02;
@@ -335,11 +336,11 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
 
   // Played region gradient
   const gradPlayed = ctx.createLinearGradient(0, centerY - h * .42, 0, centerY + h * .42);
-  gradPlayed.addColorStop(0, 'rgba(180,40,20,0.55)');
-  gradPlayed.addColorStop(.2, 'rgba(235,65,35,0.95)');
-  gradPlayed.addColorStop(.5, 'rgba(250,80,45,1)');
-  gradPlayed.addColorStop(.8, 'rgba(235,65,35,0.95)');
-  gradPlayed.addColorStop(1, 'rgba(180,40,20,0.55)');
+  gradPlayed.addColorStop(0, 'rgba(150,15,10,0.55)');
+  gradPlayed.addColorStop(.2, 'rgba(200,25,15,0.95)');
+  gradPlayed.addColorStop(.5, 'rgba(220,30,20,1)');
+  gradPlayed.addColorStop(.8, 'rgba(200,25,15,0.95)');
+  gradPlayed.addColorStop(1, 'rgba(150,15,10,0.55)');
 
   for (let i = 0; i < numBars; i++) {
     const x = i * step;
