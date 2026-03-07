@@ -154,12 +154,12 @@ function generateDemoData() {
   }
   const max = Math.max(...waveformData);
   waveformData = waveformData.map(v => v / max);
-  waveformData = smoothWaveformData(waveformData, 2);
+  // No smoothing on demo data
 }
 
 function extractWaveformData(buffer) {
   const raw = buffer.getChannelData(0);
-  const n = 10000;
+  const n = 20000;
   const blockLen = Math.floor(raw.length / n);
   waveformData = [];
   for (let i = 0; i < n; i++) {
@@ -173,7 +173,7 @@ function extractWaveformData(buffer) {
   }
   const max = Math.max(...waveformData);
   if (max > 0) waveformData = waveformData.map(v => v / max);
-  waveformData = smoothWaveformData(waveformData, 2);
+  // No smoothing — preserve kick transients
 }
 
 // ===== MINI WAVEFORM (drawn once) =====
@@ -258,13 +258,16 @@ function drawWaveform(currentTime) {
       sceneShakeY = (Math.random() - .5) * intensity * 2;
     }
 
-    // Hammer hit animation — only on strong kicks
-    if (intensity > .4 && hammerIconEl) {
+    // Hammer hit animation — triggers on kicks
+    if (intensity > .2 && hammerIconEl) {
+      hammerIconEl.classList.remove('hit');
+      // Force reflow to restart transition
+      void hammerIconEl.offsetWidth;
       hammerIconEl.classList.add('hit');
       if (hammerHitTimeout) clearTimeout(hammerHitTimeout);
       hammerHitTimeout = setTimeout(() => {
         hammerIconEl.classList.remove('hit');
-      }, 100 + intensity * 80);
+      }, 80 + intensity * 100);
     }
   }
   kickDecay *= .88;
@@ -372,7 +375,7 @@ function sampleWaveform(fIdx) {
 }
 
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
-  const barW = 2.5, gap = 1.2, step = barW + gap;
+  const barW = 2, gap = 1, step = barW + gap;
   const numBars = Math.ceil(w / step);
 
   // Played region gradient
@@ -389,14 +392,14 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     const pNorm = tSec / duration;
     if (pNorm < 0 || pNorm > 1) continue;
 
-    // Smooth interpolated sample
+    // Interpolated sample with contrast boost
     const fIdx = pNorm * (waveformData.length - 1);
-    let val = sampleWaveform(fIdx);
+    let val = Math.pow(sampleWaveform(fIdx), 0.85);
 
-    // Kick pulse near playhead
+    // Kick pulse near playhead — amplify bars on kick
     const distToHead = Math.abs(x - playheadX);
-    const proximity = Math.max(0, 1 - distToHead / (w * .15));
-    val = val * (1 + kick * proximity * .35);
+    const proximity = Math.max(0, 1 - distToHead / (w * .25));
+    val = val * (1 + kick * proximity * .6);
 
     const barH = Math.max(1, val * h * .42);
     const isPlayed = x < playheadX;
