@@ -465,11 +465,35 @@ body {
 /* ===== CHAT CARD (L'avis du chat) ===== */
 .chat-card {
   position: absolute; top: -20px; right: 15px; z-index: 30;
-  width: 210px; padding: 14px 16px; border-radius: 16px;
-  background: rgba(10, 20, 50, .55) !important;
-  backdrop-filter: blur(28px) saturate(1.4) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(1.4) !important;
+  width: 210px; padding: 20px 22px; border-radius: 16px;
+  background: url('bloc chat.png') center / calc(100% + 60px) calc(100% + 50px) no-repeat !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   animation: floatChat 9s ease-in-out infinite;
+  box-shadow:
+    0 0 18px rgba(60, 120, 220, .35),
+    0 0 40px rgba(40, 90, 200, .15),
+    inset 0 0 30px rgba(80, 140, 255, .06);
+  overflow: hidden;
+}
+.chat-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, .08) 45%,
+    rgba(255, 255, 255, .14) 50%,
+    rgba(255, 255, 255, .08) 55%,
+    transparent 70%
+  );
+  animation: shineReflectChat 8s ease-in-out infinite;
+  pointer-events: none;
+  border-radius: 16px;
+}
+@keyframes shineReflectChat {
+  0%, 100% { transform: translateX(-60%); opacity: 0.5; }
+  50% { transform: translateX(60%); opacity: 1; }
 }
 @keyframes floatChat {
   0%, 100% { transform: rotateX(0.3deg) rotateY(-1deg) translateY(0) translateZ(6px) }
