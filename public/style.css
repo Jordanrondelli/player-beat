@@ -189,14 +189,15 @@ body {
 
 /* Play button */
 .play-btn {
-  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 10;
-  width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer;
-  background: rgba(230, 60, 40, .8); color: #fff; font-size: 12px;
-  box-shadow: 0 2px 10px rgba(230, 60, 40, .25);
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); z-index: 10;
+  border: none; cursor: pointer; background: transparent; padding: 0;
   display: flex; align-items: center; justify-content: center;
-  backdrop-filter: blur(10px); transition: all .12s;
+  transition: transform .12s;
 }
-.play-btn:hover { background: rgba(230, 60, 40, 1); }
+.play-btn:hover { transform: translateX(-50%) scale(1.05); }
+.play-btn:active { transform: translateX(-50%) scale(0.95); }
+.play-btn img { height: 45px; width: auto; display: block; }
+.play-img, .pause-img { pointer-events: none; }
 
 /* Volume control */
 .volume-wrap {
@@ -367,7 +368,7 @@ body {
 }
 .fire-btn {
   width: 420px; height: 165px; border-radius: 28px; border: none; cursor: pointer;
-  background-color: transparent;
+  background-color: transparent; padding: 0; overflow: hidden;
   filter:
     drop-shadow(0 0 10px rgba(255, 40, 15, .7))
     drop-shadow(0 0 25px rgba(255, 40, 15, .4))
@@ -396,6 +397,7 @@ body {
       drop-shadow(0 0 140px rgba(255, 30, 5, .15));
   }
 }
+.fire-img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .fire-btn:hover { transform: translateY(-5px) scale(1.03) !important; }
 .fire-btn:active {
   transform: translateY(6px) scale(.95) !important;

@@ -47,7 +47,10 @@
           <canvas id="waveformCanvas"></canvas>
           <span class="time-overlay left" id="currentTime">0:00</span>
           <span class="time-overlay right" id="totalTime">0:00</span>
-          <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">&#9654;</button>
+          <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
+            <img src="play.png" alt="Play" class="play-img" id="playImg">
+            <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
+          </button>
           <div class="volume-wrap">
             <span class="volume-icon" id="volumeIcon" role="button" tabindex="0" aria-label="Volume">&#128266;</span>
             <input type="range" class="volume-slider" id="volumeSlider"
@@ -107,7 +110,9 @@
 
       <!-- Fire panic button -->
       <div class="fire-wrap">
-        <button class="fire-btn" id="btnFire" aria-label="FIRE! Vote coup de coeur"></button>
+        <button class="fire-btn" id="btnFire" aria-label="FIRE! Vote coup de coeur">
+          <img src="fire.png" alt="FIRE" class="fire-img">
+        </button>
       </div>
     </div>
   </div>

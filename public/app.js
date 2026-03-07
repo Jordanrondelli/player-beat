@@ -59,6 +59,8 @@ const miniCanvas = document.getElementById('miniCanvas');
 const miniCtx = miniCanvas.getContext('2d');
 const scene = document.getElementById('scene');
 const playBtn = document.getElementById('playBtn');
+const playImg = document.getElementById('playImg');
+const pauseImg = document.getElementById('pauseImg');
 const currentTimeEl = document.getElementById('currentTime');
 const totalTimeEl = document.getElementById('totalTime');
 const miniProgress = document.getElementById('miniProgress');
@@ -359,7 +361,7 @@ function playAudio() {
   sourceNode.start(0, pauseOffset);
   startTime = audioCtx.currentTime;
   isPlaying = true;
-  playBtn.textContent = '\u23F8';
+  playImg.style.display = 'none'; pauseImg.style.display = 'block';
 }
 
 function pauseAudio() {
@@ -369,7 +371,7 @@ function pauseAudio() {
   }
   pauseOffset += audioCtx.currentTime - startTime;
   isPlaying = false;
-  playBtn.textContent = '\u25B6';
+  playImg.style.display = 'block'; pauseImg.style.display = 'none';
 }
 
 function stopAudio() {
@@ -380,7 +382,7 @@ function stopAudio() {
   }
   isPlaying = false;
   pauseOffset = 0;
-  playBtn.textContent = '\u25B6';
+  playImg.style.display = 'block'; pauseImg.style.display = 'none';
 }
 
 // ===== EVENT LISTENERS =====
