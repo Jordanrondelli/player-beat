@@ -127,14 +127,13 @@ body {
   display: flex; align-items: center; justify-content: center;
   padding-left: 8vw;
 }
-.wrapper.shaking { animation: shake .12s ease-in-out infinite; }
+.wrapper.shaking { animation: shake .25s ease-in-out infinite; }
 @keyframes shake {
   0%, 100% { transform: translate(0, 0) }
-  10% { transform: translate(-5px, 3px) }
-  30% { transform: translate(5px, -3px) }
-  50% { transform: translate(-3px, -4px) }
-  70% { transform: translate(4px, 2px) }
-  90% { transform: translate(-2px, 3px) }
+  15% { transform: translate(-4px, 2px) }
+  35% { transform: translate(3px, -3px) }
+  55% { transform: translate(-2px, -2px) }
+  75% { transform: translate(3px, 1px) }
 }
 
 /* ===== GLASS PANEL ===== */

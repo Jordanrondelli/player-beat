@@ -69,6 +69,8 @@ const miniProgress = document.getElementById('miniProgress');
 const loadingOverlay = document.getElementById('loadingOverlay');
 const volumeSlider = document.getElementById('volumeSlider');
 const volumeIcon = document.getElementById('volumeIcon');
+const glow1El = document.querySelector('.waveform-glow');
+const glow2El = document.querySelector('.waveform-glow2');
 
 // ===== VOLUME CONTROL =====
 let lastVolume = 1;
@@ -175,6 +177,7 @@ let prevKickLevel = 0;
 let kickDecay = 0;
 let density = 0;
 let densitySmooth = 0;
+let lastKickTime = 0; // cooldown to avoid rapid re-triggers
 
 // ===== MAIN WAVEFORM DRAW =====
 function drawWaveform(currentTime) {
@@ -212,14 +215,29 @@ function drawWaveform(currentTime) {
   }
 
   const rise = kickLevel - prevKickLevel;
-  const isKick = rise > .025 && kickLevel > .1;
-  prevKickLevel += (kickLevel - prevKickLevel) * .5;
+  const now = performance.now();
+  const isKick = rise > .04 && kickLevel > .15 && (now - lastKickTime) > 120;
+  prevKickLevel += (kickLevel - prevKickLevel) * .4;
 
-  // Shake only during dense sections (drops/chorus)
-  if (isKick && densitySmooth > .35) {
-    kickDecay = Math.min(1, rise * 6 * densitySmooth * 2);
+  // Kick impact — strong hit, slow decay
+  if (isKick) {
+    lastKickTime = now;
+    const intensity = Math.min(1, rise * 8 * Math.max(densitySmooth, .3));
+    kickDecay = Math.max(kickDecay, intensity);
+
+    // Scene impact: single punch transform
+    if (intensity > .3) {
+      const ox = (Math.random() - .5) * intensity * 6;
+      const oy = intensity * 4;
+      scene.style.transition = 'transform .06s ease-out';
+      scene.style.transform = `perspective(1200px) rotateY(-5deg) rotateX(2deg) translate(${ox}px, ${oy}px) scale(${1 + intensity * .008})`;
+      setTimeout(() => {
+        scene.style.transition = 'transform .35s cubic-bezier(.25,.1,.25,1)';
+        scene.style.transform = 'perspective(1200px) rotateY(-5deg) rotateX(2deg)';
+      }, 60);
+    }
   }
-  kickDecay *= .78;
+  kickDecay *= .88;
 
 
 
@@ -269,10 +287,8 @@ function drawWaveform(currentTime) {
   waveformCtx.stroke();
 
   // Glow elements
-  const glow1 = document.querySelector('.waveform-glow');
-  const glow2 = document.querySelector('.waveform-glow2');
-  if (glow1) glow1.style.opacity = .4 + kickDecay * 1.2;
-  if (glow2) glow2.style.opacity = .2 + kickDecay * 1;
+  if (glow1El) glow1El.style.opacity = .4 + kickDecay * .8;
+  if (glow2El) glow2El.style.opacity = .2 + kickDecay * .6;
 
   // Background kick pump (scale only, no brightness flash)
   const bgPump = 1 + kickDecay * .02;
