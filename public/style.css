@@ -148,16 +148,14 @@ body {
   position: relative; z-index: 10;
   width: min(1000px, 75vw);
   transform-style: preserve-3d;
-  perspective: 1200px;
-  transform-origin: 50% 50%;
+  transform: perspective(1200px) rotateY(-3deg) rotateX(2.5deg);
+  transform-origin: 55% 50%;
 }
 
 /* ===== WAVEFORM PANEL ===== */
 .waveform-panel {
   width: 100%; height: min(340px, 38vh); padding: 0;
   border-radius: 22px;
-  transform: rotateY(-2deg) rotateX(1.5deg);
-  transform-style: preserve-3d;
 }
 @keyframes floatPanel {
   0%, 100% { transform: translateY(0) rotate(-.15deg) }
@@ -451,7 +449,7 @@ body {
 @media (max-width: 900px) {
   .scene {
     width: 90vw;
-    perspective: 900px;
+    transform: perspective(1000px) rotateY(-1.5deg) rotateX(1.5deg);
   }
   .vote-left { left: calc(50% - 200px); }
   .vote-right { right: calc(50% - 200px); }
