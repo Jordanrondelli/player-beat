@@ -367,15 +367,14 @@ body {
   transform: translateX(-50%) translateZ(10px);
 }
 .fire-btn {
-  width: 420px; height: 165px; border-radius: 28px; border: none; cursor: pointer;
-  background-color: transparent; padding: 0; overflow: hidden;
-  box-shadow:
-    0 0 8px 2px rgba(255, 20, 0, .9),
-    0 0 20px 6px rgba(255, 50, 10, .65),
-    0 0 50px 15px rgba(255, 30, 0, .4),
-    0 0 100px 30px rgba(200, 0, 0, .25);
+  width: 420px; height: 165px; border: none; cursor: pointer;
+  background-color: transparent; padding: 0;
+  filter:
+    drop-shadow(0 0 10px rgba(255, 20, 0, .9))
+    drop-shadow(0 0 25px rgba(255, 50, 10, .45))
+    drop-shadow(0 0 50px rgba(255, 30, 0, .25));
   animation: panic 1.2s ease-in-out infinite alternate, floatFire 3.5s ease-in-out infinite;
-  transition: transform .05s, box-shadow .05s;
+  transition: transform .05s, filter .05s;
 }
 @keyframes floatFire {
   0%, 100% { transform: translateY(0) rotate(-.5deg) }
@@ -383,25 +382,23 @@ body {
 }
 @keyframes panic {
   0% {
-    box-shadow:
-      0 0 6px 2px rgba(255, 20, 0, .8),
-      0 0 18px 5px rgba(255, 50, 10, .55),
-      0 0 45px 12px rgba(255, 30, 0, .3),
-      0 0 90px 25px rgba(200, 0, 0, .18);
+    filter:
+      drop-shadow(0 0 8px rgba(255, 20, 0, .8))
+      drop-shadow(0 0 20px rgba(255, 50, 10, .4))
+      drop-shadow(0 0 40px rgba(255, 30, 0, .2));
   }
   100% {
-    box-shadow:
-      0 0 12px 4px rgba(255, 10, 0, 1),
-      0 0 30px 10px rgba(255, 40, 5, .8),
-      0 0 65px 20px rgba(255, 20, 0, .5),
-      0 0 120px 40px rgba(200, 0, 0, .3);
+    filter:
+      drop-shadow(0 0 14px rgba(255, 10, 0, 1))
+      drop-shadow(0 0 35px rgba(255, 40, 5, .6))
+      drop-shadow(0 0 70px rgba(255, 20, 0, .35));
   }
 }
 .fire-img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .fire-btn:hover { transform: translateY(-5px) scale(1.03) !important; }
 .fire-btn:active {
   transform: translateY(6px) scale(.95) !important;
-  box-shadow: 0 0 5px 2px rgba(255, 40, 15, .5), 0 0 15px 5px rgba(255, 40, 15, .25) !important;
+  filter: drop-shadow(0 0 5px rgba(255, 40, 15, .5)) drop-shadow(0 0 12px rgba(255, 40, 15, .2)) !important;
   animation: none !important; transition: transform .03s;
 }
 
@@ -479,7 +476,7 @@ body {
   .user-name { font-size: 14px; }
   .user-crown { font-size: 22px; }
   .fire-wrap { bottom: -180px; }
-  .fire-btn { width: 200px; height: 90px; border-radius: 20px; }
+  .fire-btn { width: 200px; height: 90px; }
   .volume-wrap { right: 50px; }
   .volume-slider { width: 40px; }
 }
