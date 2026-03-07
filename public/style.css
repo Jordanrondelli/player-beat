@@ -413,11 +413,35 @@ body {
 .user-card {
   position: absolute; top: -65px; left: 15px; z-index: 30;
   display: flex; align-items: center; gap: 14px;
-  padding: 14px 24px 14px 16px; border-radius: 18px;
+  padding: 20px 32px 20px 22px; border-radius: 18px;
   background: url('Bloc titre.png') center / 100% 100% no-repeat !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   animation: floatUser 8s ease-in-out infinite;
+  box-shadow:
+    0 0 18px rgba(60, 120, 220, .35),
+    0 0 40px rgba(40, 90, 200, .15),
+    inset 0 0 30px rgba(80, 140, 255, .06);
+  overflow: hidden;
+}
+.user-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, .08) 45%,
+    rgba(255, 255, 255, .14) 50%,
+    rgba(255, 255, 255, .08) 55%,
+    transparent 70%
+  );
+  animation: shineReflect 8s ease-in-out infinite;
+  pointer-events: none;
+  border-radius: 18px;
+}
+@keyframes shineReflect {
+  0%, 100% { transform: translateX(-60%); opacity: 0.5; }
+  50% { transform: translateX(60%); opacity: 1; }
 }
 @keyframes floatUser {
   0%, 100% { transform: rotateX(0.5deg) rotateY(1deg) translateY(0) translateZ(8px) }
