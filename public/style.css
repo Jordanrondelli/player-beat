@@ -165,7 +165,7 @@ body {
 /* ===== SCENE (3D perspective) ===== */
 .scene {
   position: relative; z-index: 10;
-  width: min(1050px, 72vw);
+  width: min(1200px, 83vw);
   margin-top: -180px;
   transform-style: preserve-3d;
   transform: perspective(1200px) rotateY(-5deg) rotateX(2deg);
@@ -174,7 +174,7 @@ body {
 
 /* ===== WAVEFORM PANEL ===== */
 .waveform-panel {
-  width: 100%; height: min(340px, 38vh); padding: 0;
+  width: 100%; height: min(380px, 43vh); padding: 0;
   border-radius: 26px;
   border: 1px solid rgba(255, 255, 255, .1);
   border-top-color: rgba(255, 255, 255, .18);
@@ -234,13 +234,13 @@ body {
 }
 .waveform-glow {
   position: absolute; inset: 8% 2%; z-index: 0; border-radius: 50%;
-  background: radial-gradient(ellipse at 55% 50%, rgba(140, 200, 255, .22), rgba(100, 170, 255, .08) 35%, transparent 65%);
-  filter: blur(35px); pointer-events: none;
+  background: radial-gradient(ellipse at 55% 50%, rgba(245, 80, 40, .25), rgba(200, 60, 30, .10) 35%, transparent 65%);
+  filter: blur(35px); pointer-events: none; transition: opacity .08s, filter .08s;
 }
 .waveform-glow2 {
   position: absolute; top: 18%; left: 8%; right: 8%; bottom: 18%; z-index: 0; border-radius: 40%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(200, 230, 255, .12), transparent 60%);
-  filter: blur(20px); pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 120, 60, .15), transparent 60%);
+  filter: blur(20px); pointer-events: none; transition: opacity .08s, filter .08s;
 }
 #waveformCanvas { width: 100%; height: 100%; display: block; position: relative; z-index: 1; }
 
@@ -305,6 +305,45 @@ body {
   position: absolute; top: 1px; left: 8%; right: 35%; height: 1px;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .25), rgba(255, 255, 255, .08), transparent);
   pointer-events: none; z-index: 25;
+}
+
+/* ===== HAMMER LOUDNESS METER ===== */
+.hammer-meter {
+  position: absolute; top: 50%; right: -80px; transform: translateY(-50%) translateZ(10px); z-index: 30;
+  width: 56px; height: 220px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.hammer-track {
+  width: 28px; flex: 1; border-radius: 14px; position: relative; overflow: hidden;
+  background: rgba(8, 16, 48, .35);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1.2px solid rgba(190, 215, 255, .2);
+  box-shadow: 0 0 3px rgba(170, 200, 255, .15), 0 8px 20px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.hammer-fill {
+  position: absolute; bottom: 0; left: 0; right: 0; border-radius: 0 0 14px 14px;
+  background: linear-gradient(to top, rgba(245, 70, 40, .9), rgba(255, 140, 40, .7) 50%, rgba(255, 200, 60, .5));
+  transition: height .1s ease-out;
+  box-shadow: 0 0 12px rgba(245, 70, 40, .4);
+}
+.hammer-fill.hot { box-shadow: 0 0 20px rgba(245, 70, 40, .7), 0 0 40px rgba(255, 100, 30, .3); }
+.hammer-pct {
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px;
+  color: rgba(255, 255, 255, .7); text-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+  letter-spacing: -.5px;
+}
+.hammer-icon {
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  background: rgba(8, 16, 48, .3);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-radius: 10px; border: 1px solid rgba(190, 215, 255, .15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+  transition: transform .1s;
+}
+.hammer-icon.hit { transform: rotate(-15deg) scale(1.15); }
+.hammer-label {
+  font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 8px;
+  color: rgba(255, 255, 255, .35); text-transform: uppercase; letter-spacing: 1.5px;
 }
 
 /* ===== MINI WAVEFORM NAV ===== */
@@ -524,6 +563,8 @@ body {
   .user-card { left: 5px; padding: 10px 16px 10px 12px; }
   .user-name { font-size: 16px; }
   .fire-btn { width: 300px; height: 120px; }
+  .hammer-meter { right: -60px; height: 180px; width: 48px; }
+  .hammer-icon { width: 30px; height: 30px; font-size: 16px; }
 }
 
 @media (max-width: 600px) {
@@ -548,4 +589,5 @@ body {
   .fire-btn { width: 200px; height: 90px; }
   .volume-wrap { right: 50px; }
   .volume-slider { width: 40px; }
+  .hammer-meter { display: none; }
 }

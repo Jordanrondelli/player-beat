@@ -178,6 +178,7 @@ let kickDecay = 0;
 let density = 0;
 let densitySmooth = 0;
 let lastKickTime = 0; // cooldown to avoid rapid re-triggers
+let hammerSmooth = 0;
 
 // ===== MAIN WAVEFORM DRAW =====
 function drawWaveform(currentTime) {
@@ -245,12 +246,22 @@ function drawWaveform(currentTime) {
   const playheadX = w * 0.35;
   const scrollBack = 0.35 * windowSec;
   const timeStart = currentTime - scrollBack;
-  const centerY = h * 0.48;
+  const centerY = h * 0.5;
+
+  // Bass glow pass — extra warm aura on kicks (screen blend)
+  if (kickDecay > .02) {
+    waveformCtx.save();
+    waveformCtx.filter = `blur(${14 + kickDecay * 22}px)`;
+    waveformCtx.globalAlpha = kickDecay * .55;
+    waveformCtx.globalCompositeOperation = 'screen';
+    drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, true);
+    waveformCtx.restore();
+  }
 
   // Glow pass — played side only, red glow
   waveformCtx.save();
-  waveformCtx.filter = `blur(${8 + kickDecay * 14}px)`;
-  waveformCtx.globalAlpha = .12 + kickDecay * .35;
+  waveformCtx.filter = `blur(${8 + kickDecay * 16}px)`;
+  waveformCtx.globalAlpha = .12 + kickDecay * .45;
   drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, true);
   waveformCtx.restore();
 
@@ -286,9 +297,9 @@ function drawWaveform(currentTime) {
   waveformCtx.lineWidth = 1;
   waveformCtx.stroke();
 
-  // Glow elements
-  if (glow1El) glow1El.style.opacity = .4 + kickDecay * .8;
-  if (glow2El) glow2El.style.opacity = .2 + kickDecay * .6;
+  // Glow elements — intensify blur + opacity on kicks
+  if (glow1El) { glow1El.style.opacity = .3 + kickDecay * 1.4; glow1El.style.filter = `blur(${35 + kickDecay * 25}px)`; }
+  if (glow2El) { glow2El.style.opacity = .15 + kickDecay * 1.1; glow2El.style.filter = `blur(${20 + kickDecay * 15}px)`; }
 
   // Background kick pump (scale only, no brightness flash)
   const bgPump = 1 + kickDecay * .02;
@@ -296,20 +307,37 @@ function drawWaveform(currentTime) {
     bgEl.style.scale = bgPump;
   }
 
+  // Hammer loudness meter
+  const hammerRaw = Math.min(1, kickLevel * 2.5 + densitySmooth * 0.5 + kickDecay * 0.8);
+  hammerSmooth += (hammerRaw - hammerSmooth) * .12;
+  const hammerPct = Math.round(hammerSmooth * 100);
+  const hFill = document.getElementById('hammerFill');
+  const hPctEl = document.getElementById('hammerPct');
+  const hIcon = document.getElementById('hammerIcon');
+  if (hFill) { hFill.style.height = hammerPct + '%'; hFill.classList.toggle('hot', hammerPct > 65); }
+  if (hPctEl) hPctEl.textContent = hammerPct + '%';
+  if (hIcon && isKick && kickDecay > .15) {
+    hIcon.classList.add('hit');
+    setTimeout(() => hIcon.classList.remove('hit'), 120);
+  }
+
   // Mini waveform progress
   miniProgress.style.width = ((currentTime / duration) * 100) + '%';
 }
 
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
-  const barW = 2, gap = 1, step = barW + gap;
-  const numBars = Math.ceil(w / step);
-  for (let i = 0; i < numBars; i++) {
-    const x = i * step;
+  // Smooth continuous waveform using quadratic bezier curves
+  const step = 2;
+  const numPts = Math.ceil(w / step) + 1;
+
+  // Build points array with Catmull-Rom interpolated values
+  const pts = [];
+  for (let i = 0; i < numPts; i++) {
+    const x = (i / (numPts - 1)) * w;
     const tSec = timeStart + (x / w) * windowSec;
     const pNorm = tSec / duration;
-    if (pNorm < 0 || pNorm > 1) continue;
+    if (pNorm < 0 || pNorm > 1) { pts.push({ x, val: 0 }); continue; }
 
-    // Catmull-Rom interpolation for smooth waveform
     const fIdx = pNorm * waveformData.length;
     const idx1 = Math.floor(fIdx);
     const frac = fIdx - idx1;
@@ -320,42 +348,71 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     const p2 = waveformData[idx2] || 0, p3 = waveformData[idx3] || 0;
     let val = Math.max(0, 0.5 * (2*p1 + (-p0+p2)*frac + (2*p0-5*p1+4*p2-p3)*frac*frac + (-p0+3*p1-3*p2+p3)*frac*frac*frac));
 
-    // Kick pulse: bars near playhead grow on kick
+    // Kick pulse near playhead
     const distToHead = Math.abs(x - playheadX);
     const proximity = Math.max(0, 1 - distToHead / (w * .15));
     val = val * (1 + kick * proximity * .35);
+    pts.push({ x, val });
+  }
 
-    const barH = Math.max(1.5, val * h * .46);
-    const isPlayed = x <= playheadX;
-
-    // Glow pass only draws the played side
-    if (glowOnly) {
-      if (!isPlayed) continue;
-      ctx.fillStyle = `rgba(245,60,30,1)`;
-      ctx.beginPath();
-      ctx.roundRect(x, centerY - barH, barW, barH * 2, 1);
-      ctx.fill();
-      continue;
-    }
-
-    if (isPlayed) {
-      // Played: warm red gradient, bright
-      const grad = ctx.createLinearGradient(0, centerY - barH, 0, centerY + barH);
-      grad.addColorStop(0, 'rgba(180,40,20,0.55)');
-      grad.addColorStop(.2, 'rgba(235,65,35,0.95)');
-      grad.addColorStop(.5, 'rgba(250,80,45,1)');
-      grad.addColorStop(.8, 'rgba(235,65,35,0.95)');
-      grad.addColorStop(1, 'rgba(180,40,20,0.55)');
-      ctx.fillStyle = grad;
-    } else {
-      // Unplayed: white, fades out further from playhead
-      const d = (x - playheadX) / (w - playheadX);
-      const alpha = Math.max(.06, .5 - d * .4);
-      ctx.fillStyle = `rgba(200,210,230,${alpha})`;
-    }
+  // Draw smooth filled shape for one half (sign=1 top, sign=-1 bottom)
+  function drawHalf(sign) {
     ctx.beginPath();
-    ctx.roundRect(x, centerY - barH, barW, barH * 2, 1.5);
-    ctx.fill();
+    ctx.moveTo(pts[0].x, centerY);
+    for (let i = 0; i < pts.length; i++) {
+      const bh = Math.max(1, pts[i].val * h * .44) * sign;
+      const y = centerY - bh;
+      if (i === 0) {
+        ctx.lineTo(pts[i].x, y);
+      } else if (i < pts.length - 1) {
+        const nx = pts[i + 1].x;
+        const nbh = Math.max(1, pts[i + 1].val * h * .44) * sign;
+        const ny = centerY - nbh;
+        ctx.quadraticCurveTo(pts[i].x, y, (pts[i].x + nx) / 2, (y + ny) / 2);
+      } else {
+        ctx.lineTo(pts[i].x, y);
+      }
+    }
+    ctx.lineTo(pts[pts.length - 1].x, centerY);
+    ctx.closePath();
+  }
+
+  // Glow pass: only played side
+  if (glowOnly) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, playheadX, h); ctx.clip();
+    ctx.fillStyle = 'rgba(245,60,30,1)';
+    drawHalf(1); ctx.fill();
+    drawHalf(-1); ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  // Played region (left of playhead) — warm red gradient
+  const gradPlayed = ctx.createLinearGradient(0, centerY - h * .44, 0, centerY + h * .44);
+  gradPlayed.addColorStop(0, 'rgba(180,40,20,0.55)');
+  gradPlayed.addColorStop(.2, 'rgba(235,65,35,0.95)');
+  gradPlayed.addColorStop(.5, 'rgba(250,80,45,1)');
+  gradPlayed.addColorStop(.8, 'rgba(235,65,35,0.95)');
+  gradPlayed.addColorStop(1, 'rgba(180,40,20,0.55)');
+
+  for (const sign of [1, -1]) {
+    // Played
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, playheadX, h); ctx.clip();
+    ctx.fillStyle = gradPlayed;
+    drawHalf(sign); ctx.fill();
+    ctx.restore();
+
+    // Unplayed — white gradient fading out
+    ctx.save();
+    ctx.beginPath(); ctx.rect(playheadX, 0, w - playheadX, h); ctx.clip();
+    const gradUnplayed = ctx.createLinearGradient(playheadX, 0, w, 0);
+    gradUnplayed.addColorStop(0, 'rgba(200,210,230,0.5)');
+    gradUnplayed.addColorStop(1, 'rgba(200,210,230,0.06)');
+    ctx.fillStyle = gradUnplayed;
+    drawHalf(sign); ctx.fill();
+    ctx.restore();
   }
 }
 
