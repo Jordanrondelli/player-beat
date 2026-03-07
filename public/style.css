@@ -26,7 +26,7 @@ body {
 .bg-dim { position: fixed; inset: 0; z-index: 1; background: rgba(2, 4, 14, .25); }
 .vig {
   position: fixed; inset: 0; z-index: 2; pointer-events: none;
-  background: radial-gradient(ellipse at 60% 42%, transparent 30%, rgba(2, 4, 12, .55) 100%);
+  background: radial-gradient(ellipse at 54% 40%, transparent 30%, rgba(2, 4, 12, .55) 100%);
 }
 .bg-grain {
   position: fixed; inset: 0; z-index: 1; pointer-events: none;
@@ -124,8 +124,8 @@ body {
 /* ===== MAIN WRAPPER ===== */
 .wrapper {
   width: 100%; height: 100%; position: relative;
-  display: flex; align-items: center; justify-content: flex-end;
-  padding-right: 5vw;
+  display: flex; align-items: center; justify-content: center;
+  padding-left: 8vw;
 }
 .wrapper.shaking { animation: shake .12s ease-in-out infinite; }
 @keyframes shake {
@@ -167,7 +167,7 @@ body {
 .scene {
   position: relative; z-index: 10;
   width: min(1050px, 72vw);
-  margin-top: -140px;
+  margin-top: -180px;
   transform-style: preserve-3d;
   transform: perspective(1200px) rotateY(-5deg) rotateX(2deg);
   transform-origin: 55% 50%;
@@ -512,7 +512,7 @@ body {
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
-  .wrapper { justify-content: center; padding-right: 0; }
+  .wrapper { padding-left: 0; }
   .scene {
     width: 92vw;
     transform: perspective(1200px) rotateY(-3deg) rotateX(1.5deg);
