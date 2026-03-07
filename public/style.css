@@ -127,10 +127,7 @@ body {
   display: flex; align-items: center; justify-content: center;
   padding-left: 8vw;
 }
-.wrapper.shaking { animation: shake .06s linear 6; }
-@keyframes shake {
-  0% { transform: translate(0, 0) }
-  25% { transform: translate(-1px, 0.6px) }
+
   50% { transform: translate(0.8px, -1px) }
   75% { transform: translate(-0.6px, -0.4px) }
   100% { transform: translate(0, 0) }
@@ -174,15 +171,15 @@ body {
 }
 @keyframes sceneFloat {
   0%, 100% { transform: perspective(1200px) rotateY(-5deg) rotateX(2deg) translateY(0); }
-  50% { transform: perspective(1200px) rotateY(-4.5deg) rotateX(2.3deg) translateY(-6px); }
+  50% { transform: perspective(1200px) rotateY(-4.8deg) rotateX(2.1deg) translateY(-3px); }
 }
 @keyframes sceneFloatSm {
   0%, 100% { transform: perspective(1200px) rotateY(-3deg) rotateX(1.5deg) translateY(0); }
-  50% { transform: perspective(1200px) rotateY(-2.5deg) rotateX(1.8deg) translateY(-5px); }
+  50% { transform: perspective(1200px) rotateY(-2.8deg) rotateX(1.6deg) translateY(-2px); }
 }
 @keyframes sceneFloatXs {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  50% { transform: translateY(-2px); }
 }
 
 /* ===== WAVEFORM PANEL ===== */
@@ -429,12 +426,12 @@ body {
 .vote-left .vote-btn { animation: floatL 4s ease-in-out infinite; transform-origin: center; }
 .vote-right .vote-btn { animation: floatR 4.5s ease-in-out infinite; }
 @keyframes floatL {
-  0%, 100% { transform: translateY(0) rotate(-2deg) translateZ(15px) }
-  50% { transform: translateY(-10px) rotate(1.5deg) translateZ(15px) }
+  0%, 100% { transform: translateY(0) rotate(-1deg) translateZ(8px) }
+  50% { transform: translateY(-5px) rotate(0.8deg) translateZ(8px) }
 }
 @keyframes floatR {
-  0%, 100% { transform: translateY(0) rotate(2deg) translateZ(15px) }
-  50% { transform: translateY(-12px) rotate(-1.5deg) translateZ(15px) }
+  0%, 100% { transform: translateY(0) rotate(1deg) translateZ(8px) }
+  50% { transform: translateY(-6px) rotate(-0.8deg) translateZ(8px) }
 }
 .vote-btn::before {
   content: ''; position: absolute; top: 5px; left: 5px; width: 45%; height: 45%;

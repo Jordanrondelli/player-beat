@@ -209,11 +209,8 @@ let densitySmooth = 0;
 let lastKickTime = 0;
 let hammerSmooth = 0;
 let loudnessSmooth = 0;
-let sceneShakeX = 0;
-let sceneShakeY = 0;
 let hammerHitTimeout = null;
 const hammerIconEl = document.getElementById('hammerIcon');
-const wrapperEl = document.getElementById('wrapper');
 
 // ===== MAIN WAVEFORM DRAW =====
 function drawWaveform(currentTime) {
@@ -261,11 +258,6 @@ function drawWaveform(currentTime) {
     const intensity = Math.min(1, rise * 8 * Math.max(densitySmooth, .3));
     kickDecay = Math.max(kickDecay, intensity);
 
-    // Smooth scene shake — set target offset, decays via lerp below
-    if (intensity > .25) {
-      sceneShakeX = (Math.random() - .5) * intensity * 2.5;
-      sceneShakeY = (Math.random() - .5) * intensity * 2;
-    }
 
     // Hammer hit animation — triggers on kicks
     if (intensity > .2 && hammerIconEl) {
@@ -281,16 +273,7 @@ function drawWaveform(currentTime) {
   }
   kickDecay *= .88;
 
-  // Smooth scene shake decay (lerp back to 0) — applied via margin to not fight CSS animation
-  sceneShakeX *= .82;
-  sceneShakeY *= .82;
-  if (Math.abs(sceneShakeX) > .01 || Math.abs(sceneShakeY) > .01) {
-    scene.style.marginLeft = sceneShakeX + 'px';
-    scene.style.marginTop = (-280 + sceneShakeY) + 'px';
-  } else {
-    scene.style.marginLeft = '';
-    scene.style.marginTop = '';
-  }
+
 
   const windowSec = 4;
   const playheadX = w * 0.35;
@@ -385,15 +368,7 @@ function drawWaveform(currentTime) {
     hPctEl.style.transform = kickDecay > .3 ? `scale(${1 + kickDecay * .15})` : '';
   }
 
-  // Wrapper shake on loud sections (chorus etc.) — only on kicks, not every frame
-  if (wrapperEl && isKick && loudnessSmooth > 0.12) {
-    const shakeIntensity = Math.min(2, loudnessSmooth * 4);
-    const sx = (Math.random() - .5) * shakeIntensity;
-    const sy = (Math.random() - .5) * shakeIntensity;
-    wrapperEl.style.transform = `translate3d(${sx}px, ${sy}px, 0)`;
-  } else if (wrapperEl && kickDecay < 0.05) {
-    wrapperEl.style.transform = '';
-  }
+
 
   // Mini waveform progress
   miniProgress.style.width = ((currentTime / duration) * 100) + '%';
