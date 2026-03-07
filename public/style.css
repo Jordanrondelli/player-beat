@@ -322,15 +322,16 @@ body {
   70% { transform: translateX(-50%) rotateX(2deg) rotateY(2deg) translateY(-3px) translateZ(20px) }
 }
 .hammer-icon {
-  font-size: 34px;
+  width: 44px; height: 44px; object-fit: contain;
   transform-origin: 50% 90%;
   transform: rotate(0deg);
   transition: transform .15s cubic-bezier(.2,.8,.3,1);
-  filter: drop-shadow(0 2px 6px rgba(0,0,0,.5));
+  filter: drop-shadow(0 2px 8px rgba(255,120,0,.4));
 }
 .hammer-icon.hit {
   transform: rotate(-55deg) scale(1.35);
   transition: transform .035s ease-out;
+  filter: drop-shadow(0 4px 16px rgba(255,120,0,.7));
 }
 .hammer-label {
   font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 9px;
@@ -364,9 +365,13 @@ body {
 /* ===== VOTE BUTTONS ===== */
 .vote-left { position: absolute; bottom: -320px; left: calc(50% - 320px); z-index: 35; }
 .vote-right { position: absolute; bottom: -320px; right: calc(50% - 320px); z-index: 35; }
+.vote-icon {
+  width: 70%; height: 70%; object-fit: contain; pointer-events: none;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,.4));
+}
 .vote-btn {
   width: 110px; height: 110px; border-radius: 24px; border: none; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; font-size: 46px;
+  display: flex; align-items: center; justify-content: center;
   background: linear-gradient(145deg, rgba(20, 35, 75, .35), rgba(10, 20, 55, .45));
   backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
   border: 1.5px solid rgba(170, 200, 255, .22);
@@ -376,6 +381,37 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, .1),
     inset 0 -2px 8px rgba(0, 0, 0, .12);
   position: relative; overflow: hidden;
+  transition: box-shadow .3s ease;
+}
+.vote-btn-red {
+  box-shadow:
+    0 0 18px rgba(220, 40, 40, .35),
+    0 0 40px rgba(200, 20, 20, .15),
+    0 14px 35px rgba(0, 0, 0, .35),
+    inset 0 1px 0 rgba(255, 255, 255, .1);
+  border-color: rgba(220, 60, 60, .3);
+}
+.vote-btn-red:hover {
+  box-shadow:
+    0 0 25px rgba(220, 40, 40, .5),
+    0 0 55px rgba(200, 20, 20, .25),
+    0 18px 40px rgba(0, 0, 0, .4);
+  border-color: rgba(220, 60, 60, .45);
+}
+.vote-btn-green {
+  box-shadow:
+    0 0 18px rgba(40, 200, 60, .35),
+    0 0 40px rgba(20, 180, 40, .15),
+    0 14px 35px rgba(0, 0, 0, .35),
+    inset 0 1px 0 rgba(255, 255, 255, .1);
+  border-color: rgba(60, 200, 80, .3);
+}
+.vote-btn-green:hover {
+  box-shadow:
+    0 0 25px rgba(40, 200, 60, .5),
+    0 0 55px rgba(20, 180, 40, .25),
+    0 18px 40px rgba(0, 0, 0, .4);
+  border-color: rgba(60, 200, 80, .45);
 }
 .vote-left .vote-btn { animation: floatL 4s ease-in-out infinite; transform-origin: center; }
 .vote-right .vote-btn { animation: floatR 4.5s ease-in-out infinite; }
@@ -392,10 +428,6 @@ body {
   border-radius: 14px;
   background: radial-gradient(ellipse at 30% 30%, rgba(255, 255, 255, .07), transparent);
   pointer-events: none;
-}
-.vote-btn:hover {
-  box-shadow: 0 0 10px rgba(170, 200, 255, .2), 0 18px 40px rgba(0, 0, 0, .4);
-  border-color: rgba(170, 200, 255, .35);
 }
 .vote-btn:active {
   animation: none !important;
@@ -568,7 +600,7 @@ body {
   .fire-btn { width: 300px; height: 120px; }
   .hammer-card { padding: 8px 14px 8px 10px; }
   .hammer-pct { font-size: 18px; }
-  .hammer-icon { font-size: 28px; }
+  .hammer-icon { width: 36px; height: 36px; }
 }
 
 @media (max-width: 600px) {
@@ -595,6 +627,6 @@ body {
   .volume-slider { width: 40px; }
   .hammer-card { padding: 6px 10px; }
   .hammer-pct { font-size: 15px; }
-  .hammer-icon { font-size: 22px; }
+  .hammer-icon { width: 28px; height: 28px; }
   .hammer-label { display: none; }
 }
