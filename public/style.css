@@ -127,13 +127,13 @@ body {
   display: flex; align-items: center; justify-content: center;
   padding-left: 8vw;
 }
-.wrapper.shaking { animation: shake .25s ease-in-out infinite; }
+.wrapper.shaking { animation: shake .08s linear infinite; }
 @keyframes shake {
-  0%, 100% { transform: translate(0, 0) }
-  15% { transform: translate(-4px, 2px) }
-  35% { transform: translate(3px, -3px) }
-  55% { transform: translate(-2px, -2px) }
-  75% { transform: translate(3px, 1px) }
+  0% { transform: translate(0, 0) }
+  25% { transform: translate(-0.8px, 0.5px) }
+  50% { transform: translate(0.6px, -0.8px) }
+  75% { transform: translate(-0.5px, -0.3px) }
+  100% { transform: translate(0.7px, 0.4px) }
 }
 
 /* ===== GLASS PANEL ===== */
@@ -166,7 +166,7 @@ body {
 .scene {
   position: relative; z-index: 10;
   width: min(1200px, 83vw);
-  margin-top: -80px;
+  margin-top: -160px;
   transform-style: preserve-3d;
   transform: perspective(1200px) rotateY(-5deg) rotateX(2deg);
   transform-origin: 55% 50%;
@@ -234,12 +234,12 @@ body {
 }
 .waveform-glow {
   position: absolute; inset: 8% 2%; z-index: 0; border-radius: 50%;
-  background: radial-gradient(ellipse at 55% 50%, rgba(245, 80, 40, .25), rgba(200, 60, 30, .10) 35%, transparent 65%);
+  background: radial-gradient(ellipse at 55% 50%, rgba(220, 30, 20, .25), rgba(180, 20, 15, .10) 35%, transparent 65%);
   filter: blur(35px); pointer-events: none; transition: opacity .08s, filter .08s;
 }
 .waveform-glow2 {
   position: absolute; top: 18%; left: 8%; right: 8%; bottom: 18%; z-index: 0; border-radius: 40%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(255, 120, 60, .15), transparent 60%);
+  background: radial-gradient(ellipse at 50% 50%, rgba(220, 40, 25, .15), transparent 60%);
   filter: blur(20px); pointer-events: none; transition: opacity .08s, filter .08s;
 }
 #waveformCanvas { width: calc(100% - 16px); height: calc(100% - 16px); margin: 8px; display: block; position: relative; z-index: 1; }
@@ -307,49 +307,16 @@ body {
   pointer-events: none; z-index: 25;
 }
 
-/* ===== HAMMER LOUDNESS METER ===== */
+/* ===== HAMMER LOUDNESS % ===== */
 .hammer-meter {
-  position: absolute; top: 50%; right: -90px; transform: translateY(-50%) translateZ(10px); z-index: 30;
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  position: absolute; top: 12px; right: 16px; z-index: 30;
+  transform: translateZ(10px);
 }
-.hammer-gauge-wrap {
-  position: relative; width: 100px; height: 100px;
-}
-.hammer-gauge-svg {
-  width: 100%; height: 100%;
-}
-.hammer-arc-bg {
-  stroke: rgba(255, 255, 255, .08);
-}
-.hammer-arc-green {
-  stroke: rgba(74, 222, 128, .2);
-}
-.hammer-arc-yellow {
-  stroke: rgba(250, 204, 21, .2);
-}
-.hammer-arc-red {
-  stroke: rgba(239, 68, 68, .2);
-}
-.hammer-arc-fill {
-  stroke: #4ade80;
-  transition: stroke-dashoffset .1s ease-out, stroke .15s;
-  filter: drop-shadow(0 0 4px currentColor);
-}
-.hammer-icon {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  font-size: 32px;
-  transition: transform .1s;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .4));
-}
-.hammer-icon.hit { transform: translate(-50%, -50%) rotate(-20deg) scale(1.3); }
 .hammer-pct {
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px;
-  color: rgba(255, 255, 255, .7); text-shadow: 0 1px 4px rgba(0, 0, 0, .4);
-  letter-spacing: -.5px; margin-top: -8px;
-}
-.hammer-label {
-  font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 8px;
-  color: rgba(255, 255, 255, .35); text-transform: uppercase; letter-spacing: 1.5px;
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13px;
+  color: rgba(255, 255, 255, .45); text-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+  letter-spacing: -.5px;
+  transition: color .15s;
 }
 
 /* ===== MINI WAVEFORM NAV ===== */
@@ -569,9 +536,7 @@ body {
   .user-card { left: 5px; padding: 10px 16px 10px 12px; }
   .user-name { font-size: 16px; }
   .fire-btn { width: 300px; height: 120px; }
-  .hammer-meter { right: -70px; }
-  .hammer-gauge-wrap { width: 80px; height: 80px; }
-  .hammer-icon { font-size: 24px; }
+  .hammer-meter { right: 12px; top: 10px; }
 }
 
 @media (max-width: 600px) {
