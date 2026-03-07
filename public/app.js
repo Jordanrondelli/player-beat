@@ -58,6 +58,8 @@ const waveformCtx = waveformCanvas.getContext('2d');
 const miniCanvas = document.getElementById('miniCanvas');
 const miniCtx = miniCanvas.getContext('2d');
 const scene = document.getElementById('scene');
+const bgEl = document.querySelector('.bg');
+const bgDimEl = document.querySelector('.bg-dim');
 const playBtn = document.getElementById('playBtn');
 const playImg = document.getElementById('playImg');
 const pauseImg = document.getElementById('pauseImg');
@@ -270,6 +272,13 @@ function drawWaveform(currentTime) {
   const glow2 = document.querySelector('.waveform-glow2');
   if (glow1) glow1.style.opacity = .4 + kickDecay * 1.2;
   if (glow2) glow2.style.opacity = .2 + kickDecay * 1;
+
+  // Background kick pump (use filter for brightness, scale via CSS var)
+  const bgPump = 1 + kickDecay * .025;
+  if (bgEl) {
+    bgEl.style.scale = bgPump;
+    bgEl.style.filter = `brightness(${1 + kickDecay * .2})`;
+  }
 
   // Mini waveform progress
   miniProgress.style.width = ((currentTime / duration) * 100) + '%';
