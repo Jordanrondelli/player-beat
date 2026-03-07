@@ -211,8 +211,6 @@ let hammerSmooth = 0;
 let loudnessSmooth = 0;
 let hammerHitTimeout = null;
 const hammerIconEl = document.getElementById('hammerIcon');
-let detectedBPM = 0;
-let beatIntervalId = null;
 
 // ===== MAIN WAVEFORM DRAW =====
 function drawWaveform(currentTime) {
@@ -259,6 +257,22 @@ function drawWaveform(currentTime) {
     lastKickTime = now;
     const intensity = Math.min(1, rise * 8 * Math.max(densitySmooth, .3));
     kickDecay = Math.max(kickDecay, intensity);
+
+    // Hammer hit — amplitude driven by current power (exponential curve)
+    if (hammerIconEl && hammerSmooth > 0.01) {
+      const pwr = Math.pow(hammerSmooth, 2.5); // exponential: low power = barely moves, high = massive
+      const angle = -8 - pwr * 52;             // 0% → -8deg, 100% → -60deg
+      const scl = 1 + pwr * 0.4;              // 0% → 1x, 100% → 1.4x
+      hammerIconEl.style.transform = `rotate(${angle}deg) scale(${scl})`;
+      hammerIconEl.style.transition = 'transform .03s ease-out';
+      hammerIconEl.style.filter = `drop-shadow(0 ${2 + pwr * 6}px ${8 + pwr * 16}px rgba(255,120,0,${0.3 + pwr * 0.5}))`;
+      if (hammerHitTimeout) clearTimeout(hammerHitTimeout);
+      hammerHitTimeout = setTimeout(() => {
+        hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
+        hammerIconEl.style.transition = 'transform .12s cubic-bezier(.1,.9,.3,1)';
+        hammerIconEl.style.filter = 'drop-shadow(0 2px 8px rgba(255,120,0,.4))';
+      }, 60 + pwr * 80);
+    }
   }
   kickDecay *= .88;
 
@@ -445,91 +459,6 @@ function formatTime(seconds) {
   return Math.floor(seconds / 60) + ':' + String(Math.floor(seconds % 60)).padStart(2, '0');
 }
 
-// ===== BPM DETECTION =====
-function detectBPM(buffer) {
-  const offCtx = new OfflineAudioContext(1, buffer.length, buffer.sampleRate);
-  const src = offCtx.createBufferSource();
-  src.buffer = buffer;
-  // Low-pass filter to isolate kick/bass
-  const lp = offCtx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = 150;
-  src.connect(lp);
-  lp.connect(offCtx.destination);
-  src.start(0);
-  return offCtx.startRendering().then(rendered => {
-    const data = rendered.getChannelData(0);
-    const sr = rendered.sampleRate;
-    // Compute energy in windows
-    const winSize = Math.floor(sr * 0.05); // 50ms windows
-    const numWins = Math.floor(data.length / winSize);
-    const energy = new Float32Array(numWins);
-    for (let i = 0; i < numWins; i++) {
-      let sum = 0;
-      const off = i * winSize;
-      for (let j = 0; j < winSize; j++) {
-        sum += data[off + j] * data[off + j];
-      }
-      energy[i] = sum / winSize;
-    }
-    // Find peaks (onsets)
-    const peaks = [];
-    const threshold = 1.4;
-    for (let i = 1; i < energy.length - 1; i++) {
-      const avg = (energy[i - 1] + energy[i] + energy[i + 1]) / 3;
-      if (energy[i] > avg * threshold && energy[i] > energy[i - 1] && energy[i] > energy[i + 1]) {
-        peaks.push(i * winSize / sr);
-      }
-    }
-    if (peaks.length < 2) return 120; // default
-    // Compute intervals and find most common BPM
-    const intervals = [];
-    for (let i = 1; i < peaks.length; i++) {
-      const diff = peaks[i] - peaks[i - 1];
-      if (diff > 0.25 && diff < 2.0) intervals.push(diff); // 30-240 BPM range
-    }
-    if (!intervals.length) return 120;
-    // Cluster intervals into BPM buckets
-    const bpmCounts = {};
-    for (const iv of intervals) {
-      const bpm = Math.round(60 / iv);
-      const rounded = Math.round(bpm / 2) * 2; // round to nearest 2
-      bpmCounts[rounded] = (bpmCounts[rounded] || 0) + 1;
-    }
-    let bestBPM = 120, bestCount = 0;
-    for (const [bpm, count] of Object.entries(bpmCounts)) {
-      if (count > bestCount) { bestCount = count; bestBPM = +bpm; }
-    }
-    // Prefer range 70-180, halve or double if needed
-    if (bestBPM > 180) bestBPM /= 2;
-    if (bestBPM < 70) bestBPM *= 2;
-    return Math.round(bestBPM);
-  });
-}
-
-function startBeatSync() {
-  stopBeatSync();
-  if (!detectedBPM || !hammerIconEl) return;
-  const ms = 60000 / detectedBPM;
-  function hammerHit() {
-    if (!isPlaying) return;
-    hammerIconEl.classList.remove('hit');
-    void hammerIconEl.offsetWidth;
-    hammerIconEl.classList.add('hit');
-    if (hammerHitTimeout) clearTimeout(hammerHitTimeout);
-    hammerHitTimeout = setTimeout(() => {
-      hammerIconEl.classList.remove('hit');
-    }, Math.min(ms * 0.4, 150));
-  }
-  hammerHit();
-  beatIntervalId = setInterval(hammerHit, ms);
-}
-
-function stopBeatSync() {
-  if (beatIntervalId) { clearInterval(beatIntervalId); beatIntervalId = null; }
-  if (hammerIconEl) hammerIconEl.classList.remove('hit');
-}
-
 // ===== PLAYBACK CONTROLS =====
 function playAudio() {
   if (!audioBuffer) return;
@@ -542,7 +471,6 @@ function playAudio() {
   startTime = audioCtx.currentTime;
   isPlaying = true;
   playImg.style.display = 'none'; pauseImg.style.display = 'block';
-  startBeatSync();
 }
 
 function pauseAudio() {
@@ -552,7 +480,6 @@ function pauseAudio() {
   }
   pauseOffset += audioCtx.currentTime - startTime;
   isPlaying = false;
-  stopBeatSync();
   playImg.style.display = 'block'; pauseImg.style.display = 'none';
 }
 
@@ -563,7 +490,6 @@ function stopAudio() {
     sourceNode = null;
   }
   isPlaying = false;
-  stopBeatSync();
   pauseOffset = 0;
   playImg.style.display = 'block'; pauseImg.style.display = 'none';
 }
@@ -607,8 +533,6 @@ document.getElementById('audioFileInput').addEventListener('change', async (e) =
     const arrayBuffer = await file.arrayBuffer();
     audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
     extractWaveformData(audioBuffer);
-    detectedBPM = await detectBPM(audioBuffer);
-    console.log('Detected BPM:', detectedBPM);
     resizeCanvases();
     drawMiniWaveform();
     pauseOffset = 0;

@@ -334,14 +334,9 @@ body {
 .hammer-icon {
   width: 44px; height: 44px; object-fit: contain;
   transform-origin: 50% 90%;
-  transform: rotate(0deg);
+  transform: rotate(0deg) scale(1);
   transition: transform .12s cubic-bezier(.1,.9,.3,1);
   filter: drop-shadow(0 2px 8px rgba(255,120,0,.4));
-}
-.hammer-icon.hit {
-  transform: rotate(-55deg) scale(1.3);
-  transition: transform .03s ease-out;
-  filter: drop-shadow(0 4px 16px rgba(255,120,0,.8));
 }
 .hammer-label {
   font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 9px;
