@@ -136,6 +136,7 @@ function generateDemoData() {
   }
   const max = Math.max(...waveformData);
   waveformData = waveformData.map(v => v / max);
+  waveformData = smoothWaveformData(waveformData, 4);
 }
 
 function extractWaveformData(buffer) {
@@ -152,6 +153,7 @@ function extractWaveformData(buffer) {
   }
   const max = Math.max(...waveformData);
   if (max > 0) waveformData = waveformData.map(v => v / max);
+  waveformData = smoothWaveformData(waveformData, 4);
 }
 
 // ===== MINI WAVEFORM (drawn once) =====
@@ -177,8 +179,30 @@ let prevKickLevel = 0;
 let kickDecay = 0;
 let density = 0;
 let densitySmooth = 0;
-let lastKickTime = 0; // cooldown to avoid rapid re-triggers
+let lastKickTime = 0;
 let hammerSmooth = 0;
+let sceneShakeX = 0;
+let sceneShakeY = 0;
+let hammerHitTimeout = null;
+const hammerIconEl = document.getElementById('hammerIcon');
+
+// Smooth waveform data for fluid rendering
+function smoothWaveformData(data, radius) {
+  const out = new Float32Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    let sum = 0, count = 0;
+    for (let j = -radius; j <= radius; j++) {
+      const idx = i + j;
+      if (idx >= 0 && idx < data.length) {
+        const weight = 1 - Math.abs(j) / (radius + 1);
+        sum += data[idx] * weight;
+        count += weight;
+      }
+    }
+    out[i] = sum / count;
+  }
+  return Array.from(out);
+}
 
 // ===== MAIN WAVEFORM DRAW =====
 function drawWaveform(currentTime) {
@@ -200,7 +224,7 @@ function drawWaveform(currentTime) {
   density = dCount > 0 ? dSum / dCount : 0;
   densitySmooth += (density - densitySmooth) * .05;
 
-  // Kick detection
+  // Kick detection from audio analyser
   let kickLevel = 0;
   if (isPlaying && audioBuffer) {
     analyser.getByteFrequencyData(frequencyData);
@@ -220,27 +244,37 @@ function drawWaveform(currentTime) {
   const isKick = rise > .04 && kickLevel > .15 && (now - lastKickTime) > 120;
   prevKickLevel += (kickLevel - prevKickLevel) * .4;
 
-  // Kick impact — strong hit, slow decay
+  // Kick impact
   if (isKick) {
     lastKickTime = now;
     const intensity = Math.min(1, rise * 8 * Math.max(densitySmooth, .3));
     kickDecay = Math.max(kickDecay, intensity);
 
-    // Scene impact: subtle micro-tremble
-    if (intensity > .3) {
-      const ox = (Math.random() - .5) * intensity * 1.5;
-      const oy = (Math.random() - .5) * intensity * 1.2;
-      scene.style.transition = 'transform .04s linear';
-      scene.style.transform = `perspective(1200px) rotateY(-5deg) rotateX(2deg) translate(${ox}px, ${oy}px)`;
-      setTimeout(() => {
-        scene.style.transition = 'transform .15s ease-out';
-        scene.style.transform = 'perspective(1200px) rotateY(-5deg) rotateX(2deg)';
-      }, 40);
+    // Smooth scene shake — set target offset, decays via lerp below
+    if (intensity > .25) {
+      sceneShakeX = (Math.random() - .5) * intensity * 2.5;
+      sceneShakeY = (Math.random() - .5) * intensity * 2;
+    }
+
+    // Hammer hit animation — only on strong kicks
+    if (intensity > .4 && hammerIconEl) {
+      hammerIconEl.classList.add('hit');
+      if (hammerHitTimeout) clearTimeout(hammerHitTimeout);
+      hammerHitTimeout = setTimeout(() => {
+        hammerIconEl.classList.remove('hit');
+      }, 100 + intensity * 80);
     }
   }
   kickDecay *= .88;
 
-
+  // Smooth scene shake decay (lerp back to 0)
+  sceneShakeX *= .82;
+  sceneShakeY *= .82;
+  if (Math.abs(sceneShakeX) > .01 || Math.abs(sceneShakeY) > .01) {
+    scene.style.transform = `perspective(1200px) rotateY(-5deg) rotateX(2deg) translate(${sceneShakeX}px, ${sceneShakeY}px)`;
+  } else {
+    scene.style.transform = 'perspective(1200px) rotateY(-5deg) rotateX(2deg)';
+  }
 
   const windowSec = 4;
   const playheadX = w * 0.35;
@@ -308,7 +342,7 @@ function drawWaveform(currentTime) {
     bgEl.style.scale = bgPump;
   }
 
-  // Hammer loudness % — simple text display
+  // Hammer power % — shows kick intensity
   const hammerRaw = Math.min(1, Math.pow(kickLevel, 1.8) * 1.2 + densitySmooth * 0.15 + kickDecay * 0.4);
   hammerSmooth += (hammerRaw - hammerSmooth) * .08;
   const hammerCurved = Math.pow(hammerSmooth, 1.6);
@@ -316,7 +350,6 @@ function drawWaveform(currentTime) {
   const hPctEl = document.getElementById('hammerPct');
   if (hPctEl) {
     hPctEl.textContent = hammerPct + '%';
-    // Color intensity based on level
     if (hammerPct < 33) {
       hPctEl.style.color = 'rgba(255, 255, 255, .45)';
     } else if (hammerPct < 66) {
@@ -324,14 +357,24 @@ function drawWaveform(currentTime) {
     } else {
       hPctEl.style.color = 'rgba(239, 68, 68, .85)';
     }
+    // Scale the % text on strong kicks
+    hPctEl.style.transform = kickDecay > .3 ? `scale(${1 + kickDecay * .15})` : '';
   }
 
   // Mini waveform progress
   miniProgress.style.width = ((currentTime / duration) * 100) + '%';
 }
 
+// Interpolate waveform value at fractional index for smoothness
+function sampleWaveform(fIdx) {
+  const i0 = Math.floor(fIdx);
+  const i1 = Math.min(i0 + 1, waveformData.length - 1);
+  const t = fIdx - i0;
+  return (waveformData[i0] || 0) * (1 - t) + (waveformData[i1] || 0) * t;
+}
+
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
-  const barW = 3, gap = 1.5, step = barW + gap;
+  const barW = 2.5, gap = 1.2, step = barW + gap;
   const numBars = Math.ceil(w / step);
 
   // Played region gradient
@@ -348,8 +391,9 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     const pNorm = tSec / duration;
     if (pNorm < 0 || pNorm > 1) continue;
 
-    const idx = Math.floor(pNorm * waveformData.length);
-    let val = waveformData[Math.min(idx, waveformData.length - 1)] || 0;
+    // Smooth interpolated sample
+    const fIdx = pNorm * (waveformData.length - 1);
+    let val = sampleWaveform(fIdx);
 
     // Kick pulse near playhead
     const distToHead = Math.abs(x - playheadX);

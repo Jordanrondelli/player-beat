@@ -127,13 +127,13 @@ body {
   display: flex; align-items: center; justify-content: center;
   padding-left: 8vw;
 }
-.wrapper.shaking { animation: shake .08s linear infinite; }
+.wrapper.shaking { animation: shake .06s linear 6; }
 @keyframes shake {
   0% { transform: translate(0, 0) }
-  25% { transform: translate(-0.8px, 0.5px) }
-  50% { transform: translate(0.6px, -0.8px) }
-  75% { transform: translate(-0.5px, -0.3px) }
-  100% { transform: translate(0.7px, 0.4px) }
+  25% { transform: translate(-1px, 0.6px) }
+  50% { transform: translate(0.8px, -1px) }
+  75% { transform: translate(-0.6px, -0.4px) }
+  100% { transform: translate(0, 0) }
 }
 
 /* ===== GLASS PANEL ===== */
@@ -307,16 +307,26 @@ body {
   pointer-events: none; z-index: 25;
 }
 
-/* ===== HAMMER LOUDNESS % ===== */
+/* ===== HAMMER METER ===== */
 .hammer-meter {
-  position: absolute; top: 12px; right: 16px; z-index: 30;
+  position: absolute; top: 10px; right: 16px; z-index: 30;
   transform: translateZ(10px);
+  display: flex; align-items: center; gap: 6px;
+}
+.hammer-icon {
+  font-size: 22px;
+  transform-origin: 80% 80%;
+  transition: transform .06s ease-out;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.4));
+}
+.hammer-icon.hit {
+  transform: rotate(-35deg) scale(1.15);
 }
 .hammer-pct {
   font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13px;
   color: rgba(255, 255, 255, .45); text-shadow: 0 1px 4px rgba(0, 0, 0, .4);
   letter-spacing: -.5px;
-  transition: color .15s;
+  transition: color .15s, transform .08s;
 }
 
 /* ===== MINI WAVEFORM NAV ===== */
