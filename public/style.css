@@ -158,7 +158,7 @@ body {
 }
 .glass-panel::after {
   content: ''; position: absolute; inset: 0; border-radius: 20px;
-  pointer-events: none; z-index: 5; opacity: .04;
+  pointer-events: none; z-index: 5; opacity: .07;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='2' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E");
   background-size: 80px;
 }
@@ -169,23 +169,61 @@ body {
   width: min(1050px, 72vw);
   margin-top: -140px;
   transform-style: preserve-3d;
-  transform: perspective(900px) rotateY(-8deg) rotateX(3deg);
-  transform-origin: 60% 50%;
+  transform: perspective(1200px) rotateY(-5deg) rotateX(2deg);
+  transform-origin: 55% 50%;
 }
 
 /* ===== WAVEFORM PANEL ===== */
 .waveform-panel {
   width: 100%; height: min(340px, 38vh); padding: 0;
   border-radius: 26px;
-  border: 1px solid rgba(255, 255, 255, .08);
-  background: rgba(12, 20, 55, .45);
-  backdrop-filter: blur(30px) saturate(1.3);
-  -webkit-backdrop-filter: blur(30px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-top-color: rgba(255, 255, 255, .18);
+  border-bottom-color: rgba(255, 255, 255, .04);
+  background:
+    linear-gradient(165deg, rgba(30, 45, 90, .35) 0%, rgba(12, 20, 55, .5) 40%, rgba(8, 14, 40, .55) 100%);
+  backdrop-filter: blur(32px) saturate(1.3);
+  -webkit-backdrop-filter: blur(32px) saturate(1.3);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .12),
-    inset 0 -1px 0 rgba(255, 255, 255, .03),
+    inset 0 1px 0 rgba(255, 255, 255, .15),
+    inset 0 -1px 0 rgba(255, 255, 255, .02),
     0 20px 60px rgba(0, 0, 0, .4),
-    0 4px 16px rgba(0, 0, 0, .25);
+    0 4px 16px rgba(0, 0, 0, .25),
+    0 1px 2px rgba(0, 0, 0, .2);
+}
+
+/* Glass specular highlight – top edge light sweep */
+.glass-specular {
+  position: absolute; top: 0; left: 0; right: 0; height: 45%;
+  border-radius: 26px 26px 0 0;
+  background: linear-gradient(180deg,
+    rgba(255, 255, 255, .09) 0%,
+    rgba(255, 255, 255, .03) 40%,
+    transparent 100%);
+  pointer-events: none; z-index: 22;
+}
+
+/* Glass directional edge light – brighter on light-source side */
+.glass-edge {
+  position: absolute; inset: 0; border-radius: 26px;
+  background: linear-gradient(135deg,
+    rgba(255, 255, 255, .06) 0%,
+    transparent 30%,
+    transparent 70%,
+    rgba(0, 0, 0, .08) 100%);
+  pointer-events: none; z-index: 21;
+}
+
+/* Subtle iridescent / caustic shimmer */
+.glass-iridescent {
+  position: absolute; inset: 0; border-radius: 26px;
+  background: conic-gradient(from 200deg at 70% 20%,
+    rgba(180, 200, 255, .04),
+    rgba(200, 180, 255, .03),
+    rgba(180, 220, 240, .04),
+    rgba(200, 200, 255, .02),
+    transparent 40%);
+  pointer-events: none; z-index: 23; mix-blend-mode: screen;
 }
 @keyframes floatPanel {
   0%, 100% { transform: translateY(0) rotate(-.15deg) }
@@ -253,21 +291,21 @@ body {
   background: rgba(255, 255, 255, .6); cursor: pointer;
 }
 
-/* Reflections – enhanced for glass feel */
+/* Reflections – glass caustics */
 .waveform-panel > .refl {
-  position: absolute; top: -20px; right: -10px; width: 55%; height: 60%;
-  background: radial-gradient(ellipse at 70% 20%, rgba(200, 220, 255, .18), transparent 60%);
-  filter: blur(18px); pointer-events: none; z-index: 20;
+  position: absolute; top: -15px; right: 5%; width: 45%; height: 50%;
+  background: radial-gradient(ellipse at 65% 25%, rgba(200, 220, 255, .14), transparent 55%);
+  filter: blur(20px); pointer-events: none; z-index: 24;
 }
 .waveform-panel > .refl2 {
-  position: absolute; bottom: 10%; left: -10px; width: 35%; height: 50%;
-  background: radial-gradient(ellipse at center, rgba(180, 210, 255, .07), transparent 55%);
-  filter: blur(14px); pointer-events: none; z-index: 20;
+  position: absolute; bottom: 15%; left: 5%; width: 30%; height: 40%;
+  background: radial-gradient(ellipse at center, rgba(180, 210, 255, .05), transparent 55%);
+  filter: blur(16px); pointer-events: none; z-index: 24;
 }
 .waveform-panel > .refl3 {
-  position: absolute; top: 0; left: 10%; right: 30%; height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .2), rgba(255, 255, 255, .06), transparent);
-  pointer-events: none; z-index: 20;
+  position: absolute; top: 1px; left: 8%; right: 35%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .25), rgba(255, 255, 255, .08), transparent);
+  pointer-events: none; z-index: 25;
 }
 
 /* ===== MINI WAVEFORM NAV ===== */
@@ -477,7 +515,7 @@ body {
   .wrapper { justify-content: center; padding-right: 0; }
   .scene {
     width: 92vw;
-    transform: perspective(900px) rotateY(-5deg) rotateX(2deg);
+    transform: perspective(1200px) rotateY(-3deg) rotateX(1.5deg);
   }
   .vote-left { left: calc(50% - 220px); bottom: -280px; }
   .vote-right { right: calc(50% - 220px); bottom: -280px; }
