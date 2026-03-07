@@ -307,18 +307,43 @@ function drawWaveform(currentTime) {
     bgEl.style.scale = bgPump;
   }
 
-  // Hammer loudness meter
-  const hammerRaw = Math.min(1, kickLevel * 2.5 + densitySmooth * 0.5 + kickDecay * 0.8);
-  hammerSmooth += (hammerRaw - hammerSmooth) * .12;
-  const hammerPct = Math.round(hammerSmooth * 100);
-  const hFill = document.getElementById('hammerFill');
+  // Hammer loudness meter — strict scoring, 100% = truly heavy
+  const hammerRaw = Math.min(1, Math.pow(kickLevel, 1.8) * 1.2 + densitySmooth * 0.15 + kickDecay * 0.4);
+  hammerSmooth += (hammerRaw - hammerSmooth) * .08;
+  // Apply curve to make high values harder to reach
+  const hammerCurved = Math.pow(hammerSmooth, 1.6);
+  const hammerPct = Math.round(hammerCurved * 100);
+  const hArcFill = document.querySelector('.hammer-arc-fill');
   const hPctEl = document.getElementById('hammerPct');
   const hIcon = document.getElementById('hammerIcon');
-  if (hFill) { hFill.style.height = hammerPct + '%'; hFill.classList.toggle('hot', hammerPct > 65); }
+  if (hArcFill) {
+    // Arc: 270deg total (3/4 circle). dasharray = 270 out of ~314 (2*PI*50)
+    const arcLen = 2 * Math.PI * 50 * 0.75; // ~235.6
+    const fillLen = arcLen * hammerCurved;
+    hArcFill.style.strokeDasharray = fillLen + ' ' + (2 * Math.PI * 50);
+    hArcFill.style.strokeDashoffset = '0';
+    // Color: green < 33%, yellow 33-66%, red > 66%
+    if (hammerPct < 33) {
+      hArcFill.style.stroke = '#4ade80';
+    } else if (hammerPct < 66) {
+      hArcFill.style.stroke = '#facc15';
+    } else {
+      hArcFill.style.stroke = '#ef4444';
+    }
+    // Glow intensity scales with level
+    const glowSize = 4 + hammerCurved * 12;
+    hArcFill.style.filter = `drop-shadow(0 0 ${glowSize}px currentColor)`;
+  }
   if (hPctEl) hPctEl.textContent = hammerPct + '%';
   if (hIcon && isKick && kickDecay > .15) {
+    // Hammer hit animation — scale with intensity
+    const hitScale = 1.2 + kickDecay * 0.4;
+    hIcon.style.transform = `translate(-50%, -50%) rotate(-20deg) scale(${hitScale})`;
     hIcon.classList.add('hit');
-    setTimeout(() => hIcon.classList.remove('hit'), 120);
+    setTimeout(() => {
+      hIcon.classList.remove('hit');
+      hIcon.style.transform = '';
+    }, 150);
   }
 
   // Mini waveform progress
@@ -326,93 +351,52 @@ function drawWaveform(currentTime) {
 }
 
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
-  // Smooth continuous waveform using quadratic bezier curves
-  const step = 2;
-  const numPts = Math.ceil(w / step) + 1;
+  const barW = 3, gap = 1.5, step = barW + gap;
+  const numBars = Math.ceil(w / step);
 
-  // Build points array with Catmull-Rom interpolated values
-  const pts = [];
-  for (let i = 0; i < numPts; i++) {
-    const x = (i / (numPts - 1)) * w;
-    const tSec = timeStart + (x / w) * windowSec;
-    const pNorm = tSec / duration;
-    if (pNorm < 0 || pNorm > 1) { pts.push({ x, val: 0 }); continue; }
-
-    const fIdx = pNorm * waveformData.length;
-    const idx1 = Math.floor(fIdx);
-    const frac = fIdx - idx1;
-    const idx0 = Math.max(0, idx1 - 1);
-    const idx2 = Math.min(idx1 + 1, waveformData.length - 1);
-    const idx3 = Math.min(idx1 + 2, waveformData.length - 1);
-    const p0 = waveformData[idx0] || 0, p1 = waveformData[idx1] || 0;
-    const p2 = waveformData[idx2] || 0, p3 = waveformData[idx3] || 0;
-    let val = Math.max(0, 0.5 * (2*p1 + (-p0+p2)*frac + (2*p0-5*p1+4*p2-p3)*frac*frac + (-p0+3*p1-3*p2+p3)*frac*frac*frac));
-
-    // Kick pulse near playhead
-    const distToHead = Math.abs(x - playheadX);
-    const proximity = Math.max(0, 1 - distToHead / (w * .15));
-    val = val * (1 + kick * proximity * .35);
-    pts.push({ x, val });
-  }
-
-  // Draw smooth filled shape for one half (sign=1 top, sign=-1 bottom)
-  function drawHalf(sign) {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, centerY);
-    for (let i = 0; i < pts.length; i++) {
-      const bh = Math.max(1, pts[i].val * h * .44) * sign;
-      const y = centerY - bh;
-      if (i === 0) {
-        ctx.lineTo(pts[i].x, y);
-      } else if (i < pts.length - 1) {
-        const nx = pts[i + 1].x;
-        const nbh = Math.max(1, pts[i + 1].val * h * .44) * sign;
-        const ny = centerY - nbh;
-        ctx.quadraticCurveTo(pts[i].x, y, (pts[i].x + nx) / 2, (y + ny) / 2);
-      } else {
-        ctx.lineTo(pts[i].x, y);
-      }
-    }
-    ctx.lineTo(pts[pts.length - 1].x, centerY);
-    ctx.closePath();
-  }
-
-  // Glow pass: only played side
-  if (glowOnly) {
-    ctx.save();
-    ctx.beginPath(); ctx.rect(0, 0, playheadX, h); ctx.clip();
-    ctx.fillStyle = 'rgba(245,60,30,1)';
-    drawHalf(1); ctx.fill();
-    drawHalf(-1); ctx.fill();
-    ctx.restore();
-    return;
-  }
-
-  // Played region (left of playhead) — warm red gradient
-  const gradPlayed = ctx.createLinearGradient(0, centerY - h * .44, 0, centerY + h * .44);
+  // Played region gradient
+  const gradPlayed = ctx.createLinearGradient(0, centerY - h * .42, 0, centerY + h * .42);
   gradPlayed.addColorStop(0, 'rgba(180,40,20,0.55)');
   gradPlayed.addColorStop(.2, 'rgba(235,65,35,0.95)');
   gradPlayed.addColorStop(.5, 'rgba(250,80,45,1)');
   gradPlayed.addColorStop(.8, 'rgba(235,65,35,0.95)');
   gradPlayed.addColorStop(1, 'rgba(180,40,20,0.55)');
 
-  for (const sign of [1, -1]) {
-    // Played
-    ctx.save();
-    ctx.beginPath(); ctx.rect(0, 0, playheadX, h); ctx.clip();
-    ctx.fillStyle = gradPlayed;
-    drawHalf(sign); ctx.fill();
-    ctx.restore();
+  for (let i = 0; i < numBars; i++) {
+    const x = i * step;
+    const tSec = timeStart + (x / w) * windowSec;
+    const pNorm = tSec / duration;
+    if (pNorm < 0 || pNorm > 1) continue;
 
-    // Unplayed — white gradient fading out
-    ctx.save();
-    ctx.beginPath(); ctx.rect(playheadX, 0, w - playheadX, h); ctx.clip();
-    const gradUnplayed = ctx.createLinearGradient(playheadX, 0, w, 0);
-    gradUnplayed.addColorStop(0, 'rgba(200,210,230,0.5)');
-    gradUnplayed.addColorStop(1, 'rgba(200,210,230,0.06)');
-    ctx.fillStyle = gradUnplayed;
-    drawHalf(sign); ctx.fill();
-    ctx.restore();
+    const idx = Math.floor(pNorm * waveformData.length);
+    let val = waveformData[Math.min(idx, waveformData.length - 1)] || 0;
+
+    // Kick pulse near playhead
+    const distToHead = Math.abs(x - playheadX);
+    const proximity = Math.max(0, 1 - distToHead / (w * .15));
+    val = val * (1 + kick * proximity * .35);
+
+    const barH = Math.max(1, val * h * .42);
+    const isPlayed = x < playheadX;
+
+    if (glowOnly) {
+      if (!isPlayed) continue;
+      ctx.fillStyle = 'rgba(245,60,30,1)';
+      ctx.fillRect(x, centerY - barH, barW, barH * 2);
+      continue;
+    }
+
+    if (isPlayed) {
+      ctx.fillStyle = gradPlayed;
+    } else {
+      const fadeAlpha = Math.max(0.06, 0.5 - ((x - playheadX) / (w - playheadX)) * 0.44);
+      ctx.fillStyle = `rgba(200,210,230,${fadeAlpha})`;
+    }
+
+    // Draw bar (mirrored top/bottom)
+    ctx.beginPath();
+    ctx.roundRect(x, centerY - barH, barW, barH * 2, 1.5);
+    ctx.fill();
   }
 }
 
