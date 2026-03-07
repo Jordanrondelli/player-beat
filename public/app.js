@@ -368,9 +368,10 @@ function drawWaveform(currentTime) {
   loudnessSmooth += (loudnessRaw - loudnessSmooth) * 0.12;
 
   // Hammer power % — based on loudness (how loud/saturated the sound is)
-  const hammerRaw = Math.min(1, loudnessSmooth * 3.5);
-  hammerSmooth += (hammerRaw - hammerSmooth) * .1;
-  const hammerPct = Math.round(hammerSmooth * 100);
+  // RMS typically ranges 0.05 (quiet) to 0.45 (loud/saturated)
+  const hammerRaw = Math.min(1, Math.max(0, (loudnessSmooth - 0.03) / 0.4));
+  hammerSmooth += (hammerRaw - hammerSmooth) * .08;
+  const hammerPct = Math.round(Math.pow(hammerSmooth, 0.7) * 100);
   const hPctEl = document.getElementById('hammerPct');
   if (hPctEl) {
     hPctEl.textContent = hammerPct + '%';
@@ -384,13 +385,13 @@ function drawWaveform(currentTime) {
     hPctEl.style.transform = kickDecay > .3 ? `scale(${1 + kickDecay * .15})` : '';
   }
 
-  // Wrapper shake on loud sections (chorus etc.)
-  if (wrapperEl && loudnessSmooth > 0.15) {
-    const shakeIntensity = Math.pow((loudnessSmooth - 0.15) / 0.85, 1.5) * 2.5;
+  // Wrapper shake on loud sections (chorus etc.) — only on kicks, not every frame
+  if (wrapperEl && isKick && loudnessSmooth > 0.12) {
+    const shakeIntensity = Math.min(2, loudnessSmooth * 4);
     const sx = (Math.random() - .5) * shakeIntensity;
     const sy = (Math.random() - .5) * shakeIntensity;
-    wrapperEl.style.transform = `translate(${sx}px, ${sy}px)`;
-  } else if (wrapperEl) {
+    wrapperEl.style.transform = `translate3d(${sx}px, ${sy}px, 0)`;
+  } else if (wrapperEl && kickDecay < 0.05) {
     wrapperEl.style.transform = '';
   }
 
