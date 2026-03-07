@@ -307,27 +307,38 @@ body {
   pointer-events: none; z-index: 25;
 }
 
-/* ===== HAMMER METER ===== */
-.hammer-meter {
-  position: absolute; top: 10px; right: 16px; z-index: 30;
-  transform: translateZ(10px);
-  display: flex; align-items: center; gap: 6px;
+/* ===== HAMMER CARD ===== */
+.hammer-card {
+  position: absolute; top: -55px; left: 50%; z-index: 30;
+  transform: translateX(-50%) translateZ(20px);
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px 10px 14px; border-radius: 16px;
+  animation: floatHammer 5.5s ease-in-out infinite;
+}
+@keyframes floatHammer {
+  0%, 100% { transform: translateX(-50%) rotateX(1deg) rotateY(1deg) translateY(0) translateZ(20px) }
+  40% { transform: translateX(-50%) rotateX(0deg) rotateY(-1deg) translateY(-6px) translateZ(20px) }
+  70% { transform: translateX(-50%) rotateX(2deg) rotateY(2deg) translateY(-3px) translateZ(20px) }
 }
 .hammer-icon {
-  font-size: 28px;
+  font-size: 34px;
   transform-origin: 85% 85%;
   transform: rotate(0deg);
   transition: transform .12s cubic-bezier(.2,.8,.3,1);
   filter: drop-shadow(0 2px 6px rgba(0,0,0,.5));
 }
 .hammer-icon.hit {
-  transform: rotate(-50deg) scale(1.25);
+  transform: rotate(-50deg) scale(1.3);
   transition: transform .04s ease-out;
 }
+.hammer-label {
+  font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 9px;
+  color: rgba(255, 255, 255, .3); letter-spacing: 2px; text-transform: uppercase;
+}
 .hammer-pct {
-  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13px;
-  color: rgba(255, 255, 255, .45); text-shadow: 0 1px 4px rgba(0, 0, 0, .4);
-  letter-spacing: -.5px;
+  font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 22px;
+  color: rgba(255, 255, 255, .5); text-shadow: 0 2px 8px rgba(0, 0, 0, .5);
+  letter-spacing: -1px;
   transition: color .15s, transform .08s;
 }
 
@@ -548,7 +559,9 @@ body {
   .user-card { left: 5px; padding: 10px 16px 10px 12px; }
   .user-name { font-size: 16px; }
   .fire-btn { width: 300px; height: 120px; }
-  .hammer-meter { right: 12px; top: 10px; }
+  .hammer-card { padding: 8px 14px 8px 10px; }
+  .hammer-pct { font-size: 18px; }
+  .hammer-icon { font-size: 28px; }
 }
 
 @media (max-width: 600px) {
@@ -573,5 +586,8 @@ body {
   .fire-btn { width: 200px; height: 90px; }
   .volume-wrap { right: 50px; }
   .volume-slider { width: 40px; }
-  .hammer-meter { display: none; }
+  .hammer-card { padding: 6px 10px; }
+  .hammer-pct { font-size: 15px; }
+  .hammer-icon { font-size: 22px; }
+  .hammer-label { display: none; }
 }
