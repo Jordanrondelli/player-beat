@@ -147,28 +147,29 @@ body {
 /* ===== SCENE (3D perspective) ===== */
 .scene {
   position: relative; z-index: 10;
-  width: min(1000px, 75vw);
+  width: min(1150px, 86vw);
   margin-top: -120px;
   transform-style: preserve-3d;
-  transform: perspective(1200px) rotateY(-3deg) rotateX(2.5deg);
-  transform-origin: 55% 50%;
+  transform: perspective(900px) rotateY(-8deg) rotateX(3deg);
+  transform-origin: 60% 50%;
 }
 
 /* ===== WAVEFORM PANEL ===== */
 .waveform-panel {
   width: 100%; height: min(340px, 38vh); padding: 0;
-  border-radius: 22px;
+  border-radius: 26px;
+  border: none;
+  background: rgba(8, 16, 48, .18);
   box-shadow:
-    0 0 3px rgba(190, 215, 255, .3),
-    0 0 12px rgba(140, 180, 255, .06),
-    0 12px 40px rgba(0, 0, 0, .35),
-    inset 0 1px 0 rgba(255, 255, 255, .12),
-    inset 0 -4px 12px rgba(0, 0, 0, .5),
-    inset 0 4px 8px rgba(0, 0, 0, .3),
-    inset 4px 0 10px rgba(0, 0, 0, .2),
-    inset -4px 0 10px rgba(0, 0, 0, .2),
-    0 20px 60px rgba(0, 0, 0, .5),
-    0 2px 4px rgba(0, 0, 0, .4);
+    inset 0 1px 0 rgba(255, 255, 255, .15),
+    inset 0 -1px 0 rgba(255, 255, 255, .04),
+    inset 0 -6px 16px rgba(0, 0, 0, .5),
+    inset 0 6px 12px rgba(0, 0, 0, .25),
+    inset 5px 0 12px rgba(0, 0, 0, .2),
+    inset -5px 0 12px rgba(0, 0, 0, .15),
+    0 25px 70px rgba(0, 0, 0, .55),
+    0 8px 24px rgba(0, 0, 0, .35),
+    0 0 1px rgba(255, 255, 255, .08);
 }
 @keyframes floatPanel {
   0%, 100% { transform: translateY(0) rotate(-.15deg) }
@@ -176,10 +177,10 @@ body {
 }
 .waveform-inner {
   position: relative; width: 100%; height: 100%;
-  border-radius: 22px; overflow: hidden;
+  border-radius: 26px; overflow: hidden;
   box-shadow:
-    inset 0 2px 6px rgba(0, 0, 0, .6),
-    inset 0 -1px 3px rgba(0, 0, 0, .3);
+    inset 0 2px 8px rgba(0, 0, 0, .6),
+    inset 0 -1px 4px rgba(0, 0, 0, .3);
 }
 .waveform-glow {
   position: absolute; inset: 8% 2%; z-index: 0; border-radius: 50%;
@@ -239,20 +240,20 @@ body {
   background: rgba(255, 255, 255, .6); cursor: pointer;
 }
 
-/* Reflections */
+/* Reflections – enhanced for glass feel */
 .waveform-panel > .refl {
-  position: absolute; top: -15px; right: -15px; width: 300px; height: 300px;
-  background: radial-gradient(ellipse at center, rgba(200, 220, 255, .14), transparent 55%);
-  filter: blur(15px); pointer-events: none; z-index: 20;
+  position: absolute; top: -20px; right: -10px; width: 55%; height: 60%;
+  background: radial-gradient(ellipse at 70% 20%, rgba(200, 220, 255, .18), transparent 60%);
+  filter: blur(18px); pointer-events: none; z-index: 20;
 }
 .waveform-panel > .refl2 {
-  position: absolute; bottom: 20%; left: -10px; width: 150px; height: 200px;
-  background: radial-gradient(ellipse at center, rgba(180, 210, 255, .06), transparent 55%);
-  filter: blur(12px); pointer-events: none; z-index: 20;
+  position: absolute; bottom: 10%; left: -10px; width: 35%; height: 50%;
+  background: radial-gradient(ellipse at center, rgba(180, 210, 255, .07), transparent 55%);
+  filter: blur(14px); pointer-events: none; z-index: 20;
 }
 .waveform-panel > .refl3 {
-  position: absolute; bottom: 44px; left: 15%; right: 15%; height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .06), transparent);
+  position: absolute; top: 0; left: 10%; right: 30%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .2), rgba(255, 255, 255, .06), transparent);
   pointer-events: none; z-index: 20;
 }
 
@@ -461,8 +462,8 @@ body {
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
   .scene {
-    width: 90vw;
-    transform: perspective(1000px) rotateY(-1.5deg) rotateX(1.5deg);
+    width: 92vw;
+    transform: perspective(900px) rotateY(-5deg) rotateX(2deg);
   }
   .vote-left { left: calc(50% - 200px); }
   .vote-right { right: calc(50% - 200px); }
