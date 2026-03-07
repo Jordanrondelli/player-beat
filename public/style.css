@@ -148,14 +148,16 @@ body {
   position: relative; z-index: 10;
   width: min(1000px, 75vw);
   transform-style: preserve-3d;
-  transform: perspective(1100px) rotateY(-3deg) rotateX(2deg);
-  transform-origin: 55% 50%;
+  perspective: 1200px;
+  transform-origin: 50% 50%;
 }
 
 /* ===== WAVEFORM PANEL ===== */
 .waveform-panel {
   width: 100%; height: min(340px, 38vh); padding: 0;
   border-radius: 22px;
+  transform: rotateY(-2deg) rotateX(1.5deg);
+  transform-style: preserve-3d;
 }
 @keyframes floatPanel {
   0%, 100% { transform: translateY(0) rotate(-.15deg) }
@@ -243,6 +245,7 @@ body {
 /* ===== MINI WAVEFORM NAV ===== */
 .mini-nav {
   position: absolute; bottom: -38px; left: 0; right: 0; z-index: 15;
+  transform: translateZ(5px);
   height: 28px; border-radius: 8px; overflow: hidden; cursor: pointer;
   background: rgba(8, 16, 48, .4);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
@@ -273,15 +276,15 @@ body {
     inset 0 -2px 8px rgba(0, 0, 0, .12);
   position: relative; overflow: hidden;
 }
-.vote-left .vote-btn { animation: floatL 4s ease-in-out infinite; }
+.vote-left .vote-btn { animation: floatL 4s ease-in-out infinite; transform-origin: center; }
 .vote-right .vote-btn { animation: floatR 4.5s ease-in-out infinite; }
 @keyframes floatL {
-  0%, 100% { transform: translateY(0) rotate(-2deg) }
-  50% { transform: translateY(-10px) rotate(1.5deg) }
+  0%, 100% { transform: translateY(0) rotate(-2deg) translateZ(15px) }
+  50% { transform: translateY(-10px) rotate(1.5deg) translateZ(15px) }
 }
 @keyframes floatR {
-  0%, 100% { transform: translateY(0) rotate(2deg) }
-  50% { transform: translateY(-12px) rotate(-1.5deg) }
+  0%, 100% { transform: translateY(0) rotate(2deg) translateZ(15px) }
+  50% { transform: translateY(-12px) rotate(-1.5deg) translateZ(15px) }
 }
 .vote-btn::before {
   content: ''; position: absolute; top: 5px; left: 5px; width: 45%; height: 45%;
@@ -304,13 +307,12 @@ body {
   position: absolute; top: -50px; left: 15px; z-index: 30;
   display: flex; align-items: center; gap: 14px;
   padding: 14px 24px 14px 16px; border-radius: 18px;
-  transform: translateZ(30px);
   animation: floatUser 5s ease-in-out infinite;
 }
 @keyframes floatUser {
-  0%, 100% { transform: perspective(600px) rotateX(3deg) rotateY(3deg) translateY(0) translateZ(30px) }
-  33% { transform: perspective(600px) rotateX(5deg) rotateY(1deg) translateY(-6px) translateZ(30px) }
-  66% { transform: perspective(600px) rotateX(2deg) rotateY(5deg) translateY(-3px) translateZ(30px) }
+  0%, 100% { transform: rotateX(1deg) rotateY(2deg) translateY(0) translateZ(25px) }
+  33% { transform: rotateX(2deg) rotateY(0deg) translateY(-6px) translateZ(25px) }
+  66% { transform: rotateX(0deg) rotateY(3deg) translateY(-3px) translateZ(25px) }
 }
 .user-avatar {
   width: 54px; height: 54px; border-radius: 50%;
@@ -337,9 +339,9 @@ body {
   animation: floatChat 7s ease-in-out infinite;
 }
 @keyframes floatChat {
-  0%, 100% { transform: perspective(500px) rotateX(3deg) rotateY(-6deg) translateY(0) translateZ(30px) }
-  40% { transform: perspective(500px) rotateX(1deg) rotateY(-8deg) translateY(-7px) translateZ(30px) }
-  75% { transform: perspective(500px) rotateX(4deg) rotateY(-4deg) translateY(-3px) translateZ(30px) }
+  0%, 100% { transform: rotateX(1deg) rotateY(-3deg) translateY(0) translateZ(20px) }
+  40% { transform: rotateX(0deg) rotateY(-5deg) translateY(-7px) translateZ(20px) }
+  75% { transform: rotateX(2deg) rotateY(-2deg) translateY(-3px) translateZ(20px) }
 }
 .chat-title { font-weight: 800; font-size: 15px; margin-bottom: 10px; }
 .chat-row { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; font-size: 13px; }
@@ -364,7 +366,7 @@ body {
 /* ===== FIRE PANIC BUTTON ===== */
 .fire-wrap {
   position: absolute; bottom: -210px; left: 50%; z-index: 40;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateZ(10px);
 }
 .fire-btn {
   width: 420px; height: 165px; border-radius: 28px; border: none; cursor: pointer;
@@ -449,7 +451,7 @@ body {
 @media (max-width: 900px) {
   .scene {
     width: 90vw;
-    transform: perspective(1100px) rotateY(-1deg) rotateX(1deg);
+    perspective: 900px;
   }
   .vote-left { left: calc(50% - 200px); }
   .vote-right { right: calc(50% - 200px); }

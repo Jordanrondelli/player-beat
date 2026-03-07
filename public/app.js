@@ -280,20 +280,20 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
   const numBars = Math.ceil(w / step);
   for (let i = 0; i < numBars; i++) {
     const x = i * step;
-    const t = timeStart + (x / w) * windowSec;
-    const p = t / duration;
-    if (p < 0 || p > 1) continue;
+    const tSec = timeStart + (x / w) * windowSec;
+    const pNorm = tSec / duration;
+    if (pNorm < 0 || pNorm > 1) continue;
 
     // Catmull-Rom interpolation for smooth waveform
-    const fIdx = p * waveformData.length;
+    const fIdx = pNorm * waveformData.length;
     const idx1 = Math.floor(fIdx);
-    const t = fIdx - idx1;
+    const frac = fIdx - idx1;
     const idx0 = Math.max(0, idx1 - 1);
     const idx2 = Math.min(idx1 + 1, waveformData.length - 1);
     const idx3 = Math.min(idx1 + 2, waveformData.length - 1);
     const p0 = waveformData[idx0] || 0, p1 = waveformData[idx1] || 0;
     const p2 = waveformData[idx2] || 0, p3 = waveformData[idx3] || 0;
-    const val = Math.max(0, 0.5 * (2*p1 + (-p0+p2)*t + (2*p0-5*p1+4*p2-p3)*t*t + (-p0+3*p1-3*p2+p3)*t*t*t));
+    const val = Math.max(0, 0.5 * (2*p1 + (-p0+p2)*frac + (2*p0-5*p1+4*p2-p3)*frac*frac + (-p0+3*p1-3*p2+p3)*frac*frac*frac));
     const barH = Math.max(2, val * h * .42);
 
     if (x <= playheadX) {
