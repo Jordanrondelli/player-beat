@@ -226,16 +226,16 @@ function drawWaveform(currentTime) {
     const intensity = Math.min(1, rise * 8 * Math.max(densitySmooth, .3));
     kickDecay = Math.max(kickDecay, intensity);
 
-    // Scene impact: single punch transform
+    // Scene impact: subtle micro-tremble
     if (intensity > .3) {
-      const ox = (Math.random() - .5) * intensity * 6;
-      const oy = intensity * 4;
-      scene.style.transition = 'transform .06s ease-out';
-      scene.style.transform = `perspective(1200px) rotateY(-5deg) rotateX(2deg) translate(${ox}px, ${oy}px) scale(${1 + intensity * .008})`;
+      const ox = (Math.random() - .5) * intensity * 1.5;
+      const oy = (Math.random() - .5) * intensity * 1.2;
+      scene.style.transition = 'transform .04s linear';
+      scene.style.transform = `perspective(1200px) rotateY(-5deg) rotateX(2deg) translate(${ox}px, ${oy}px)`;
       setTimeout(() => {
-        scene.style.transition = 'transform .35s cubic-bezier(.25,.1,.25,1)';
+        scene.style.transition = 'transform .15s ease-out';
         scene.style.transform = 'perspective(1200px) rotateY(-5deg) rotateX(2deg)';
-      }, 60);
+      }, 40);
     }
   }
   kickDecay *= .88;
@@ -273,9 +273,9 @@ function drawWaveform(currentTime) {
   // Playhead glow
   const phGlow = waveformCtx.createLinearGradient(playheadX - 30, 0, playheadX + 30, 0);
   phGlow.addColorStop(0, 'transparent');
-  phGlow.addColorStop(.35, `rgba(245,60,30,${.06 + kickDecay * .12})`);
-  phGlow.addColorStop(.5, `rgba(255,80,40,${.12 + kickDecay * .2})`);
-  phGlow.addColorStop(.65, `rgba(245,60,30,${.06 + kickDecay * .12})`);
+  phGlow.addColorStop(.35, `rgba(200,25,15,${.06 + kickDecay * .12})`);
+  phGlow.addColorStop(.5, `rgba(220,30,20,${.12 + kickDecay * .2})`);
+  phGlow.addColorStop(.65, `rgba(200,25,15,${.06 + kickDecay * .12})`);
   phGlow.addColorStop(1, 'transparent');
   waveformCtx.fillStyle = phGlow;
   waveformCtx.fillRect(playheadX - 30, 0, 60, h);
@@ -307,43 +307,22 @@ function drawWaveform(currentTime) {
     bgEl.style.scale = bgPump;
   }
 
-  // Hammer loudness meter — strict scoring, 100% = truly heavy
+  // Hammer loudness % — simple text display
   const hammerRaw = Math.min(1, Math.pow(kickLevel, 1.8) * 1.2 + densitySmooth * 0.15 + kickDecay * 0.4);
   hammerSmooth += (hammerRaw - hammerSmooth) * .08;
-  // Apply curve to make high values harder to reach
   const hammerCurved = Math.pow(hammerSmooth, 1.6);
   const hammerPct = Math.round(hammerCurved * 100);
-  const hArcFill = document.querySelector('.hammer-arc-fill');
   const hPctEl = document.getElementById('hammerPct');
-  const hIcon = document.getElementById('hammerIcon');
-  if (hArcFill) {
-    // Arc: 270deg total (3/4 circle). dasharray = 270 out of ~314 (2*PI*50)
-    const arcLen = 2 * Math.PI * 50 * 0.75; // ~235.6
-    const fillLen = arcLen * hammerCurved;
-    hArcFill.style.strokeDasharray = fillLen + ' ' + (2 * Math.PI * 50);
-    hArcFill.style.strokeDashoffset = '0';
-    // Color: green < 33%, yellow 33-66%, red > 66%
+  if (hPctEl) {
+    hPctEl.textContent = hammerPct + '%';
+    // Color intensity based on level
     if (hammerPct < 33) {
-      hArcFill.style.stroke = '#4ade80';
+      hPctEl.style.color = 'rgba(255, 255, 255, .45)';
     } else if (hammerPct < 66) {
-      hArcFill.style.stroke = '#facc15';
+      hPctEl.style.color = 'rgba(250, 204, 21, .7)';
     } else {
-      hArcFill.style.stroke = '#ef4444';
+      hPctEl.style.color = 'rgba(239, 68, 68, .85)';
     }
-    // Glow intensity scales with level
-    const glowSize = 4 + hammerCurved * 12;
-    hArcFill.style.filter = `drop-shadow(0 0 ${glowSize}px currentColor)`;
-  }
-  if (hPctEl) hPctEl.textContent = hammerPct + '%';
-  if (hIcon && isKick && kickDecay > .15) {
-    // Hammer hit animation — scale with intensity
-    const hitScale = 1.2 + kickDecay * 0.4;
-    hIcon.style.transform = `translate(-50%, -50%) rotate(-20deg) scale(${hitScale})`;
-    hIcon.classList.add('hit');
-    setTimeout(() => {
-      hIcon.classList.remove('hit');
-      hIcon.style.transform = '';
-    }, 150);
   }
 
   // Mini waveform progress
@@ -381,7 +360,7 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
 
     if (glowOnly) {
       if (!isPlayed) continue;
-      ctx.fillStyle = 'rgba(245,60,30,1)';
+      ctx.fillStyle = 'rgba(200,25,15,1)';
       ctx.fillRect(x, centerY - barH, barW, barH * 2);
       continue;
     }
