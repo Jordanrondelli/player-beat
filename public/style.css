@@ -413,8 +413,8 @@ body {
 .user-card {
   position: absolute; top: -65px; left: 15px; z-index: 30;
   display: flex; align-items: center; gap: 14px;
-  padding: 34px 55px 34px 40px; border-radius: 18px;
-  background: url('Bloc titre.png') center / 100% 100% no-repeat !important;
+  padding: 28px 45px 28px 35px; border-radius: 18px;
+  background: url('Bloc titre.png') center / calc(100% + 60px) calc(100% + 50px) no-repeat !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   animation: floatUser 8s ease-in-out infinite;
