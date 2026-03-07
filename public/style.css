@@ -147,6 +147,7 @@ body {
 .scene {
   position: relative; z-index: 10;
   width: min(1000px, 75vw);
+  margin-top: -120px;
   transform-style: preserve-3d;
   transform: perspective(1200px) rotateY(-3deg) rotateX(2.5deg);
   transform-origin: 55% 50%;
