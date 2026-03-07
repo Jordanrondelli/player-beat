@@ -273,11 +273,10 @@ function drawWaveform(currentTime) {
   if (glow1) glow1.style.opacity = .4 + kickDecay * 1.2;
   if (glow2) glow2.style.opacity = .2 + kickDecay * 1;
 
-  // Background kick pump (use filter for brightness, scale via CSS var)
-  const bgPump = 1 + kickDecay * .025;
+  // Background kick pump (scale only, no brightness flash)
+  const bgPump = 1 + kickDecay * .02;
   if (bgEl) {
     bgEl.style.scale = bgPump;
-    bgEl.style.filter = `brightness(${1 + kickDecay * .2})`;
   }
 
   // Mini waveform progress
