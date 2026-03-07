@@ -72,8 +72,23 @@
 
       <!-- Hammer loudness meter -->
       <div class="hammer-meter" id="hammerMeter">
-        <div class="hammer-icon" id="hammerIcon">&#x1F528;</div>
-        <div class="hammer-track"><div class="hammer-fill" id="hammerFill"></div></div>
+        <div class="hammer-gauge-wrap">
+          <svg class="hammer-gauge-svg" viewBox="0 0 120 120">
+            <!-- Background arc -->
+            <path class="hammer-arc-bg" d="M 15 95 A 50 50 0 1 1 105 95" fill="none" stroke-width="8" stroke-linecap="round"/>
+            <!-- Green zone (0-33%) -->
+            <path class="hammer-arc-green" d="M 15 95 A 50 50 0 0 1 22.6 38.4" fill="none" stroke-width="8" stroke-linecap="round"/>
+            <!-- Yellow zone (33-66%) -->
+            <path class="hammer-arc-yellow" d="M 22.6 38.4 A 50 50 0 0 1 97.4 38.4" fill="none" stroke-width="8" stroke-linecap="round"/>
+            <!-- Red zone (66-100%) -->
+            <path class="hammer-arc-red" d="M 97.4 38.4 A 50 50 0 0 1 105 95" fill="none" stroke-width="8" stroke-linecap="round"/>
+            <!-- Active fill arc (drawn by JS) -->
+            <circle class="hammer-arc-fill" cx="60" cy="60" r="50" fill="none" stroke-width="8" stroke-linecap="round"
+              stroke-dasharray="270 360" stroke-dashoffset="270"
+              transform="rotate(135 60 60)"/>
+          </svg>
+          <div class="hammer-icon" id="hammerIcon">&#x1F528;</div>
+        </div>
         <div class="hammer-pct" id="hammerPct">0%</div>
         <div class="hammer-label">HEAVY</div>
       </div>
