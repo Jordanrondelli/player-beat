@@ -219,20 +219,7 @@ function drawWaveform(currentTime) {
   }
   kickDecay *= .78;
 
-  // Apply shake to waveform panel
-  const panel = document.querySelector('.waveform-panel');
-  if (panel) {
-    if (kickDecay > .03) {
-      const intensity = kickDecay * densitySmooth * 2;
-      const sx = Math.sin(currentTime * 73) * intensity * 6;
-      const sy = Math.cos(currentTime * 97) * intensity * 3;
-      panel.style.animation = 'none';
-      panel.style.transform = `translate(${sx}px,${sy}px)`;
-    } else {
-      panel.style.animation = '';
-      panel.style.transform = '';
-    }
-  }
+
 
   const windowSec = 3;
   const playheadX = w * 0.4;
@@ -289,7 +276,7 @@ function drawWaveform(currentTime) {
 }
 
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration) {
-  const barW = 4, gap = 0.4, step = barW + gap;
+  const barW = 2.5, gap = 0.3, step = barW + gap;
   const numBars = Math.ceil(w / step);
   for (let i = 0; i < numBars; i++) {
     const x = i * step;
@@ -297,12 +284,16 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     const p = t / duration;
     if (p < 0 || p > 1) continue;
 
-    // Smooth interpolation
+    // Catmull-Rom interpolation for smooth waveform
     const fIdx = p * waveformData.length;
-    const idx0 = Math.floor(fIdx);
-    const idx1 = Math.min(idx0 + 1, waveformData.length - 1);
-    const frac = fIdx - idx0;
-    const val = (waveformData[idx0] || 0) * (1 - frac) + (waveformData[idx1] || 0) * frac;
+    const idx1 = Math.floor(fIdx);
+    const t = fIdx - idx1;
+    const idx0 = Math.max(0, idx1 - 1);
+    const idx2 = Math.min(idx1 + 1, waveformData.length - 1);
+    const idx3 = Math.min(idx1 + 2, waveformData.length - 1);
+    const p0 = waveformData[idx0] || 0, p1 = waveformData[idx1] || 0;
+    const p2 = waveformData[idx2] || 0, p3 = waveformData[idx3] || 0;
+    const val = Math.max(0, 0.5 * (2*p1 + (-p0+p2)*t + (2*p0-5*p1+4*p2-p3)*t*t + (-p0+3*p1-3*p2+p3)*t*t*t));
     const barH = Math.max(2, val * h * .42);
 
     if (x <= playheadX) {
