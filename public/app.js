@@ -194,6 +194,13 @@ function drawMiniWaveform() {
   }
 }
 
+// ===== LOUDNESS ANALYSER =====
+const loudnessAnalyser = audioCtx.createAnalyser();
+loudnessAnalyser.fftSize = 2048;
+loudnessAnalyser.smoothingTimeConstant = 0.3;
+const loudnessTimeData = new Uint8Array(loudnessAnalyser.fftSize);
+gainNode.connect(loudnessAnalyser);
+
 // ===== KICK DETECTION STATE =====
 let prevKickLevel = 0;
 let kickDecay = 0;
@@ -201,10 +208,12 @@ let density = 0;
 let densitySmooth = 0;
 let lastKickTime = 0;
 let hammerSmooth = 0;
+let loudnessSmooth = 0;
 let sceneShakeX = 0;
 let sceneShakeY = 0;
 let hammerHitTimeout = null;
 const hammerIconEl = document.getElementById('hammerIcon');
+const wrapperEl = document.getElementById('wrapper');
 
 // ===== MAIN WAVEFORM DRAW =====
 function drawWaveform(currentTime) {
@@ -272,13 +281,15 @@ function drawWaveform(currentTime) {
   }
   kickDecay *= .88;
 
-  // Smooth scene shake decay (lerp back to 0)
+  // Smooth scene shake decay (lerp back to 0) — applied via margin to not fight CSS animation
   sceneShakeX *= .82;
   sceneShakeY *= .82;
   if (Math.abs(sceneShakeX) > .01 || Math.abs(sceneShakeY) > .01) {
-    scene.style.transform = `perspective(1200px) rotateY(-5deg) rotateX(2deg) translate(${sceneShakeX}px, ${sceneShakeY}px)`;
+    scene.style.marginLeft = sceneShakeX + 'px';
+    scene.style.marginTop = (-280 + sceneShakeY) + 'px';
   } else {
-    scene.style.transform = 'perspective(1200px) rotateY(-5deg) rotateX(2deg)';
+    scene.style.marginLeft = '';
+    scene.style.marginTop = '';
   }
 
   const windowSec = 4;
@@ -343,11 +354,23 @@ function drawWaveform(currentTime) {
 
   // Background — no kick reaction, just CSS animation
 
-  // Hammer power % — shows kick intensity
-  const hammerRaw = Math.min(1, Math.pow(kickLevel, 1.8) * 1.2 + densitySmooth * 0.15 + kickDecay * 0.4);
-  hammerSmooth += (hammerRaw - hammerSmooth) * .08;
-  const hammerCurved = Math.pow(hammerSmooth, 1.6);
-  const hammerPct = Math.round(hammerCurved * 100);
+  // Loudness measurement (RMS of full signal)
+  let loudnessRaw = 0;
+  if (isPlaying && audioBuffer) {
+    loudnessAnalyser.getByteTimeDomainData(loudnessTimeData);
+    let rmsSum = 0;
+    for (let i = 0; i < loudnessTimeData.length; i++) {
+      const s = (loudnessTimeData[i] - 128) / 128;
+      rmsSum += s * s;
+    }
+    loudnessRaw = Math.sqrt(rmsSum / loudnessTimeData.length);
+  }
+  loudnessSmooth += (loudnessRaw - loudnessSmooth) * 0.12;
+
+  // Hammer power % — based on loudness (how loud/saturated the sound is)
+  const hammerRaw = Math.min(1, loudnessSmooth * 3.5);
+  hammerSmooth += (hammerRaw - hammerSmooth) * .1;
+  const hammerPct = Math.round(hammerSmooth * 100);
   const hPctEl = document.getElementById('hammerPct');
   if (hPctEl) {
     hPctEl.textContent = hammerPct + '%';
@@ -358,8 +381,17 @@ function drawWaveform(currentTime) {
     } else {
       hPctEl.style.color = 'rgba(239, 68, 68, .85)';
     }
-    // Scale the % text on strong kicks
     hPctEl.style.transform = kickDecay > .3 ? `scale(${1 + kickDecay * .15})` : '';
+  }
+
+  // Wrapper shake on loud sections (chorus etc.)
+  if (wrapperEl && loudnessSmooth > 0.15) {
+    const shakeIntensity = Math.pow((loudnessSmooth - 0.15) / 0.85, 1.5) * 2.5;
+    const sx = (Math.random() - .5) * shakeIntensity;
+    const sy = (Math.random() - .5) * shakeIntensity;
+    wrapperEl.style.transform = `translate(${sx}px, ${sy}px)`;
+  } else if (wrapperEl) {
+    wrapperEl.style.transform = '';
   }
 
   // Mini waveform progress
@@ -395,11 +427,6 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     // Interpolated sample with contrast boost
     const fIdx = pNorm * (waveformData.length - 1);
     let val = Math.pow(sampleWaveform(fIdx), 0.85);
-
-    // Kick pulse near playhead — amplify bars on kick
-    const distToHead = Math.abs(x - playheadX);
-    const proximity = Math.max(0, 1 - distToHead / (w * .25));
-    val = val * (1 + kick * proximity * .6);
 
     const barH = Math.max(1, val * h * .42);
     const isPlayed = x < playheadX;

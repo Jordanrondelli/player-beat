@@ -170,6 +170,19 @@ body {
   transform-style: preserve-3d;
   transform: perspective(1200px) rotateY(-5deg) rotateX(2deg);
   transform-origin: 55% 50%;
+  animation: sceneFloat 6s ease-in-out infinite;
+}
+@keyframes sceneFloat {
+  0%, 100% { transform: perspective(1200px) rotateY(-5deg) rotateX(2deg) translateY(0); }
+  50% { transform: perspective(1200px) rotateY(-4.5deg) rotateX(2.3deg) translateY(-6px); }
+}
+@keyframes sceneFloatSm {
+  0%, 100% { transform: perspective(1200px) rotateY(-3deg) rotateX(1.5deg) translateY(0); }
+  50% { transform: perspective(1200px) rotateY(-2.5deg) rotateX(1.8deg) translateY(-5px); }
+}
+@keyframes sceneFloatXs {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
 }
 
 /* ===== WAVEFORM PANEL ===== */
@@ -588,7 +601,7 @@ body {
   .wrapper { padding-left: 0; }
   .scene {
     width: 92vw;
-    transform: perspective(1200px) rotateY(-3deg) rotateX(1.5deg);
+    animation: sceneFloatSm 6s ease-in-out infinite;
   }
   .vote-left { left: calc(50% - 220px); bottom: -280px; }
   .vote-right { right: calc(50% - 220px); bottom: -280px; }
@@ -606,7 +619,7 @@ body {
 @media (max-width: 600px) {
   .scene {
     width: 95vw;
-    transform: none;
+    animation: sceneFloatXs 6s ease-in-out infinite;
   }
   .waveform-panel { height: min(240px, 35vh); }
   .vote-left { left: 10px; bottom: -240px; }
