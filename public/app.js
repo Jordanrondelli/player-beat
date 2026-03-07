@@ -120,6 +120,24 @@ function resizeCanvases() {
 }
 window.addEventListener('resize', resizeCanvases);
 
+// ===== SMOOTH WAVEFORM DATA =====
+function smoothWaveformData(data, radius) {
+  const out = new Float32Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    let sum = 0, count = 0;
+    for (let j = -radius; j <= radius; j++) {
+      const idx = i + j;
+      if (idx >= 0 && idx < data.length) {
+        const weight = 1 - Math.abs(j) / (radius + 1);
+        sum += data[idx] * weight;
+        count += weight;
+      }
+    }
+    out[i] = sum / count;
+  }
+  return Array.from(out);
+}
+
 // ===== WAVEFORM DATA =====
 function generateDemoData() {
   const n = 10000;
@@ -136,22 +154,26 @@ function generateDemoData() {
   }
   const max = Math.max(...waveformData);
   waveformData = waveformData.map(v => v / max);
+  // No smoothing on demo data
 }
 
 function extractWaveformData(buffer) {
   const raw = buffer.getChannelData(0);
-  const n = 10000;
+  const n = 20000;
   const blockLen = Math.floor(raw.length / n);
   waveformData = [];
   for (let i = 0; i < n; i++) {
     let sum = 0;
     for (let j = 0; j < blockLen; j++) {
-      sum += Math.abs(raw[i * blockLen + j] || 0);
+      const s = raw[i * blockLen + j] || 0;
+      sum += s * s;
     }
-    waveformData.push(sum / blockLen);
+    // RMS — preserves transient peaks better than average abs
+    waveformData.push(Math.sqrt(sum / blockLen));
   }
   const max = Math.max(...waveformData);
   if (max > 0) waveformData = waveformData.map(v => v / max);
+  // No smoothing — preserve kick transients
 }
 
 // ===== MINI WAVEFORM (drawn once) =====
@@ -172,13 +194,25 @@ function drawMiniWaveform() {
   }
 }
 
+// ===== LOUDNESS ANALYSER =====
+const loudnessAnalyser = audioCtx.createAnalyser();
+loudnessAnalyser.fftSize = 2048;
+loudnessAnalyser.smoothingTimeConstant = 0.3;
+const loudnessTimeData = new Uint8Array(loudnessAnalyser.fftSize);
+gainNode.connect(loudnessAnalyser);
+
 // ===== KICK DETECTION STATE =====
 let prevKickLevel = 0;
 let kickDecay = 0;
 let density = 0;
 let densitySmooth = 0;
-let lastKickTime = 0; // cooldown to avoid rapid re-triggers
+let lastKickTime = 0;
 let hammerSmooth = 0;
+let loudnessSmooth = 0;
+let hammerHitTimeout = null;
+const hammerIconEl = document.getElementById('hammerIcon');
+let detectedBPM = 0;
+let beatIntervalId = null;
 
 // ===== MAIN WAVEFORM DRAW =====
 function drawWaveform(currentTime) {
@@ -200,7 +234,7 @@ function drawWaveform(currentTime) {
   density = dCount > 0 ? dSum / dCount : 0;
   densitySmooth += (density - densitySmooth) * .05;
 
-  // Kick detection
+  // Kick detection from audio analyser
   let kickLevel = 0;
   if (isPlaying && audioBuffer) {
     analyser.getByteFrequencyData(frequencyData);
@@ -220,23 +254,11 @@ function drawWaveform(currentTime) {
   const isKick = rise > .04 && kickLevel > .15 && (now - lastKickTime) > 120;
   prevKickLevel += (kickLevel - prevKickLevel) * .4;
 
-  // Kick impact — strong hit, slow decay
+  // Kick impact
   if (isKick) {
     lastKickTime = now;
     const intensity = Math.min(1, rise * 8 * Math.max(densitySmooth, .3));
     kickDecay = Math.max(kickDecay, intensity);
-
-    // Scene impact: subtle micro-tremble
-    if (intensity > .3) {
-      const ox = (Math.random() - .5) * intensity * 1.5;
-      const oy = (Math.random() - .5) * intensity * 1.2;
-      scene.style.transition = 'transform .04s linear';
-      scene.style.transform = `perspective(1200px) rotateY(-5deg) rotateX(2deg) translate(${ox}px, ${oy}px)`;
-      setTimeout(() => {
-        scene.style.transition = 'transform .15s ease-out';
-        scene.style.transform = 'perspective(1200px) rotateY(-5deg) rotateX(2deg)';
-      }, 40);
-    }
   }
   kickDecay *= .88;
 
@@ -297,25 +319,34 @@ function drawWaveform(currentTime) {
   waveformCtx.lineWidth = 1;
   waveformCtx.stroke();
 
-  // Glow elements — intensify blur + opacity on kicks
-  if (glow1El) { glow1El.style.opacity = .3 + kickDecay * 1.4; glow1El.style.filter = `blur(${35 + kickDecay * 25}px)`; }
-  if (glow2El) { glow2El.style.opacity = .15 + kickDecay * 1.1; glow2El.style.filter = `blur(${20 + kickDecay * 15}px)`; }
+  // Glow elements — intensify blur + opacity on kicks, clip to played side only
+  const glowClip = `inset(0 ${100 - (playheadX / w) * 100}% 0 0)`;
+  if (glow1El) { glow1El.style.opacity = .3 + kickDecay * 1.4; glow1El.style.filter = `blur(${35 + kickDecay * 25}px)`; glow1El.style.clipPath = glowClip; }
+  if (glow2El) { glow2El.style.opacity = .15 + kickDecay * 1.1; glow2El.style.filter = `blur(${20 + kickDecay * 15}px)`; glow2El.style.clipPath = glowClip; }
 
-  // Background kick pump (scale only, no brightness flash)
-  const bgPump = 1 + kickDecay * .02;
-  if (bgEl) {
-    bgEl.style.scale = bgPump;
+  // Background — no kick reaction, just CSS animation
+
+  // Loudness measurement (RMS of full signal)
+  let loudnessRaw = 0;
+  if (isPlaying && audioBuffer) {
+    loudnessAnalyser.getByteTimeDomainData(loudnessTimeData);
+    let rmsSum = 0;
+    for (let i = 0; i < loudnessTimeData.length; i++) {
+      const s = (loudnessTimeData[i] - 128) / 128;
+      rmsSum += s * s;
+    }
+    loudnessRaw = Math.sqrt(rmsSum / loudnessTimeData.length);
   }
+  loudnessSmooth += (loudnessRaw - loudnessSmooth) * 0.12;
 
-  // Hammer loudness % — simple text display
-  const hammerRaw = Math.min(1, Math.pow(kickLevel, 1.8) * 1.2 + densitySmooth * 0.15 + kickDecay * 0.4);
+  // Hammer power % — based on loudness (how loud/saturated the sound is)
+  // RMS typically ranges 0.05 (quiet) to 0.45 (loud/saturated)
+  const hammerRaw = Math.min(1, Math.max(0, (loudnessSmooth - 0.03) / 0.4));
   hammerSmooth += (hammerRaw - hammerSmooth) * .08;
-  const hammerCurved = Math.pow(hammerSmooth, 1.6);
-  const hammerPct = Math.round(hammerCurved * 100);
+  const hammerPct = Math.round(Math.pow(hammerSmooth, 0.7) * 100);
   const hPctEl = document.getElementById('hammerPct');
   if (hPctEl) {
     hPctEl.textContent = hammerPct + '%';
-    // Color intensity based on level
     if (hammerPct < 33) {
       hPctEl.style.color = 'rgba(255, 255, 255, .45)';
     } else if (hammerPct < 66) {
@@ -323,23 +354,34 @@ function drawWaveform(currentTime) {
     } else {
       hPctEl.style.color = 'rgba(239, 68, 68, .85)';
     }
+    hPctEl.style.transform = kickDecay > .3 ? `scale(${1 + kickDecay * .15})` : '';
   }
+
+
 
   // Mini waveform progress
   miniProgress.style.width = ((currentTime / duration) * 100) + '%';
 }
 
+// Interpolate waveform value at fractional index for smoothness
+function sampleWaveform(fIdx) {
+  const i0 = Math.floor(fIdx);
+  const i1 = Math.min(i0 + 1, waveformData.length - 1);
+  const t = fIdx - i0;
+  return (waveformData[i0] || 0) * (1 - t) + (waveformData[i1] || 0) * t;
+}
+
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
-  const barW = 3, gap = 1.5, step = barW + gap;
+  const barW = 2, gap = 1, step = barW + gap;
   const numBars = Math.ceil(w / step);
 
   // Played region gradient
   const gradPlayed = ctx.createLinearGradient(0, centerY - h * .42, 0, centerY + h * .42);
-  gradPlayed.addColorStop(0, 'rgba(180,40,20,0.55)');
-  gradPlayed.addColorStop(.2, 'rgba(235,65,35,0.95)');
-  gradPlayed.addColorStop(.5, 'rgba(250,80,45,1)');
-  gradPlayed.addColorStop(.8, 'rgba(235,65,35,0.95)');
-  gradPlayed.addColorStop(1, 'rgba(180,40,20,0.55)');
+  gradPlayed.addColorStop(0, 'rgba(150,15,10,0.55)');
+  gradPlayed.addColorStop(.2, 'rgba(200,25,15,0.95)');
+  gradPlayed.addColorStop(.5, 'rgba(220,30,20,1)');
+  gradPlayed.addColorStop(.8, 'rgba(200,25,15,0.95)');
+  gradPlayed.addColorStop(1, 'rgba(150,15,10,0.55)');
 
   for (let i = 0; i < numBars; i++) {
     const x = i * step;
@@ -347,13 +389,9 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     const pNorm = tSec / duration;
     if (pNorm < 0 || pNorm > 1) continue;
 
-    const idx = Math.floor(pNorm * waveformData.length);
-    let val = waveformData[Math.min(idx, waveformData.length - 1)] || 0;
-
-    // Kick pulse near playhead
-    const distToHead = Math.abs(x - playheadX);
-    const proximity = Math.max(0, 1 - distToHead / (w * .15));
-    val = val * (1 + kick * proximity * .35);
+    // Interpolated sample with contrast boost
+    const fIdx = pNorm * (waveformData.length - 1);
+    let val = Math.pow(sampleWaveform(fIdx), 0.85);
 
     const barH = Math.max(1, val * h * .42);
     const isPlayed = x < playheadX;
@@ -407,6 +445,93 @@ function formatTime(seconds) {
   return Math.floor(seconds / 60) + ':' + String(Math.floor(seconds % 60)).padStart(2, '0');
 }
 
+// ===== BPM DETECTION =====
+function detectBPM(buffer) {
+  const offCtx = new OfflineAudioContext(1, buffer.length, buffer.sampleRate);
+  const src = offCtx.createBufferSource();
+  src.buffer = buffer;
+  const lp = offCtx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 150;
+  src.connect(lp);
+  lp.connect(offCtx.destination);
+  src.start(0);
+  return offCtx.startRendering().then(rendered => {
+    const data = rendered.getChannelData(0);
+    const sr = rendered.sampleRate;
+    const winSize = Math.floor(sr * 0.05);
+    const numWins = Math.floor(data.length / winSize);
+    const energy = new Float32Array(numWins);
+    for (let i = 0; i < numWins; i++) {
+      let sum = 0;
+      const off = i * winSize;
+      for (let j = 0; j < winSize; j++) sum += data[off + j] * data[off + j];
+      energy[i] = sum / winSize;
+    }
+    const peaks = [];
+    const threshold = 1.4;
+    for (let i = 1; i < energy.length - 1; i++) {
+      const avg = (energy[i - 1] + energy[i] + energy[i + 1]) / 3;
+      if (energy[i] > avg * threshold && energy[i] > energy[i - 1] && energy[i] > energy[i + 1]) {
+        peaks.push(i * winSize / sr);
+      }
+    }
+    if (peaks.length < 2) return 120;
+    const intervals = [];
+    for (let i = 1; i < peaks.length; i++) {
+      const diff = peaks[i] - peaks[i - 1];
+      if (diff > 0.25 && diff < 2.0) intervals.push(diff);
+    }
+    if (!intervals.length) return 120;
+    const bpmCounts = {};
+    for (const iv of intervals) {
+      const bpm = Math.round(60 / iv);
+      const rounded = Math.round(bpm / 2) * 2;
+      bpmCounts[rounded] = (bpmCounts[rounded] || 0) + 1;
+    }
+    let bestBPM = 120, bestCount = 0;
+    for (const [bpm, count] of Object.entries(bpmCounts)) {
+      if (count > bestCount) { bestCount = count; bestBPM = +bpm; }
+    }
+    if (bestBPM > 180) bestBPM /= 2;
+    if (bestBPM < 70) bestBPM *= 2;
+    return Math.round(bestBPM);
+  });
+}
+
+function startBeatSync() {
+  stopBeatSync();
+  if (!detectedBPM || !hammerIconEl) return;
+  const ms = 60000 / detectedBPM;
+  function hammerHit() {
+    if (!isPlaying) return;
+    // Power-driven amplitude (exponential curve)
+    const pwr = Math.pow(hammerSmooth, 2.5);
+    if (pwr < 0.001) return; // 0% power = no movement
+    const angle = -8 - pwr * 52;
+    const scl = 1 + pwr * 0.4;
+    hammerIconEl.style.transform = `rotate(${angle}deg) scale(${scl})`;
+    hammerIconEl.style.transition = 'transform .03s ease-out';
+    hammerIconEl.style.filter = `drop-shadow(0 ${2 + pwr * 6}px ${8 + pwr * 16}px rgba(255,120,0,${0.3 + pwr * 0.5}))`;
+    if (hammerHitTimeout) clearTimeout(hammerHitTimeout);
+    hammerHitTimeout = setTimeout(() => {
+      hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
+      hammerIconEl.style.transition = 'transform .12s cubic-bezier(.1,.9,.3,1)';
+      hammerIconEl.style.filter = 'drop-shadow(0 2px 8px rgba(255,120,0,.4))';
+    }, 60 + pwr * 80);
+  }
+  hammerHit();
+  beatIntervalId = setInterval(hammerHit, ms);
+}
+
+function stopBeatSync() {
+  if (beatIntervalId) { clearInterval(beatIntervalId); beatIntervalId = null; }
+  if (hammerIconEl) {
+    hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
+    hammerIconEl.style.filter = 'drop-shadow(0 2px 8px rgba(255,120,0,.4))';
+  }
+}
+
 // ===== PLAYBACK CONTROLS =====
 function playAudio() {
   if (!audioBuffer) return;
@@ -419,6 +544,7 @@ function playAudio() {
   startTime = audioCtx.currentTime;
   isPlaying = true;
   playImg.style.display = 'none'; pauseImg.style.display = 'block';
+  startBeatSync();
 }
 
 function pauseAudio() {
@@ -428,6 +554,7 @@ function pauseAudio() {
   }
   pauseOffset += audioCtx.currentTime - startTime;
   isPlaying = false;
+  stopBeatSync();
   playImg.style.display = 'block'; pauseImg.style.display = 'none';
 }
 
@@ -438,6 +565,7 @@ function stopAudio() {
     sourceNode = null;
   }
   isPlaying = false;
+  stopBeatSync();
   pauseOffset = 0;
   playImg.style.display = 'block'; pauseImg.style.display = 'none';
 }
@@ -481,6 +609,8 @@ document.getElementById('audioFileInput').addEventListener('change', async (e) =
     const arrayBuffer = await file.arrayBuffer();
     audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
     extractWaveformData(audioBuffer);
+    detectedBPM = await detectBPM(audioBuffer);
+    console.log('Detected BPM:', detectedBPM);
     resizeCanvases();
     drawMiniWaveform();
     pauseOffset = 0;

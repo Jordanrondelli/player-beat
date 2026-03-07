@@ -23,7 +23,7 @@ body {
   50% { transform: scale(1.05) translate(-5px, 8px) }
   75% { transform: scale(1.06) translate(6px, 3px) }
 }
-.bg-dim { position: fixed; inset: 0; z-index: 1; background: rgba(2, 4, 14, .25); }
+.bg-dim { position: fixed; inset: 0; z-index: 1; background: rgba(2, 4, 14, .25); pointer-events: none; }
 .vig {
   position: fixed; inset: 0; z-index: 2; pointer-events: none;
   background: radial-gradient(ellipse at 54% 40%, transparent 30%, rgba(2, 4, 12, .55) 100%);
@@ -123,17 +123,14 @@ body {
 
 /* ===== MAIN WRAPPER ===== */
 .wrapper {
-  width: 100%; height: 100%; position: relative;
+  width: 100%; height: 100%; position: relative; z-index: 5;
   display: flex; align-items: center; justify-content: center;
   padding-left: 8vw;
 }
-.wrapper.shaking { animation: shake .08s linear infinite; }
-@keyframes shake {
-  0% { transform: translate(0, 0) }
-  25% { transform: translate(-0.8px, 0.5px) }
-  50% { transform: translate(0.6px, -0.8px) }
-  75% { transform: translate(-0.5px, -0.3px) }
-  100% { transform: translate(0.7px, 0.4px) }
+
+  50% { transform: translate(0.8px, -1px) }
+  75% { transform: translate(-0.6px, -0.4px) }
+  100% { transform: translate(0, 0) }
 }
 
 /* ===== GLASS PANEL ===== */
@@ -166,10 +163,23 @@ body {
 .scene {
   position: relative; z-index: 10;
   width: min(1200px, 83vw);
-  margin-top: -160px;
+  margin-top: -280px;
   transform-style: preserve-3d;
   transform: perspective(1200px) rotateY(-5deg) rotateX(2deg);
   transform-origin: 55% 50%;
+  animation: sceneFloat 6s ease-in-out infinite;
+}
+@keyframes sceneFloat {
+  0%, 100% { transform: perspective(1200px) rotateY(-5deg) rotateX(2deg) translateY(0); }
+  50% { transform: perspective(1200px) rotateY(-4.8deg) rotateX(2.1deg) translateY(-3px); }
+}
+@keyframes sceneFloatSm {
+  0%, 100% { transform: perspective(1200px) rotateY(-3deg) rotateX(1.5deg) translateY(0); }
+  50% { transform: perspective(1200px) rotateY(-2.8deg) rotateX(1.6deg) translateY(-2px); }
+}
+@keyframes sceneFloatXs {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
 }
 
 /* ===== WAVEFORM PANEL ===== */
@@ -307,16 +317,36 @@ body {
   pointer-events: none; z-index: 25;
 }
 
-/* ===== HAMMER LOUDNESS % ===== */
-.hammer-meter {
-  position: absolute; top: 12px; right: 16px; z-index: 30;
-  transform: translateZ(10px);
+/* ===== HAMMER CARD ===== */
+.hammer-card {
+  position: absolute; top: -55px; left: 50%; z-index: 30;
+  transform: translateX(-50%) translateZ(20px);
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px 10px 14px; border-radius: 16px;
+  overflow: visible;
+  animation: floatHammer 5.5s ease-in-out infinite;
+}
+@keyframes floatHammer {
+  0%, 100% { transform: translateX(-50%) rotateX(1deg) rotateY(1deg) translateY(0) translateZ(20px) }
+  40% { transform: translateX(-50%) rotateX(0deg) rotateY(-1deg) translateY(-6px) translateZ(20px) }
+  70% { transform: translateX(-50%) rotateX(2deg) rotateY(2deg) translateY(-3px) translateZ(20px) }
+}
+.hammer-icon {
+  width: 44px; height: 44px; object-fit: contain;
+  transform-origin: 50% 90%;
+  transform: rotate(0deg) scale(1);
+  transition: transform .12s cubic-bezier(.1,.9,.3,1);
+  filter: drop-shadow(0 2px 8px rgba(255,120,0,.4));
+}
+.hammer-label {
+  font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 9px;
+  color: rgba(255, 255, 255, .3); letter-spacing: 2px; text-transform: uppercase;
 }
 .hammer-pct {
-  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13px;
-  color: rgba(255, 255, 255, .45); text-shadow: 0 1px 4px rgba(0, 0, 0, .4);
-  letter-spacing: -.5px;
-  transition: color .15s;
+  font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 22px;
+  color: rgba(255, 255, 255, .5); text-shadow: 0 2px 8px rgba(0, 0, 0, .5);
+  letter-spacing: -1px;
+  transition: color .15s, transform .08s;
 }
 
 /* ===== MINI WAVEFORM NAV ===== */
@@ -338,45 +368,45 @@ body {
 }
 
 /* ===== VOTE BUTTONS ===== */
-.vote-left { position: absolute; bottom: -320px; left: calc(50% - 320px); z-index: 35; }
-.vote-right { position: absolute; bottom: -320px; right: calc(50% - 320px); z-index: 35; }
+.vote-left { position: absolute; bottom: -380px; left: calc(50% - 480px); z-index: 35; }
+.vote-right { position: absolute; bottom: -380px; right: calc(50% - 480px); z-index: 35; }
+.vote-icon {
+  width: 100%; height: 100%; object-fit: contain; pointer-events: none;
+  transition: filter .3s ease;
+}
 .vote-btn {
-  width: 110px; height: 110px; border-radius: 24px; border: none; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; font-size: 46px;
-  background: linear-gradient(145deg, rgba(20, 35, 75, .35), rgba(10, 20, 55, .45));
-  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-  border: 1.5px solid rgba(170, 200, 255, .22);
-  box-shadow:
-    0 0 4px rgba(170, 200, 255, .2),
-    0 14px 35px rgba(0, 0, 0, .35),
-    inset 0 1px 0 rgba(255, 255, 255, .1),
-    inset 0 -2px 8px rgba(0, 0, 0, .12);
-  position: relative; overflow: hidden;
+  width: 150px; height: 150px; border-radius: 24px; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  position: relative; overflow: visible;
+  transition: filter .3s ease;
+}
+.vote-btn-red .vote-icon {
+  filter: drop-shadow(0 0 12px rgba(220, 40, 40, .45)) drop-shadow(0 0 25px rgba(200, 20, 20, .2));
+}
+.vote-btn-red:hover .vote-icon {
+  filter: drop-shadow(0 0 18px rgba(220, 40, 40, .7)) drop-shadow(0 0 40px rgba(200, 20, 20, .35));
+}
+.vote-btn-green .vote-icon {
+  filter: drop-shadow(0 0 12px rgba(40, 200, 60, .45)) drop-shadow(0 0 25px rgba(20, 180, 40, .2));
+}
+.vote-btn-green:hover .vote-icon {
+  filter: drop-shadow(0 0 18px rgba(40, 200, 60, .7)) drop-shadow(0 0 40px rgba(20, 180, 40, .35));
 }
 .vote-left .vote-btn { animation: floatL 4s ease-in-out infinite; transform-origin: center; }
 .vote-right .vote-btn { animation: floatR 4.5s ease-in-out infinite; }
 @keyframes floatL {
-  0%, 100% { transform: translateY(0) rotate(-2deg) translateZ(15px) }
-  50% { transform: translateY(-10px) rotate(1.5deg) translateZ(15px) }
+  0%, 100% { transform: translateY(0) rotate(-1deg) translateZ(8px) }
+  50% { transform: translateY(-5px) rotate(0.8deg) translateZ(8px) }
 }
 @keyframes floatR {
-  0%, 100% { transform: translateY(0) rotate(2deg) translateZ(15px) }
-  50% { transform: translateY(-12px) rotate(-1.5deg) translateZ(15px) }
+  0%, 100% { transform: translateY(0) rotate(1deg) translateZ(8px) }
+  50% { transform: translateY(-6px) rotate(-0.8deg) translateZ(8px) }
 }
-.vote-btn::before {
-  content: ''; position: absolute; top: 5px; left: 5px; width: 45%; height: 45%;
-  border-radius: 14px;
-  background: radial-gradient(ellipse at 30% 30%, rgba(255, 255, 255, .07), transparent);
-  pointer-events: none;
-}
-.vote-btn:hover {
-  box-shadow: 0 0 10px rgba(170, 200, 255, .2), 0 18px 40px rgba(0, 0, 0, .4);
-  border-color: rgba(170, 200, 255, .35);
-}
+
 .vote-btn:active {
   animation: none !important;
-  transform: translateY(4px) scale(.93) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .3), inset 0 3px 8px rgba(0, 0, 0, .2) !important;
+  transform: translateY(3px) scale(.92) !important;
 }
 
 /* ===== USER CARD ===== */
@@ -384,12 +414,14 @@ body {
   position: absolute; top: -65px; left: 15px; z-index: 30;
   display: flex; align-items: center; gap: 14px;
   padding: 14px 24px 14px 16px; border-radius: 18px;
-  animation: floatUser 5s ease-in-out infinite;
+  background: rgba(10, 20, 50, .55) !important;
+  backdrop-filter: blur(28px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.4) !important;
+  animation: floatUser 8s ease-in-out infinite;
 }
 @keyframes floatUser {
-  0%, 100% { transform: rotateX(1deg) rotateY(2deg) translateY(0) translateZ(25px) }
-  33% { transform: rotateX(2deg) rotateY(0deg) translateY(-6px) translateZ(25px) }
-  66% { transform: rotateX(0deg) rotateY(3deg) translateY(-3px) translateZ(25px) }
+  0%, 100% { transform: rotateX(0.5deg) rotateY(1deg) translateY(0) translateZ(8px) }
+  50% { transform: rotateX(-0.3deg) rotateY(-0.5deg) translateY(-3px) translateZ(10px) }
 }
 .user-avatar {
   width: 54px; height: 54px; border-radius: 50%;
@@ -413,12 +445,11 @@ body {
   background: rgba(10, 20, 50, .55) !important;
   backdrop-filter: blur(28px) saturate(1.4) !important;
   -webkit-backdrop-filter: blur(28px) saturate(1.4) !important;
-  animation: floatChat 7s ease-in-out infinite;
+  animation: floatChat 9s ease-in-out infinite;
 }
 @keyframes floatChat {
-  0%, 100% { transform: rotateX(1deg) rotateY(-3deg) translateY(0) translateZ(20px) }
-  40% { transform: rotateX(0deg) rotateY(-5deg) translateY(-7px) translateZ(20px) }
-  75% { transform: rotateX(2deg) rotateY(-2deg) translateY(-3px) translateZ(20px) }
+  0%, 100% { transform: rotateX(0.3deg) rotateY(-1deg) translateY(0) translateZ(6px) }
+  50% { transform: rotateX(-0.3deg) rotateY(-1.5deg) translateY(-3px) translateZ(8px) }
 }
 .chat-title { font-weight: 800; font-size: 15px; margin-bottom: 10px; }
 .chat-row { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; font-size: 13px; }
@@ -526,28 +557,30 @@ body {
   .wrapper { padding-left: 0; }
   .scene {
     width: 92vw;
-    transform: perspective(1200px) rotateY(-3deg) rotateX(1.5deg);
+    animation: sceneFloatSm 6s ease-in-out infinite;
   }
-  .vote-left { left: calc(50% - 220px); bottom: -280px; }
-  .vote-right { right: calc(50% - 220px); bottom: -280px; }
-  .vote-btn { width: 80px; height: 80px; font-size: 34px; border-radius: 20px; }
+  .vote-left { left: calc(50% - 320px); bottom: -320px; }
+  .vote-right { right: calc(50% - 320px); bottom: -320px; }
+  .vote-btn { width: 110px; height: 110px; border-radius: 20px; }
   .fire-wrap { bottom: -260px; }
   .chat-card { width: 180px; font-size: 11px; right: 5px; }
   .user-card { left: 5px; padding: 10px 16px 10px 12px; }
   .user-name { font-size: 16px; }
   .fire-btn { width: 300px; height: 120px; }
-  .hammer-meter { right: 12px; top: 10px; }
+  .hammer-card { padding: 8px 14px 8px 10px; }
+  .hammer-pct { font-size: 18px; }
+  .hammer-icon { width: 36px; height: 36px; }
 }
 
 @media (max-width: 600px) {
   .scene {
     width: 95vw;
-    transform: none;
+    animation: sceneFloatXs 6s ease-in-out infinite;
   }
   .waveform-panel { height: min(240px, 35vh); }
-  .vote-left { left: 10px; bottom: -240px; }
-  .vote-right { right: 10px; bottom: -240px; }
-  .vote-btn { width: 65px; height: 65px; font-size: 28px; border-radius: 16px; }
+  .vote-left { left: 10px; bottom: -260px; }
+  .vote-right { right: 10px; bottom: -260px; }
+  .vote-btn { width: 90px; height: 90px; border-radius: 16px; }
   .chat-card { width: 160px; right: 2px; padding: 10px 12px; }
   .chat-title { font-size: 12px; }
   .user-card {
@@ -561,5 +594,8 @@ body {
   .fire-btn { width: 200px; height: 90px; }
   .volume-wrap { right: 50px; }
   .volume-slider { width: 40px; }
-  .hammer-meter { display: none; }
+  .hammer-card { padding: 6px 10px; }
+  .hammer-pct { font-size: 15px; }
+  .hammer-icon { width: 28px; height: 28px; }
+  .hammer-label { display: none; }
 }
