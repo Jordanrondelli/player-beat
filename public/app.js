@@ -223,49 +223,50 @@ function drawWaveform(currentTime) {
 
 
 
-  const windowSec = 3;
-  const playheadX = w * 0.4;
-  const scrollBack = 0.4 * windowSec;
+  const windowSec = 4;
+  const playheadX = w * 0.35;
+  const scrollBack = 0.35 * windowSec;
   const timeStart = currentTime - scrollBack;
   const centerY = h * 0.48;
 
-  // Glow pass
-  const glowAlpha = .15 + kickDecay * .4;
+  // Glow pass — played side only, red glow
   waveformCtx.save();
-  waveformCtx.filter = `blur(${6 + kickDecay * 12}px)`;
-  waveformCtx.globalAlpha = glowAlpha;
-  drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration);
+  waveformCtx.filter = `blur(${8 + kickDecay * 14}px)`;
+  waveformCtx.globalAlpha = .12 + kickDecay * .35;
+  drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, true);
   waveformCtx.restore();
 
-  // Sharp pass
+  // Sharp pass — full waveform
   waveformCtx.globalAlpha = 1;
   waveformCtx.filter = 'none';
-  drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration);
+  drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, false);
+
+  // Playhead glow
+  const phGlow = waveformCtx.createLinearGradient(playheadX - 30, 0, playheadX + 30, 0);
+  phGlow.addColorStop(0, 'transparent');
+  phGlow.addColorStop(.35, `rgba(245,60,30,${.06 + kickDecay * .12})`);
+  phGlow.addColorStop(.5, `rgba(255,80,40,${.12 + kickDecay * .2})`);
+  phGlow.addColorStop(.65, `rgba(245,60,30,${.06 + kickDecay * .12})`);
+  phGlow.addColorStop(1, 'transparent');
+  waveformCtx.fillStyle = phGlow;
+  waveformCtx.fillRect(playheadX - 30, 0, 60, h);
 
   // Playhead line
-  waveformCtx.fillStyle = `rgba(255,255,255,${.3 + kickDecay * .2})`;
-  waveformCtx.fillRect(playheadX - .5, 0, 1.5, h);
+  const phAlpha = .6 + kickDecay * .3;
+  waveformCtx.fillStyle = `rgba(255,255,255,${phAlpha})`;
+  waveformCtx.fillRect(playheadX - .75, 0, 1.5, h);
 
-  // Spectrum at bottom
-  if (isPlaying) {
-    const specH = h * .12;
-    const specY = h - specH - 4;
-    const binCount = 64;
-    const binW = w / binCount;
-    for (let i = 0; i < binCount; i++) {
-      const val = frequencyData[Math.floor(i * analyser.frequencyBinCount / binCount / 2)] || 0;
-      const norm = val / 255;
-      const barH = norm * specH;
-      const hue = i / binCount;
-      if (hue < .3)
-        waveformCtx.fillStyle = `rgba(255,${80 + hue * 200},30,${.15 + norm * .25})`;
-      else if (hue < .6)
-        waveformCtx.fillStyle = `rgba(${255 - hue * 200},200,${100 + hue * 200},${.1 + norm * .2})`;
-      else
-        waveformCtx.fillStyle = `rgba(100,${180 + hue * 75},255,${.08 + norm * .15})`;
-      waveformCtx.fillRect(i * binW, specY + specH - barH, binW - .5, barH);
-    }
-  }
+  // Playhead dot
+  const dotR = 4 + kickDecay * 2;
+  waveformCtx.beginPath();
+  waveformCtx.arc(playheadX, centerY, dotR, 0, Math.PI * 2);
+  waveformCtx.fillStyle = `rgba(255,255,255,${.8 + kickDecay * .2})`;
+  waveformCtx.fill();
+  waveformCtx.beginPath();
+  waveformCtx.arc(playheadX, centerY, dotR + 3, 0, Math.PI * 2);
+  waveformCtx.strokeStyle = `rgba(255,200,180,${.2 + kickDecay * .3})`;
+  waveformCtx.lineWidth = 1;
+  waveformCtx.stroke();
 
   // Glow elements
   const glow1 = document.querySelector('.waveform-glow');
@@ -283,8 +284,8 @@ function drawWaveform(currentTime) {
   miniProgress.style.width = ((currentTime / duration) * 100) + '%';
 }
 
-function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration) {
-  const barW = 2.5, gap = 0.3, step = barW + gap;
+function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
+  const barW = 2, gap = 1, step = barW + gap;
   const numBars = Math.ceil(w / step);
   for (let i = 0; i < numBars; i++) {
     const x = i * step;
@@ -301,19 +302,40 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     const idx3 = Math.min(idx1 + 2, waveformData.length - 1);
     const p0 = waveformData[idx0] || 0, p1 = waveformData[idx1] || 0;
     const p2 = waveformData[idx2] || 0, p3 = waveformData[idx3] || 0;
-    const val = Math.max(0, 0.5 * (2*p1 + (-p0+p2)*frac + (2*p0-5*p1+4*p2-p3)*frac*frac + (-p0+3*p1-3*p2+p3)*frac*frac*frac));
-    const barH = Math.max(2, val * h * .46);
+    let val = Math.max(0, 0.5 * (2*p1 + (-p0+p2)*frac + (2*p0-5*p1+4*p2-p3)*frac*frac + (-p0+3*p1-3*p2+p3)*frac*frac*frac));
 
-    if (x <= playheadX) {
+    // Kick pulse: bars near playhead grow on kick
+    const distToHead = Math.abs(x - playheadX);
+    const proximity = Math.max(0, 1 - distToHead / (w * .15));
+    val = val * (1 + kick * proximity * .35);
+
+    const barH = Math.max(1.5, val * h * .46);
+    const isPlayed = x <= playheadX;
+
+    // Glow pass only draws the played side
+    if (glowOnly) {
+      if (!isPlayed) continue;
+      ctx.fillStyle = `rgba(245,60,30,1)`;
+      ctx.beginPath();
+      ctx.roundRect(x, centerY - barH, barW, barH * 2, 1);
+      ctx.fill();
+      continue;
+    }
+
+    if (isPlayed) {
+      // Played: warm red gradient, bright
       const grad = ctx.createLinearGradient(0, centerY - barH, 0, centerY + barH);
-      grad.addColorStop(0, 'rgba(200,45,25,0.7)');
-      grad.addColorStop(.3, 'rgba(245,70,40,1)');
-      grad.addColorStop(.7, 'rgba(245,70,40,1)');
-      grad.addColorStop(1, 'rgba(170,30,15,0.65)');
+      grad.addColorStop(0, 'rgba(180,40,20,0.55)');
+      grad.addColorStop(.2, 'rgba(235,65,35,0.95)');
+      grad.addColorStop(.5, 'rgba(250,80,45,1)');
+      grad.addColorStop(.8, 'rgba(235,65,35,0.95)');
+      grad.addColorStop(1, 'rgba(180,40,20,0.55)');
       ctx.fillStyle = grad;
     } else {
+      // Unplayed: white, fades out further from playhead
       const d = (x - playheadX) / (w - playheadX);
-      ctx.fillStyle = `rgba(255,255,255,${Math.max(.04, .8 - d * .55)})`;
+      const alpha = Math.max(.06, .5 - d * .4);
+      ctx.fillStyle = `rgba(200,210,230,${alpha})`;
     }
     ctx.beginPath();
     ctx.roundRect(x, centerY - barH, barW, barH * 2, 1.5);
