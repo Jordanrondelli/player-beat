@@ -368,8 +368,8 @@ body {
 }
 
 /* ===== VOTE BUTTONS ===== */
-.vote-left { position: absolute; bottom: -380px; left: calc(50% - 380px); z-index: 35; }
-.vote-right { position: absolute; bottom: -380px; right: calc(50% - 380px); z-index: 35; }
+.vote-left { position: absolute; bottom: -380px; left: calc(50% - 480px); z-index: 35; }
+.vote-right { position: absolute; bottom: -380px; right: calc(50% - 480px); z-index: 35; }
 .vote-icon {
   width: 100%; height: 100%; object-fit: contain; pointer-events: none;
   transition: filter .3s ease;
@@ -559,8 +559,8 @@ body {
     width: 92vw;
     animation: sceneFloatSm 6s ease-in-out infinite;
   }
-  .vote-left { left: calc(50% - 260px); bottom: -320px; }
-  .vote-right { right: calc(50% - 260px); bottom: -320px; }
+  .vote-left { left: calc(50% - 320px); bottom: -320px; }
+  .vote-right { right: calc(50% - 320px); bottom: -320px; }
   .vote-btn { width: 110px; height: 110px; border-radius: 20px; }
   .fire-wrap { bottom: -260px; }
   .chat-card { width: 180px; font-size: 11px; right: 5px; }
