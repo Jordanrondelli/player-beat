@@ -120,6 +120,24 @@ function resizeCanvases() {
 }
 window.addEventListener('resize', resizeCanvases);
 
+// ===== SMOOTH WAVEFORM DATA =====
+function smoothWaveformData(data, radius) {
+  const out = new Float32Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    let sum = 0, count = 0;
+    for (let j = -radius; j <= radius; j++) {
+      const idx = i + j;
+      if (idx >= 0 && idx < data.length) {
+        const weight = 1 - Math.abs(j) / (radius + 1);
+        sum += data[idx] * weight;
+        count += weight;
+      }
+    }
+    out[i] = sum / count;
+  }
+  return Array.from(out);
+}
+
 // ===== WAVEFORM DATA =====
 function generateDemoData() {
   const n = 10000;
@@ -136,7 +154,7 @@ function generateDemoData() {
   }
   const max = Math.max(...waveformData);
   waveformData = waveformData.map(v => v / max);
-  waveformData = smoothWaveformData(waveformData, 4);
+  waveformData = smoothWaveformData(waveformData, 2);
 }
 
 function extractWaveformData(buffer) {
@@ -147,13 +165,15 @@ function extractWaveformData(buffer) {
   for (let i = 0; i < n; i++) {
     let sum = 0;
     for (let j = 0; j < blockLen; j++) {
-      sum += Math.abs(raw[i * blockLen + j] || 0);
+      const s = raw[i * blockLen + j] || 0;
+      sum += s * s;
     }
-    waveformData.push(sum / blockLen);
+    // RMS — preserves transient peaks better than average abs
+    waveformData.push(Math.sqrt(sum / blockLen));
   }
   const max = Math.max(...waveformData);
   if (max > 0) waveformData = waveformData.map(v => v / max);
-  waveformData = smoothWaveformData(waveformData, 4);
+  waveformData = smoothWaveformData(waveformData, 2);
 }
 
 // ===== MINI WAVEFORM (drawn once) =====
@@ -185,24 +205,6 @@ let sceneShakeX = 0;
 let sceneShakeY = 0;
 let hammerHitTimeout = null;
 const hammerIconEl = document.getElementById('hammerIcon');
-
-// Smooth waveform data for fluid rendering
-function smoothWaveformData(data, radius) {
-  const out = new Float32Array(data.length);
-  for (let i = 0; i < data.length; i++) {
-    let sum = 0, count = 0;
-    for (let j = -radius; j <= radius; j++) {
-      const idx = i + j;
-      if (idx >= 0 && idx < data.length) {
-        const weight = 1 - Math.abs(j) / (radius + 1);
-        sum += data[idx] * weight;
-        count += weight;
-      }
-    }
-    out[i] = sum / count;
-  }
-  return Array.from(out);
-}
 
 // ===== MAIN WAVEFORM DRAW =====
 function drawWaveform(currentTime) {
@@ -336,11 +338,7 @@ function drawWaveform(currentTime) {
   if (glow1El) { glow1El.style.opacity = .3 + kickDecay * 1.4; glow1El.style.filter = `blur(${35 + kickDecay * 25}px)`; glow1El.style.clipPath = glowClip; }
   if (glow2El) { glow2El.style.opacity = .15 + kickDecay * 1.1; glow2El.style.filter = `blur(${20 + kickDecay * 15}px)`; glow2El.style.clipPath = glowClip; }
 
-  // Background kick pump (scale only, no brightness flash)
-  const bgPump = 1 + kickDecay * .02;
-  if (bgEl) {
-    bgEl.style.scale = bgPump;
-  }
+  // Background — no kick reaction, just CSS animation
 
   // Hammer power % — shows kick intensity
   const hammerRaw = Math.min(1, Math.pow(kickLevel, 1.8) * 1.2 + densitySmooth * 0.15 + kickDecay * 0.4);

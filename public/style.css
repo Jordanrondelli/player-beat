@@ -314,13 +314,15 @@ body {
   display: flex; align-items: center; gap: 6px;
 }
 .hammer-icon {
-  font-size: 22px;
-  transform-origin: 80% 80%;
-  transition: transform .06s ease-out;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,.4));
+  font-size: 28px;
+  transform-origin: 85% 85%;
+  transform: rotate(0deg);
+  transition: transform .12s cubic-bezier(.2,.8,.3,1);
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.5));
 }
 .hammer-icon.hit {
-  transform: rotate(-35deg) scale(1.15);
+  transform: rotate(-50deg) scale(1.25);
+  transition: transform .04s ease-out;
 }
 .hammer-pct {
   font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13px;
