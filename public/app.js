@@ -378,88 +378,77 @@ function drawWaveform(currentTime) {
   loudnessSmooth += (loudnessRaw - loudnessSmooth) * 0.12;
 
   // ===== HAMMER: ENERGY CONTRAST SYSTEM =====
-  // Measures HOW MUCH harder the music hits NOW vs what came before.
-  // Intro kicks = low charge. Drop/chorus = high charge. Based on contrast, not volume.
+  // Compares current energy vs track baseline. Needs time to build up.
+  // Intro = low. Build-up = medium. Drop/chorus = high.
   if (isPlaying && audioBuffer) {
-    // Get frequency spectrum for spectral analysis
     analyser.getByteFrequencyData(frequencyData);
-
-    // fftSize=512 → 256 bins. Bin width = (sampleRate/2)/256 ≈ 86Hz per bin at 44100
     const binCount = analyser.frequencyBinCount; // 256
 
-    // Bass energy (20-250Hz, bins 0-3)
+    // Bass energy (bins 0-3)
     let bassEnergy = 0;
-    const bassEnd = Math.min(4, binCount);
-    for (let i = 0; i < bassEnd; i++) bassEnergy += frequencyData[i];
-    bassEnergy /= bassEnd * 255;
+    for (let i = 0; i < 4; i++) bassEnergy += frequencyData[i];
+    bassEnergy /= 4 * 255;
 
-    // Mid energy (250-3000Hz, bins 3-35)
+    // Mid energy (bins 4-34)
     let midEnergy = 0;
-    const midStart = bassEnd, midEnd = Math.min(35, binCount);
-    for (let i = midStart; i < midEnd; i++) midEnergy += frequencyData[i];
-    midEnergy /= (midEnd - midStart) * 255;
+    for (let i = 4; i < 35; i++) midEnergy += frequencyData[i];
+    midEnergy /= 31 * 255;
 
-    // High energy (3000-12000Hz, bins 35-140)
+    // High energy (bins 35-139)
     let highEnergy = 0;
-    const hiStart = midEnd, hiEnd = Math.min(140, binCount);
-    for (let i = hiStart; i < hiEnd; i++) highEnergy += frequencyData[i];
-    highEnergy /= (hiEnd - hiStart) * 255;
+    for (let i = 35; i < Math.min(140, binCount); i++) highEnergy += frequencyData[i];
+    highEnergy /= Math.min(105, binCount - 35) * 255;
 
-    // Combined energy (weighted: bass matters most in electro)
+    // Combined energy
     const energy = bassEnergy * 0.5 + midEnergy * 0.3 + highEnergy * 0.2;
 
-    // Track energy range for normalization within THIS song
+    // Feed hammerSmooth so beat sync still works
+    hammerSmooth += (energy - hammerSmooth) * 0.08;
+
+    // Track energy range
     trackMaxEnergy = Math.max(trackMaxEnergy, energy);
     trackMinEnergy = Math.min(trackMinEnergy, energy);
 
-    // Spectral contrast: bass-to-mid ratio (drops have more bass relative to mids)
-    const spectralRatio = midEnergy > 0.001 ? bassEnergy / (midEnergy + 0.001) : 0;
-    spectralRatioWindow.push(spectralRatio);
-    if (spectralRatioWindow.length > 300) spectralRatioWindow.shift(); // ~5s
-
     // Build energy windows
     energyShortWindow.push(energy);
-    if (energyShortWindow.length > 60) energyShortWindow.shift();  // ~1s
+    if (energyShortWindow.length > 60) energyShortWindow.shift();   // ~1s
     energyLongWindow.push(energy);
-    if (energyLongWindow.length > 600) energyLongWindow.shift();   // ~10s
+    if (energyLongWindow.length > 600) energyLongWindow.shift();    // ~10s
 
-    // Current vs baseline energy
     const shortAvg = energyShortWindow.reduce((a, b) => a + b, 0) / energyShortWindow.length;
-    const longAvg = energyLongWindow.length > 120
-      ? energyLongWindow.slice(0, -60).reduce((a, b) => a + b, 0) / (energyLongWindow.length - 60)
-      : shortAvg * 0.5; // early in track, assume baseline is lower
 
-    // Contrast: how much louder is NOW vs the recent baseline
-    const energyRange = Math.max(0.01, trackMaxEnergy - trackMinEnergy);
-    const contrast = Math.max(0, (shortAvg - longAvg) / energyRange);
-
-    // Spectral excitement: how varied is the spectrum (drops = full spectrum)
-    const spectralFullness = Math.min(1, (bassEnergy + midEnergy + highEnergy) / 0.5);
-
-    // Combined "intensity score" 0-1
-    // High when: energy is above baseline AND spectrum is full AND bass is pumping
-    const intensity = Math.min(1,
-      contrast * 1.5 +                                    // energy contrast (main driver)
-      Math.max(0, spectralFullness - 0.3) * 0.4 +        // spectral fullness bonus
-      Math.max(0, bassEnergy - 0.3) * 0.3                 // heavy bass bonus
-    );
-
-    // Charge moves toward intensity * 100, but SLOWLY
-    // Low intensity = charge drifts down gently. High intensity = charge rises.
-    const target = intensity * 100;
-    const diff = target - hammerCharge;
-
-    if (diff > 0) {
-      // Rising: moderate speed, faster on big jumps (drops)
-      chargeVelocity += diff * 0.003;
-      chargeVelocity = Math.min(chargeVelocity, 1.5); // cap rise speed
+    // CRITICAL: Don't compute contrast until we have enough baseline data (~4s)
+    // During warmup, charge stays at 0
+    if (energyLongWindow.length < 240) {
+      // Warmup phase: just collecting data, charge stays low
+      hammerCharge = Math.max(0, hammerCharge - 0.1);
     } else {
-      // Falling: very slow — don't punish brief quiet moments
-      chargeVelocity += diff * 0.0003;
-      chargeVelocity = Math.max(chargeVelocity, -0.3); // cap fall speed
+      // Baseline = average of the oldest half of the long window (the "past")
+      const halfLen = Math.floor(energyLongWindow.length / 2);
+      const baseline = energyLongWindow.slice(0, halfLen).reduce((a, b) => a + b, 0) / halfLen;
+
+      // How much louder is NOW vs the past baseline
+      const energyRange = Math.max(0.02, trackMaxEnergy - trackMinEnergy);
+      const contrast = (shortAvg - baseline) / energyRange;
+      // contrast: ~0 = same as baseline, ~0.5 = noticeably louder, ~1 = way louder
+
+      // Intensity: purely contrast-driven, clamped 0-1
+      // Needs significant contrast to score high — no freebies from volume alone
+      const intensity = Math.max(0, Math.min(1, contrast * 1.2));
+
+      // Move charge toward target slowly
+      const target = intensity * 100;
+      const diff = target - hammerCharge;
+
+      if (diff > 0) {
+        // Rising: slow ramp
+        hammerCharge += diff * 0.008;
+      } else {
+        // Falling: very slow
+        hammerCharge += diff * 0.002;
+      }
+      hammerCharge = Math.max(0, Math.min(100, hammerCharge));
     }
-    chargeVelocity *= 0.95; // damping
-    hammerCharge = Math.max(0, Math.min(100, hammerCharge + chargeVelocity));
   }
 
   const hammerPct = Math.round(hammerCharge);
@@ -738,8 +727,8 @@ function updateHammerVisuals(pct, kick) {
   // Scale hammer icon with percentage — bigger as power grows
   const hammerIconWrap = document.getElementById('hammerIconWrap');
   if (hammerIconWrap) {
-    const baseSize = 46;
-    const maxExtra = 30; // grows up to +30px at 100%
+    const baseSize = 54;
+    const maxExtra = 36; // grows up to +36px at 100%
     const size = baseSize + (pct / 100) * maxExtra;
     hammerIconWrap.style.width = size + 'px';
     hammerIconWrap.style.height = size + 'px';
@@ -853,7 +842,7 @@ function stopBeatSync() {
   if (gaugeFill) gaugeFill.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   if (gaugeGlow) gaugeGlow.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   const hammerIconWrap = document.getElementById('hammerIconWrap');
-  if (hammerIconWrap) { hammerIconWrap.style.width = '46px'; hammerIconWrap.style.height = '46px'; }
+  if (hammerIconWrap) { hammerIconWrap.style.width = '54px'; hammerIconWrap.style.height = '54px'; }
 }
 
 // ===== PLAYBACK CONTROLS =====
