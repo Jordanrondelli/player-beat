@@ -236,10 +236,27 @@ const hammerStageEl = document.getElementById('hammerStage');
 let currentHammerStage = 'cold';
 let hammerCharge = 0;
 let hammerPeakStage = 'cold';
-// Energy analysis buffers
-let energyShortWindow = [];   // ~0.5s rolling window for smoothing
-let trackMaxEnergy = 0.01;    // max energy seen so far in this track
-let trackMinEnergy = 1;       // min energy seen so far in this track
+// Multi-criteria power scoring state
+const loudnessFreqData = new Uint8Array(loudnessAnalyser.frequencyBinCount);
+let hammerKickSmooth = 0;     // smoothed kick impact for scoring
+let criteriaMax = { sub: 0.001, bass: 0.001, kick: 0.001, fullness: 0.001, loudness: 0.001 };
+let criteriaSmooth = { sub: 0, bass: 0, kick: 0, fullness: 0, loudness: 0 };
+
+// A-weighting: attempt IEC 61672 standard curve
+// Models human ear sensitivity — boosts 2-5kHz, attenuates sub-bass
+function aWeight(f) {
+  if (f < 10) return 0;
+  const f2 = f * f;
+  const ra = (148693636 * f2 * f2) /
+    ((f2 + 424.36) * (f2 + 148693636) * Math.sqrt((f2 + 11599.29) * (f2 + 544496.41)));
+  return ra / 0.7943; // normalize: 1kHz = 1.0
+}
+// Pre-compute A-weight table (avoid recalc every frame)
+const aWeightTable = new Float32Array(loudnessAnalyser.frequencyBinCount);
+{
+  const binHz = audioCtx.sampleRate / loudnessAnalyser.fftSize;
+  for (let i = 0; i < aWeightTable.length; i++) aWeightTable[i] = aWeight(i * binHz);
+}
 let detectedBPM = 0;
 let beatIntervalId = null;
 const GAUGE_CIRCUMFERENCE = 326.73; // 2π × 52
@@ -374,76 +391,97 @@ function drawWaveform(currentTime) {
   }
   loudnessSmooth += (loudnessRaw - loudnessSmooth) * 0.12;
 
-  // ===== HAMMER: ABSOLUTE ENERGY MEASUREMENT =====
-  // Measures how loud the music is RIGHT NOW relative to this track's own range.
-  // 0% = quietest moment. 100% = loudest moment. Simple, intuitive, satisfying.
+  // ===== HAMMER: MULTI-CRITERIA POWER SCORING =====
+  // 5 criteria must ALL converge for 100%. Weighted geometric mean.
+  // Sub + Bass + Kick Impact + Spectral Fullness + A-Weighted Loudness
   if (isPlaying && audioBuffer) {
-    analyser.getByteFrequencyData(frequencyData);
-    const binCount = analyser.frequencyBinCount;
+    // High-resolution spectrum (1024 bins, ~21Hz/bin at 44100Hz)
+    loudnessAnalyser.getByteFrequencyData(loudnessFreqData);
+    const hrBins = loudnessAnalyser.frequencyBinCount;
+    const binHz = audioCtx.sampleRate / loudnessAnalyser.fftSize;
 
-    // Bass energy (bins 0-3, ~0-340Hz)
-    let bassEnergy = 0;
-    for (let i = 0; i < 4; i++) bassEnergy += frequencyData[i];
-    bassEnergy /= 4 * 255;
+    // --- CRITERION 1: SUB PRESENCE (20-60Hz) ---
+    // The rumble you feel in your chest
+    const subS = Math.max(1, Math.round(20 / binHz)), subE = Math.round(60 / binHz);
+    let subSum = 0;
+    for (let i = subS; i < subE; i++) subSum += loudnessFreqData[i];
+    const subRaw = subSum / ((subE - subS) * 255);
 
-    // Mid energy (bins 4-34, ~340-3000Hz)
-    let midEnergy = 0;
-    for (let i = 4; i < 35; i++) midEnergy += frequencyData[i];
-    midEnergy /= 31 * 255;
+    // --- CRITERION 2: BASS POWER (60-250Hz) ---
+    // Sustained low-end, the wall of sound
+    const bassS = subE, bassE = Math.round(250 / binHz);
+    let bassSum = 0;
+    for (let i = bassS; i < bassE; i++) bassSum += loudnessFreqData[i];
+    const bassRaw = bassSum / ((bassE - bassS) * 255);
 
-    // High energy (bins 35-139, ~3000-12000Hz)
-    let highEnergy = 0;
-    for (let i = 35; i < Math.min(140, binCount); i++) highEnergy += frequencyData[i];
-    highEnergy /= Math.min(105, binCount - 35) * 255;
+    // --- CRITERION 3: KICK IMPACT ---
+    // Smoothed kick transients (from kick detection above)
+    hammerKickSmooth += (kickDecay - hammerKickSmooth) * 0.15;
+    const kickRaw = hammerKickSmooth;
 
-    // Combined energy (bass-heavy for electro)
-    const energy = bassEnergy * 0.5 + midEnergy * 0.3 + highEnergy * 0.2;
+    // --- CRITERION 4: SPECTRAL FULLNESS ---
+    // How many frequency bands are active simultaneously
+    // Drop = everything lit up. Intro = sparse.
+    const bandEdges = [60, 150, 300, 600, 1200, 2400, 4000, 6500, 10000, 16000];
+    let activeBands = 0;
+    for (let b = 0; b < bandEdges.length - 1; b++) {
+      const bS = Math.round(bandEdges[b] / binHz);
+      const bE = Math.min(Math.round(bandEdges[b + 1] / binHz), hrBins);
+      let bSum = 0;
+      for (let i = bS; i < bE; i++) bSum += loudnessFreqData[i];
+      if (bSum / ((bE - bS) * 255) > 0.06) activeBands++;
+    }
+    const fullnessRaw = activeBands / (bandEdges.length - 1);
+
+    // --- CRITERION 5: A-WEIGHTED LOUDNESS ---
+    // Perceived loudness using human ear sensitivity curve
+    let wSum = 0, wTotal = 0;
+    for (let i = 1; i < Math.min(750, hrBins); i++) {
+      wSum += (loudnessFreqData[i] / 255) * aWeightTable[i];
+      wTotal += aWeightTable[i];
+    }
+    const loudnessRaw = wSum / wTotal;
 
     // Feed hammerSmooth for beat sync
-    hammerSmooth += (energy - hammerSmooth) * 0.08;
+    hammerSmooth += (loudnessRaw - hammerSmooth) * 0.08;
 
-    // Smooth the energy over ~0.5s to avoid jitter
-    energyShortWindow.push(energy);
-    if (energyShortWindow.length > 30) energyShortWindow.shift();
-    const smoothEnergy = energyShortWindow.reduce((a, b) => a + b, 0) / energyShortWindow.length;
+    // Normalize each within this track's own range (max seen so far)
+    criteriaMax.sub = Math.max(criteriaMax.sub, subRaw);
+    criteriaMax.bass = Math.max(criteriaMax.bass, bassRaw);
+    criteriaMax.kick = Math.max(criteriaMax.kick, kickRaw);
+    criteriaMax.fullness = Math.max(criteriaMax.fullness, fullnessRaw);
+    criteriaMax.loudness = Math.max(criteriaMax.loudness, loudnessRaw);
 
-    // Track the min/max energy seen so far in this track
-    // Min adapts slowly upward (ignore silence at start)
-    // Max adapts upward immediately
-    trackMaxEnergy = Math.max(trackMaxEnergy, smoothEnergy);
-    // Only start tracking min after a brief warmup (first 1s)
-    if (energyShortWindow.length >= 30) {
-      trackMinEnergy = Math.min(trackMinEnergy, smoothEnergy);
-    }
+    const norm = (val, max) => max > 0.001 ? Math.min(1, val / max) : 0;
+    const subN = norm(subRaw, criteriaMax.sub);
+    const bassN = norm(bassRaw, criteriaMax.bass);
+    const kickN = norm(kickRaw, criteriaMax.kick);
+    const fullN = norm(fullnessRaw, criteriaMax.fullness);
+    const loudN = norm(loudnessRaw, criteriaMax.loudness);
 
-    // Where does current energy sit within the track's range?
-    const range = trackMaxEnergy - trackMinEnergy;
-    let normalizedEnergy;
-    if (range < 0.005) {
-      // Not enough dynamic range yet (first few seconds, or very flat track)
-      normalizedEnergy = 0;
-    } else {
-      normalizedEnergy = Math.max(0, Math.min(1, (smoothEnergy - trackMinEnergy) / range));
-    }
+    // Smooth each criterion (~0.3s) to avoid jitter
+    criteriaSmooth.sub += (subN - criteriaSmooth.sub) * 0.12;
+    criteriaSmooth.bass += (bassN - criteriaSmooth.bass) * 0.12;
+    criteriaSmooth.kick += (kickN - criteriaSmooth.kick) * 0.18; // kicks are fast
+    criteriaSmooth.fullness += (fullN - criteriaSmooth.fullness) * 0.08; // band count is jumpy
+    criteriaSmooth.loudness += (loudN - criteriaSmooth.loudness) * 0.12;
 
-    // Apply a curve to make it more musical:
-    // - Below 50% raw → compresses to ~20% (verses feel "moderate")
-    // - Above 70% raw → expands to fill 60-100% (drops feel "explosive")
-    const shaped = normalizedEnergy < 0.5
-      ? normalizedEnergy * 0.4           // 0-50% energy → 0-20% charge
-      : 0.2 + (normalizedEnergy - 0.5) * 1.6;  // 50-100% energy → 20-100% charge
+    // Weighted geometric mean — ALL criteria must converge
+    // eps floor prevents a single zero from killing the score
+    const eps = 0.01;
+    const score =
+      Math.pow(criteriaSmooth.sub + eps, 0.10) *       // sub: 10%
+      Math.pow(criteriaSmooth.bass + eps, 0.25) *      // bass: 25%
+      Math.pow(criteriaSmooth.kick + eps, 0.20) *      // impact: 20%
+      Math.pow(criteriaSmooth.fullness + eps, 0.20) *  // spectral: 20%
+      Math.pow(criteriaSmooth.loudness + eps, 0.25);   // perceived vol: 25%
 
-    const target = Math.max(0, Math.min(1, shaped)) * 100;
+    // Final curve — makes 80-100% really hard to earn
+    const shaped = Math.pow(Math.min(1, score), 1.3) * 100;
 
-    // Smooth charge movement:
-    // - Rise: reacts in ~1-2 seconds (fast enough for drops)
-    // - Fall: decays in ~3-4 seconds (doesn't punish brief breaks)
-    const diff = target - hammerCharge;
-    if (diff > 0) {
-      hammerCharge += diff * 0.04; // rise ~1.5s
-    } else {
-      hammerCharge += diff * 0.015; // fall ~3s
-    }
+    // Smooth charge: rise ~1s, fall ~2.5s
+    const diff = shaped - hammerCharge;
+    hammerCharge += diff * (diff > 0 ? 0.05 : 0.02);
     hammerCharge = Math.max(0, Math.min(100, hammerCharge));
   }
 
@@ -828,9 +866,9 @@ function stopBeatSync() {
   hammerCharge = 0;
   hammerPeakStage = 'cold';
   currentHammerStage = 'cold';
-  energyShortWindow = [];
-  trackMaxEnergy = 0.01;
-  trackMinEnergy = 1;
+  hammerKickSmooth = 0;
+  criteriaMax = { sub: 0.001, bass: 0.001, kick: 0.001, fullness: 0.001, loudness: 0.001 };
+  criteriaSmooth = { sub: 0, bass: 0, kick: 0, fullness: 0, loudness: 0 };
   if (hammerCard) hammerCard.setAttribute('data-stage', 'cold');
   if (hammerStageEl) hammerStageEl.textContent = '';
   if (gaugeFill) gaugeFill.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
