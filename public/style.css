@@ -529,16 +529,16 @@ body {
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 500px; height: 180px;
-  background: radial-gradient(ellipse at center, rgba(255, 15, 0, .5) 0%, rgba(255, 40, 0, .25) 40%, transparent 70%);
+  width: 700px; height: 300px;
+  background: radial-gradient(ellipse at center, rgba(255, 10, 0, .9) 0%, rgba(255, 30, 0, .5) 35%, rgba(255, 50, 0, .2) 60%, transparent 80%);
   border-radius: 50%;
-  filter: blur(30px);
+  filter: blur(40px);
   pointer-events: none;
   z-index: -1;
   animation: glowBehind 1.2s ease-in-out infinite alternate;
 }
 @keyframes glowBehind {
-  0%   { opacity: .6; }
+  0%   { opacity: .7; }
   100% { opacity: 1; }
 }
 .fire-btn {
