@@ -378,11 +378,12 @@ function sampleWaveform(fIdx) {
 }
 
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
-  const step = 3;
+  // Smooth cartoon step — fewer points = rounder, more organic blobs
+  const step = 6;
   const numPts = Math.ceil(w / step) + 1;
 
-  // Build array of {x, val, pNorm} points
-  const pts = [];
+  // Build smoothed points — double-pass moving average for extra roundness
+  const raw = [];
   for (let i = 0; i < numPts; i++) {
     const x = i * step;
     const tSec = timeStart + (x / w) * windowSec;
@@ -390,36 +391,44 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     let val = 0;
     if (pNorm >= 0 && pNorm <= 1) {
       const fIdx = pNorm * (waveformData.length - 1);
-      val = Math.pow(sampleWaveform(fIdx), 0.80);
+      val = Math.pow(sampleWaveform(fIdx), 0.75);
     }
-    pts.push({ x, val: val * h * .44, pNorm });
+    raw.push({ x, val: val * h * .44, pNorm });
   }
+  // Smooth pass (3-tap average, applied twice)
+  function smooth(arr) {
+    const out = [];
+    for (let i = 0; i < arr.length; i++) {
+      const prev = arr[Math.max(0, i - 1)].val;
+      const next = arr[Math.min(arr.length - 1, i + 1)].val;
+      out.push({ ...arr[i], val: prev * 0.25 + arr[i].val * 0.5 + next * 0.25 });
+    }
+    return out;
+  }
+  const pts = smooth(smooth(raw));
 
-  // Helper: draw a smooth filled blob shape from pts[start..end]
-  function drawBlob(start, end, fillStyle) {
-    if (end - start < 1) return;
-    ctx.fillStyle = fillStyle;
+  // Helper: build a smooth closed path (top curve forward, bottom curve back)
+  function buildBlobPath(start, end) {
+    const minH = 3;
     ctx.beginPath();
-    // Top curve (negative = upward)
-    ctx.moveTo(pts[start].x, centerY - Math.max(1, pts[start].val));
+    // Top edge
+    ctx.moveTo(pts[start].x, centerY - Math.max(minH, pts[start].val));
     for (let i = start; i < end; i++) {
       const p0 = pts[i], p1 = pts[Math.min(i + 1, end)];
       const cpx = (p0.x + p1.x) / 2;
-      const v0 = Math.max(1, p0.val), v1 = Math.max(1, p1.val);
+      const v0 = Math.max(minH, p0.val), v1 = Math.max(minH, p1.val);
       ctx.quadraticCurveTo(p0.x, centerY - v0, cpx, centerY - (v0 + v1) / 2);
     }
-    const last = pts[end];
-    ctx.lineTo(last.x, centerY - Math.max(1, last.val));
-    // Bottom curve (mirrored, positive = downward)
-    ctx.lineTo(last.x, centerY + Math.max(1, last.val));
+    ctx.lineTo(pts[end].x, centerY - Math.max(minH, pts[end].val));
+    // Bottom edge (reverse)
+    ctx.lineTo(pts[end].x, centerY + Math.max(minH, pts[end].val));
     for (let i = end; i > start; i--) {
       const p0 = pts[i], p1 = pts[Math.max(i - 1, start)];
       const cpx = (p0.x + p1.x) / 2;
-      const v0 = Math.max(1, p0.val), v1 = Math.max(1, p1.val);
+      const v0 = Math.max(minH, p0.val), v1 = Math.max(minH, p1.val);
       ctx.quadraticCurveTo(p0.x, centerY + v0, cpx, centerY + (v0 + v1) / 2);
     }
     ctx.closePath();
-    ctx.fill();
   }
 
   // Find playhead split index
@@ -430,33 +439,149 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
   }
 
   if (glowOnly) {
-    // Glow: only played side
     if (splitIdx > 0) {
-      drawBlob(0, splitIdx, 'rgba(200,25,15,1)');
+      buildBlobPath(0, splitIdx);
+      ctx.fillStyle = 'rgba(200,25,15,1)';
+      ctx.fill();
     }
     return;
   }
 
-  // Played region gradient
-  const gradPlayed = ctx.createLinearGradient(0, centerY - h * .44, 0, centerY + h * .44);
-  gradPlayed.addColorStop(0, 'rgba(150,15,10,0.55)');
-  gradPlayed.addColorStop(.15, 'rgba(200,25,15,0.95)');
-  gradPlayed.addColorStop(.5, 'rgba(220,30,20,1)');
-  gradPlayed.addColorStop(.85, 'rgba(200,25,15,0.95)');
-  gradPlayed.addColorStop(1, 'rgba(150,15,10,0.55)');
+  const amp = h * .44;
 
-  // Unplayed region gradient (light blue, fading out)
-  const gradUnplayed = ctx.createLinearGradient(playheadX, 0, w, 0);
-  gradUnplayed.addColorStop(0, 'rgba(180,200,230,0.50)');
-  gradUnplayed.addColorStop(1, 'rgba(180,200,230,0.08)');
-
-  // Draw played blob
+  // ——— PLAYED SIDE (red 3D glossy) ———
   if (splitIdx > 0) {
-    drawBlob(0, splitIdx, gradPlayed);
+    // Layer 1: outer dark red border/shadow
+    buildBlobPath(0, splitIdx);
+    const gradOuter = ctx.createLinearGradient(0, centerY - amp, 0, centerY + amp);
+    gradOuter.addColorStop(0, 'rgba(140,10,5,0.9)');
+    gradOuter.addColorStop(0.3, 'rgba(200,30,15,1)');
+    gradOuter.addColorStop(0.5, 'rgba(220,45,25,1)');
+    gradOuter.addColorStop(0.7, 'rgba(200,30,15,1)');
+    gradOuter.addColorStop(1, 'rgba(140,10,5,0.9)');
+    ctx.fillStyle = gradOuter;
+    ctx.fill();
+
+    // Layer 2: inner lighter pink/white highlight (scaled down ~60%)
+    ctx.save();
+    ctx.beginPath();
+    const minH = 3;
+    // Top edge, pushed toward center
+    const shrink = 0.55;
+    ctx.moveTo(pts[0].x, centerY - Math.max(minH, pts[0].val * shrink));
+    for (let i = 0; i < splitIdx; i++) {
+      const p0 = pts[i], p1 = pts[Math.min(i + 1, splitIdx)];
+      const cpx = (p0.x + p1.x) / 2;
+      const v0 = Math.max(minH, p0.val * shrink), v1 = Math.max(minH, p1.val * shrink);
+      ctx.quadraticCurveTo(p0.x, centerY - v0, cpx, centerY - (v0 + v1) / 2);
+    }
+    ctx.lineTo(pts[splitIdx].x, centerY - Math.max(minH, pts[splitIdx].val * shrink));
+    // Bottom edge reverse
+    ctx.lineTo(pts[splitIdx].x, centerY + Math.max(minH, pts[splitIdx].val * shrink));
+    for (let i = splitIdx; i > 0; i--) {
+      const p0 = pts[i], p1 = pts[Math.max(i - 1, 0)];
+      const cpx = (p0.x + p1.x) / 2;
+      const v0 = Math.max(minH, p0.val * shrink), v1 = Math.max(minH, p1.val * shrink);
+      ctx.quadraticCurveTo(p0.x, centerY + v0, cpx, centerY + (v0 + v1) / 2);
+    }
+    ctx.closePath();
+    const gradInner = ctx.createLinearGradient(0, centerY - amp * shrink, 0, centerY + amp * shrink);
+    gradInner.addColorStop(0, 'rgba(255,180,170,0.7)');
+    gradInner.addColorStop(0.3, 'rgba(255,220,215,0.85)');
+    gradInner.addColorStop(0.5, 'rgba(255,235,230,0.95)');
+    gradInner.addColorStop(0.7, 'rgba(255,220,215,0.85)');
+    gradInner.addColorStop(1, 'rgba(255,180,170,0.7)');
+    ctx.fillStyle = gradInner;
+    ctx.fill();
+    ctx.restore();
+
+    // Layer 3: specular highlight strip (very top, narrow)
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    const specShrink = 0.35;
+    const specOffset = -0.18 * amp; // shift upward
+    ctx.moveTo(pts[0].x, centerY + specOffset - Math.max(1, pts[0].val * specShrink));
+    for (let i = 0; i < splitIdx; i++) {
+      const p0 = pts[i], p1 = pts[Math.min(i + 1, splitIdx)];
+      const cpx = (p0.x + p1.x) / 2;
+      const v0 = Math.max(1, p0.val * specShrink), v1 = Math.max(1, p1.val * specShrink);
+      ctx.quadraticCurveTo(p0.x, centerY + specOffset - v0, cpx, centerY + specOffset - (v0 + v1) / 2);
+    }
+    ctx.lineTo(pts[splitIdx].x, centerY + specOffset - Math.max(1, pts[splitIdx].val * specShrink));
+    // close bottom flat
+    ctx.lineTo(pts[splitIdx].x, centerY + specOffset);
+    ctx.lineTo(pts[0].x, centerY + specOffset);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fill();
+    ctx.restore();
   }
-  // Draw unplayed blob
+
+  // ——— UNPLAYED SIDE (blue 3D glossy, same technique) ———
   if (splitIdx < pts.length - 1) {
-    drawBlob(splitIdx, pts.length - 1, gradUnplayed);
+    const s = splitIdx, e = pts.length - 1;
+
+    // Layer 1: outer blue
+    buildBlobPath(s, e);
+    const gradOuterB = ctx.createLinearGradient(0, centerY - amp, 0, centerY + amp);
+    gradOuterB.addColorStop(0, 'rgba(80,100,180,0.45)');
+    gradOuterB.addColorStop(0.3, 'rgba(120,145,210,0.55)');
+    gradOuterB.addColorStop(0.5, 'rgba(150,170,230,0.6)');
+    gradOuterB.addColorStop(0.7, 'rgba(120,145,210,0.55)');
+    gradOuterB.addColorStop(1, 'rgba(80,100,180,0.45)');
+    ctx.fillStyle = gradOuterB;
+    ctx.fill();
+
+    // Layer 2: inner highlight
+    ctx.save();
+    const shrinkB = 0.55;
+    const minHB = 3;
+    ctx.beginPath();
+    ctx.moveTo(pts[s].x, centerY - Math.max(minHB, pts[s].val * shrinkB));
+    for (let i = s; i < e; i++) {
+      const p0 = pts[i], p1 = pts[Math.min(i + 1, e)];
+      const cpx = (p0.x + p1.x) / 2;
+      const v0 = Math.max(minHB, p0.val * shrinkB), v1 = Math.max(minHB, p1.val * shrinkB);
+      ctx.quadraticCurveTo(p0.x, centerY - v0, cpx, centerY - (v0 + v1) / 2);
+    }
+    ctx.lineTo(pts[e].x, centerY - Math.max(minHB, pts[e].val * shrinkB));
+    ctx.lineTo(pts[e].x, centerY + Math.max(minHB, pts[e].val * shrinkB));
+    for (let i = e; i > s; i--) {
+      const p0 = pts[i], p1 = pts[Math.max(i - 1, s)];
+      const cpx = (p0.x + p1.x) / 2;
+      const v0 = Math.max(minHB, p0.val * shrinkB), v1 = Math.max(minHB, p1.val * shrinkB);
+      ctx.quadraticCurveTo(p0.x, centerY + v0, cpx, centerY + (v0 + v1) / 2);
+    }
+    ctx.closePath();
+    const gradInnerB = ctx.createLinearGradient(0, centerY - amp * shrinkB, 0, centerY + amp * shrinkB);
+    gradInnerB.addColorStop(0, 'rgba(200,215,255,0.35)');
+    gradInnerB.addColorStop(0.5, 'rgba(230,240,255,0.45)');
+    gradInnerB.addColorStop(1, 'rgba(200,215,255,0.35)');
+    ctx.fillStyle = gradInnerB;
+    ctx.fill();
+    ctx.restore();
+
+    // Layer 3: specular
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    const specShrinkB = 0.35;
+    const specOffB = -0.18 * amp;
+    ctx.beginPath();
+    ctx.moveTo(pts[s].x, centerY + specOffB - Math.max(1, pts[s].val * specShrinkB));
+    for (let i = s; i < e; i++) {
+      const p0 = pts[i], p1 = pts[Math.min(i + 1, e)];
+      const cpx = (p0.x + p1.x) / 2;
+      const v0 = Math.max(1, p0.val * specShrinkB), v1 = Math.max(1, p1.val * specShrinkB);
+      ctx.quadraticCurveTo(p0.x, centerY + specOffB - v0, cpx, centerY + specOffB - (v0 + v1) / 2);
+    }
+    ctx.lineTo(pts[e].x, centerY + specOffB - Math.max(1, pts[e].val * specShrinkB));
+    ctx.lineTo(pts[e].x, centerY + specOffB);
+    ctx.lineTo(pts[s].x, centerY + specOffB);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fill();
+    ctx.restore();
   }
 }
 
