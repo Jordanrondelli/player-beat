@@ -276,24 +276,17 @@ function drawWaveform(currentTime) {
   const timeStart = currentTime - scrollBack;
   const centerY = h * 0.5;
 
-  // Bass glow pass — extra warm aura on kicks (screen blend)
+  // Bass bloom pass — extra wide aura on kicks (screen blend)
   if (kickDecay > .02) {
     waveformCtx.save();
-    waveformCtx.filter = `blur(${14 + kickDecay * 22}px)`;
-    waveformCtx.globalAlpha = kickDecay * .55;
+    waveformCtx.filter = `blur(${18 + kickDecay * 25}px)`;
+    waveformCtx.globalAlpha = kickDecay * .45;
     waveformCtx.globalCompositeOperation = 'screen';
     drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, true);
     waveformCtx.restore();
   }
 
-  // Glow pass — played side only, red glow
-  waveformCtx.save();
-  waveformCtx.filter = `blur(${8 + kickDecay * 16}px)`;
-  waveformCtx.globalAlpha = .12 + kickDecay * .45;
-  drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, true);
-  waveformCtx.restore();
-
-  // Sharp pass — full waveform
+  // Main neon waveform (handles its own multi-layer glow internally)
   waveformCtx.globalAlpha = 1;
   waveformCtx.filter = 'none';
   drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, false);
@@ -378,58 +371,45 @@ function sampleWaveform(fIdx) {
 }
 
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
-  // Smooth cartoon step — fewer points = rounder, more organic blobs
-  const step = 6;
-  const numPts = Math.ceil(w / step) + 1;
+  // === NEON SINE-WAVE STYLE ===
+  // The waveform amplitude modulates a continuous sine oscillation
+  const pixelStep = 2;
+  const numPts = Math.ceil(w / pixelStep) + 1;
+  const maxAmp = h * 0.42;
+  // Oscillation frequency — how many wiggles per pixel
+  const freq = 0.045 + kick * 0.008;
 
-  // Build smoothed points — double-pass moving average for extra roundness
-  const raw = [];
+  // Build wave points: y = sin(phase) * envelope(amplitude)
+  const points = [];
+  let phase = 0;
   for (let i = 0; i < numPts; i++) {
-    const x = i * step;
+    const x = i * pixelStep;
     const tSec = timeStart + (x / w) * windowSec;
     const pNorm = tSec / duration;
-    let val = 0;
+    let envelope = 0;
     if (pNorm >= 0 && pNorm <= 1) {
       const fIdx = pNorm * (waveformData.length - 1);
-      val = Math.pow(sampleWaveform(fIdx), 0.75);
+      envelope = Math.pow(sampleWaveform(fIdx), 0.7);
     }
-    raw.push({ x, val: val * h * .44, pNorm });
+    // Minimum wiggle so the line is never flat
+    const amp = Math.max(3, envelope * maxAmp);
+    const y = centerY + Math.sin(phase) * amp;
+    phase += freq * (1 + envelope * 0.5);
+    points.push({ x, y, envelope });
   }
-  // Smooth pass (3-tap average, applied twice)
-  function smooth(arr) {
+
+  // Smooth the points for cartoon roundness (2-pass)
+  function smoothPts(arr) {
     const out = [];
     for (let i = 0; i < arr.length; i++) {
-      const prev = arr[Math.max(0, i - 1)].val;
-      const next = arr[Math.min(arr.length - 1, i + 1)].val;
-      out.push({ ...arr[i], val: prev * 0.25 + arr[i].val * 0.5 + next * 0.25 });
+      const prev = arr[Math.max(0, i - 1)];
+      const cur = arr[i];
+      const next = arr[Math.min(arr.length - 1, i + 1)];
+      out.push({ x: cur.x, y: prev.y * 0.2 + cur.y * 0.6 + next.y * 0.2, envelope: cur.envelope });
     }
     return out;
   }
-  const pts = smooth(smooth(raw));
-
-  // Helper: build a smooth closed path (top curve forward, bottom curve back)
-  function buildBlobPath(start, end) {
-    const minH = 3;
-    ctx.beginPath();
-    // Top edge
-    ctx.moveTo(pts[start].x, centerY - Math.max(minH, pts[start].val));
-    for (let i = start; i < end; i++) {
-      const p0 = pts[i], p1 = pts[Math.min(i + 1, end)];
-      const cpx = (p0.x + p1.x) / 2;
-      const v0 = Math.max(minH, p0.val), v1 = Math.max(minH, p1.val);
-      ctx.quadraticCurveTo(p0.x, centerY - v0, cpx, centerY - (v0 + v1) / 2);
-    }
-    ctx.lineTo(pts[end].x, centerY - Math.max(minH, pts[end].val));
-    // Bottom edge (reverse)
-    ctx.lineTo(pts[end].x, centerY + Math.max(minH, pts[end].val));
-    for (let i = end; i > start; i--) {
-      const p0 = pts[i], p1 = pts[Math.max(i - 1, start)];
-      const cpx = (p0.x + p1.x) / 2;
-      const v0 = Math.max(minH, p0.val), v1 = Math.max(minH, p1.val);
-      ctx.quadraticCurveTo(p0.x, centerY + v0, cpx, centerY + (v0 + v1) / 2);
-    }
-    ctx.closePath();
-  }
+  const pts = smoothPts(smoothPts(points));
 
   // Find playhead split index
   let splitIdx = 0;
@@ -438,150 +418,119 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     if (i === pts.length - 1) splitIdx = pts.length - 1;
   }
 
+  // Helper: build a smooth path segment from start to end index
+  function buildPath(start, end) {
+    ctx.beginPath();
+    ctx.moveTo(pts[start].x, pts[start].y);
+    for (let i = start; i < end - 1; i++) {
+      const cpx = (pts[i].x + pts[i + 1].x) / 2;
+      const cpy = (pts[i].y + pts[i + 1].y) / 2;
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, cpx, cpy);
+    }
+    if (end > start) {
+      ctx.lineTo(pts[end].x, pts[end].y);
+    }
+  }
+
+  // === GLOW-ONLY PASS (called with blur filter from drawWaveform) ===
   if (glowOnly) {
     if (splitIdx > 0) {
-      buildBlobPath(0, splitIdx);
-      ctx.fillStyle = 'rgba(200,25,15,1)';
-      ctx.fill();
+      buildPath(0, splitIdx);
+      ctx.strokeStyle = 'rgba(255,60,30,1)';
+      ctx.lineWidth = 5 + kick * 6;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
     }
     return;
   }
 
-  const amp = h * .44;
-
-  // ——— PLAYED SIDE (red 3D glossy) ———
+  // === PLAYED SIDE — RED/ORANGE NEON ===
   if (splitIdx > 0) {
-    // Layer 1: outer dark red border/shadow
-    buildBlobPath(0, splitIdx);
-    const gradOuter = ctx.createLinearGradient(0, centerY - amp, 0, centerY + amp);
-    gradOuter.addColorStop(0, 'rgba(140,10,5,0.9)');
-    gradOuter.addColorStop(0.3, 'rgba(200,30,15,1)');
-    gradOuter.addColorStop(0.5, 'rgba(220,45,25,1)');
-    gradOuter.addColorStop(0.7, 'rgba(200,30,15,1)');
-    gradOuter.addColorStop(1, 'rgba(140,10,5,0.9)');
-    ctx.fillStyle = gradOuter;
-    ctx.fill();
-
-    // Layer 2: inner lighter pink/white highlight (scaled down ~60%)
+    // Outer glow (wide, dim)
     ctx.save();
-    ctx.beginPath();
-    const minH = 3;
-    // Top edge, pushed toward center
-    const shrink = 0.55;
-    ctx.moveTo(pts[0].x, centerY - Math.max(minH, pts[0].val * shrink));
-    for (let i = 0; i < splitIdx; i++) {
-      const p0 = pts[i], p1 = pts[Math.min(i + 1, splitIdx)];
-      const cpx = (p0.x + p1.x) / 2;
-      const v0 = Math.max(minH, p0.val * shrink), v1 = Math.max(minH, p1.val * shrink);
-      ctx.quadraticCurveTo(p0.x, centerY - v0, cpx, centerY - (v0 + v1) / 2);
-    }
-    ctx.lineTo(pts[splitIdx].x, centerY - Math.max(minH, pts[splitIdx].val * shrink));
-    // Bottom edge reverse
-    ctx.lineTo(pts[splitIdx].x, centerY + Math.max(minH, pts[splitIdx].val * shrink));
-    for (let i = splitIdx; i > 0; i--) {
-      const p0 = pts[i], p1 = pts[Math.max(i - 1, 0)];
-      const cpx = (p0.x + p1.x) / 2;
-      const v0 = Math.max(minH, p0.val * shrink), v1 = Math.max(minH, p1.val * shrink);
-      ctx.quadraticCurveTo(p0.x, centerY + v0, cpx, centerY + (v0 + v1) / 2);
-    }
-    ctx.closePath();
-    const gradInner = ctx.createLinearGradient(0, centerY - amp * shrink, 0, centerY + amp * shrink);
-    gradInner.addColorStop(0, 'rgba(255,180,170,0.7)');
-    gradInner.addColorStop(0.3, 'rgba(255,220,215,0.85)');
-    gradInner.addColorStop(0.5, 'rgba(255,235,230,0.95)');
-    gradInner.addColorStop(0.7, 'rgba(255,220,215,0.85)');
-    gradInner.addColorStop(1, 'rgba(255,180,170,0.7)');
-    ctx.fillStyle = gradInner;
-    ctx.fill();
+    ctx.filter = `blur(${10 + kick * 8}px)`;
+    ctx.globalAlpha = 0.4 + kick * 0.3;
+    buildPath(0, splitIdx);
+    ctx.strokeStyle = 'rgba(255,50,20,0.8)';
+    ctx.lineWidth = 8 + kick * 6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
     ctx.restore();
 
-    // Layer 3: specular highlight strip (very top, narrow)
+    // Mid glow
     ctx.save();
-    ctx.globalAlpha = 0.4;
-    ctx.beginPath();
-    const specShrink = 0.35;
-    const specOffset = -0.18 * amp; // shift upward
-    ctx.moveTo(pts[0].x, centerY + specOffset - Math.max(1, pts[0].val * specShrink));
-    for (let i = 0; i < splitIdx; i++) {
-      const p0 = pts[i], p1 = pts[Math.min(i + 1, splitIdx)];
-      const cpx = (p0.x + p1.x) / 2;
-      const v0 = Math.max(1, p0.val * specShrink), v1 = Math.max(1, p1.val * specShrink);
-      ctx.quadraticCurveTo(p0.x, centerY + specOffset - v0, cpx, centerY + specOffset - (v0 + v1) / 2);
-    }
-    ctx.lineTo(pts[splitIdx].x, centerY + specOffset - Math.max(1, pts[splitIdx].val * specShrink));
-    // close bottom flat
-    ctx.lineTo(pts[splitIdx].x, centerY + specOffset);
-    ctx.lineTo(pts[0].x, centerY + specOffset);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.fill();
+    ctx.filter = `blur(${4 + kick * 4}px)`;
+    ctx.globalAlpha = 0.6 + kick * 0.2;
+    buildPath(0, splitIdx);
+    ctx.strokeStyle = 'rgba(255,80,40,0.9)';
+    ctx.lineWidth = 5 + kick * 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
     ctx.restore();
+
+    // Core line (bright, sharp)
+    buildPath(0, splitIdx);
+    ctx.strokeStyle = 'rgba(255,160,120,1)';
+    ctx.lineWidth = 2.5 + kick * 1;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // Hot center (white-ish)
+    buildPath(0, splitIdx);
+    ctx.strokeStyle = 'rgba(255,220,200,0.6)';
+    ctx.lineWidth = 1.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
   }
 
-  // ——— UNPLAYED SIDE (blue 3D glossy, same technique) ———
+  // === UNPLAYED SIDE — CYAN/BLUE NEON ===
   if (splitIdx < pts.length - 1) {
     const s = splitIdx, e = pts.length - 1;
 
-    // Layer 1: outer blue
-    buildBlobPath(s, e);
-    const gradOuterB = ctx.createLinearGradient(0, centerY - amp, 0, centerY + amp);
-    gradOuterB.addColorStop(0, 'rgba(80,100,180,0.45)');
-    gradOuterB.addColorStop(0.3, 'rgba(120,145,210,0.55)');
-    gradOuterB.addColorStop(0.5, 'rgba(150,170,230,0.6)');
-    gradOuterB.addColorStop(0.7, 'rgba(120,145,210,0.55)');
-    gradOuterB.addColorStop(1, 'rgba(80,100,180,0.45)');
-    ctx.fillStyle = gradOuterB;
-    ctx.fill();
-
-    // Layer 2: inner highlight
+    // Outer glow
     ctx.save();
-    const shrinkB = 0.55;
-    const minHB = 3;
-    ctx.beginPath();
-    ctx.moveTo(pts[s].x, centerY - Math.max(minHB, pts[s].val * shrinkB));
-    for (let i = s; i < e; i++) {
-      const p0 = pts[i], p1 = pts[Math.min(i + 1, e)];
-      const cpx = (p0.x + p1.x) / 2;
-      const v0 = Math.max(minHB, p0.val * shrinkB), v1 = Math.max(minHB, p1.val * shrinkB);
-      ctx.quadraticCurveTo(p0.x, centerY - v0, cpx, centerY - (v0 + v1) / 2);
-    }
-    ctx.lineTo(pts[e].x, centerY - Math.max(minHB, pts[e].val * shrinkB));
-    ctx.lineTo(pts[e].x, centerY + Math.max(minHB, pts[e].val * shrinkB));
-    for (let i = e; i > s; i--) {
-      const p0 = pts[i], p1 = pts[Math.max(i - 1, s)];
-      const cpx = (p0.x + p1.x) / 2;
-      const v0 = Math.max(minHB, p0.val * shrinkB), v1 = Math.max(minHB, p1.val * shrinkB);
-      ctx.quadraticCurveTo(p0.x, centerY + v0, cpx, centerY + (v0 + v1) / 2);
-    }
-    ctx.closePath();
-    const gradInnerB = ctx.createLinearGradient(0, centerY - amp * shrinkB, 0, centerY + amp * shrinkB);
-    gradInnerB.addColorStop(0, 'rgba(200,215,255,0.35)');
-    gradInnerB.addColorStop(0.5, 'rgba(230,240,255,0.45)');
-    gradInnerB.addColorStop(1, 'rgba(200,215,255,0.35)');
-    ctx.fillStyle = gradInnerB;
-    ctx.fill();
+    ctx.filter = 'blur(10px)';
+    ctx.globalAlpha = 0.35;
+    buildPath(s, e);
+    ctx.strokeStyle = 'rgba(40,160,255,0.7)';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
     ctx.restore();
 
-    // Layer 3: specular
+    // Mid glow
     ctx.save();
-    ctx.globalAlpha = 0.25;
-    const specShrinkB = 0.35;
-    const specOffB = -0.18 * amp;
-    ctx.beginPath();
-    ctx.moveTo(pts[s].x, centerY + specOffB - Math.max(1, pts[s].val * specShrinkB));
-    for (let i = s; i < e; i++) {
-      const p0 = pts[i], p1 = pts[Math.min(i + 1, e)];
-      const cpx = (p0.x + p1.x) / 2;
-      const v0 = Math.max(1, p0.val * specShrinkB), v1 = Math.max(1, p1.val * specShrinkB);
-      ctx.quadraticCurveTo(p0.x, centerY + specOffB - v0, cpx, centerY + specOffB - (v0 + v1) / 2);
-    }
-    ctx.lineTo(pts[e].x, centerY + specOffB - Math.max(1, pts[e].val * specShrinkB));
-    ctx.lineTo(pts[e].x, centerY + specOffB);
-    ctx.lineTo(pts[s].x, centerY + specOffB);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fill();
+    ctx.filter = 'blur(4px)';
+    ctx.globalAlpha = 0.5;
+    buildPath(s, e);
+    ctx.strokeStyle = 'rgba(80,190,255,0.8)';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
     ctx.restore();
+
+    // Core line
+    buildPath(s, e);
+    ctx.strokeStyle = 'rgba(140,220,255,1)';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // Hot center
+    buildPath(s, e);
+    ctx.strokeStyle = 'rgba(220,245,255,0.5)';
+    ctx.lineWidth = 1.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
   }
 }
 
