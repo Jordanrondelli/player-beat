@@ -107,27 +107,29 @@
         </div>
       </div>
 
-      <!-- Control bar below waveform -->
-      <div class="control-bar">
+      <!-- Transport controls (prev / play / next) -->
+      <div class="transport-controls">
+        <button class="transport-btn" id="prevBtn" aria-label="Son précédent">
+          <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" transform="scale(-1,1) translate(-24,0)"/></svg>
+        </button>
+        <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
+          <img src="play.png" alt="Play" class="play-img" id="playImg">
+          <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
+        </button>
+        <button class="transport-btn" id="nextBtn" aria-label="Son suivant">
+          <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+        </button>
+      </div>
+
+      <!-- Vote bar: pouce rouge | FIRE | pouce vert -->
+      <div class="vote-bar">
         <button class="vote-btn vote-btn-red" id="btnDown" aria-label="Je n'aime pas"><img src="pouce-rouge.png" alt="Pouce rouge" class="vote-icon"></button>
-        <div class="transport-controls">
-          <button class="transport-btn" id="prevBtn" aria-label="Son précédent">
-            <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" transform="scale(-1,1) translate(-24,0)"/></svg>
-          </button>
-          <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
-            <img src="play.png" alt="Play" class="play-img" id="playImg">
-            <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
-          </button>
-          <button class="transport-btn" id="nextBtn" aria-label="Son suivant">
-            <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-          </button>
-        </div>
-        <button class="vote-btn vote-btn-green" id="btnUp" aria-label="J'aime"><img src="pouce-vert.png" alt="Pouce vert" class="vote-icon"></button>
         <div class="fire-wrap">
           <button class="fire-btn" id="btnFire" aria-label="FIRE! Vote coup de coeur">
             <img src="fire.png" alt="FIRE" class="fire-img">
           </button>
         </div>
+        <button class="vote-btn vote-btn-green" id="btnUp" aria-label="J'aime"><img src="pouce-vert.png" alt="Pouce vert" class="vote-icon"></button>
       </div>
     </div>
   </div>
