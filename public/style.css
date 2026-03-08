@@ -318,7 +318,7 @@ body {
 }
 .play-btn:hover { transform: translateX(-50%) scale(1.05); }
 .play-btn:active { transform: translateX(-50%) scale(0.95); }
-.play-btn img { height: 45px; width: auto; display: block; }
+.play-btn img { height: 60px; width: auto; display: block; }
 .play-img, .pause-img { pointer-events: none; }
 
 /* Volume control */
