@@ -233,9 +233,9 @@ const gaugeGlow = document.getElementById('gaugeGlow');
 const hammerSparks = document.getElementById('hammerSparks');
 const hammerShockwave = document.getElementById('hammerShockwave');
 const hammerStageEl = document.getElementById('hammerStage');
-let currentHammerStage = 'cold';
+let currentHammerStage = 'cool';
 let hammerCharge = 0;
-let hammerPeakStage = 'cold';
+let hammerPeakStage = 'cool';
 // Multi-criteria power scoring state
 const loudnessFreqData = new Uint8Array(loudnessAnalyser.frequencyBinCount);
 let hammerKickSmooth = 0;     // smoothed kick impact for scoring
@@ -767,12 +767,12 @@ function updateHammerVisuals(pct, kick) {
   }
 
   // Determine stage — LOCKED: once reached, never goes back down
-  const stageOrder = ['cold', 'warm', 'hot', 'max'];
-  let newStage = 'cold';
-  let stageLabel = '';
-  if (pct >= 90) { newStage = 'max'; stageLabel = 'MAXIMUM'; }
-  else if (pct >= 66) { newStage = 'hot'; stageLabel = 'EN FEU'; }
-  else if (pct >= 33) { newStage = 'warm'; stageLabel = 'CHAUD'; }
+  const stageOrder = ['cool', 'chaud', 'enfeu', 'lourd', 'overload'];
+  let newStage = 'cool';
+  if (pct >= 100) { newStage = 'overload'; }
+  else if (pct >= 80) { newStage = 'lourd'; }
+  else if (pct >= 60) { newStage = 'enfeu'; }
+  else if (pct >= 40) { newStage = 'chaud'; }
 
   // Lock: only go up, never down
   const peakIdx = stageOrder.indexOf(hammerPeakStage);
@@ -786,7 +786,7 @@ function updateHammerVisuals(pct, kick) {
   if (hammerPeakStage !== currentHammerStage) {
     currentHammerStage = hammerPeakStage;
     if (hammerCard) hammerCard.setAttribute('data-stage', hammerPeakStage);
-    const labels = { cold: '', warm: 'CHAUD', hot: 'EN FEU', max: 'MAXIMUM' };
+    const labels = { cool: '', chaud: 'CHAUD', enfeu: 'EN FEU', lourd: 'TRÈS LOURD', overload: 'OVERLOAD' };
     if (hammerStageEl) hammerStageEl.textContent = labels[hammerPeakStage];
   }
 }
@@ -808,22 +808,52 @@ function triggerHammerActivation(stage) {
     setTimeout(() => hammerIconEl.classList.remove('slam'), 200);
   }
 
-  // Screen shake on HOT/MAX
-  if (stage === 'max' || stage === 'hot') {
+  // Screen shake on enfeu/lourd/overload
+  if (stage === 'enfeu' || stage === 'lourd' || stage === 'overload') {
     const wrapper = document.getElementById('wrapper');
     if (wrapper) {
       wrapper.classList.add('shaking');
-      setTimeout(() => wrapper.classList.remove('shaking'), 400);
+      setTimeout(() => wrapper.classList.remove('shaking'), stage === 'overload' ? 800 : 400);
     }
   }
 
-  // Flash on MAX
-  if (stage === 'max') {
+  // Flash on lourd
+  if (stage === 'lourd') {
     const flash = document.createElement('div');
     flash.className = 'fire-flash';
     flash.style.background = 'radial-gradient(ellipse at center, rgba(255, 200, 50, .4) 0%, rgba(255, 100, 0, .2) 40%, transparent 70%)';
     document.body.appendChild(flash);
     flash.addEventListener('animationend', () => flash.remove());
+  }
+
+  // OVERLOAD — massive visual explosion
+  if (stage === 'overload') {
+    // 1. Chromatic aberration flash
+    const chromaFlash = document.createElement('div');
+    chromaFlash.className = 'overload-chroma';
+    document.body.appendChild(chromaFlash);
+    setTimeout(() => chromaFlash.remove(), 1200);
+
+    // 2. White-hot flash
+    const flash = document.createElement('div');
+    flash.className = 'fire-flash overload-flash';
+    document.body.appendChild(flash);
+    flash.addEventListener('animationend', () => flash.remove());
+
+    // 3. Waveform panel border glow
+    const wp = document.querySelector('.waveform-panel');
+    if (wp) {
+      wp.classList.add('overload-border');
+    }
+
+    // 4. Double shockwave
+    if (hammerShockwave) {
+      setTimeout(() => {
+        hammerShockwave.classList.remove('active');
+        void hammerShockwave.offsetWidth;
+        hammerShockwave.classList.add('active');
+      }, 200);
+    }
   }
 }
 
@@ -862,8 +892,8 @@ function stopBeatSync() {
   }
   // Reset hammer charge and stage
   hammerCharge = 0;
-  hammerPeakStage = 'cold';
-  currentHammerStage = 'cold';
+  hammerPeakStage = 'cool';
+  currentHammerStage = 'cool';
   hammerKickSmooth = 0;
   criteriaMax = { sub: 0.001, bass: 0.001, kick: 0.001, fullness: 0.001, loudness: 0.001 };
   criteriaSmooth = { sub: 0, bass: 0, kick: 0, fullness: 0, loudness: 0 };
