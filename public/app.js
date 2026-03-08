@@ -168,25 +168,25 @@ function generateDemoData() {
 
 function extractWaveformData(buffer) {
   const raw = buffer.getChannelData(0);
-  const n = 40000;
+  const n = 20000;
   const blockLen = Math.floor(raw.length / n);
   waveformData = [];
-  waveformSigned = [];
+  waveformSigned = []; // now stores absolute peak envelope (always positive)
   for (let i = 0; i < n; i++) {
     let sum = 0;
-    // Pick the peak sample (signed, preserves waveform shape)
-    let peak = 0;
+    let maxAbs = 0;
     for (let j = 0; j < blockLen; j++) {
       const s = raw[i * blockLen + j] || 0;
       sum += s * s;
-      if (Math.abs(s) > Math.abs(peak)) peak = s;
+      const a = Math.abs(s);
+      if (a > maxAbs) maxAbs = a;
     }
     waveformData.push(Math.sqrt(sum / blockLen));
-    waveformSigned.push(peak);
+    waveformSigned.push(maxAbs); // absolute peak envelope — no sign oscillation
   }
   const maxRms = Math.max(...waveformData);
   if (maxRms > 0) waveformData = waveformData.map(v => v / maxRms);
-  const maxPeak = Math.max(...waveformSigned.map(Math.abs));
+  const maxPeak = Math.max(...waveformSigned);
   if (maxPeak > 0) waveformSigned = waveformSigned.map(v => v / maxPeak);
 }
 
@@ -398,13 +398,13 @@ function sampleSigned(fIdx) {
 }
 
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
-  // === NEON ENVELOPE WAVEFORM — high-def mirrored amplitude with peak transients ===
-  const step = 1.5;
+  // === NEON ENVELOPE WAVEFORM — stable mirrored amplitude silhouette ===
+  const step = 2;
   const numPts = Math.ceil(w / step) + 1;
   const maxAmp = h * 0.44;
   const minH = 1.5;
 
-  // Build amplitude envelope from PEAK data (preserves transients like kicks)
+  // Build amplitude envelope — peak envelope (always positive, no oscillation)
   const raw = [];
   for (let i = 0; i < numPts; i++) {
     const x = i * step;
@@ -412,16 +412,16 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     const pNorm = tSec / duration;
     let val = 0;
     if (pNorm >= 0 && pNorm <= 1) {
-      const fIdx = pNorm * (waveformSigned.length - 1);
-      // Use absolute peak for sharp transients, blend with RMS for body
-      const peak = Math.abs(sampleSigned(fIdx));
+      const fIdx = pNorm * (waveformData.length - 1);
+      // Blend peak envelope (sharp transients) with RMS (body)
+      const peak = sampleSigned(fIdx); // already absolute envelope
       const rms = sampleWaveform(fIdx);
-      val = peak * 0.7 + rms * 0.3; // peaks dominate for kick definition
+      val = peak * 0.65 + rms * 0.35;
     }
     raw.push({ x, val: Math.max(minH, val * maxAmp) });
   }
 
-  // Light single smooth pass — preserves transient spikes
+  // Light smooth — 3-wide kernel, preserves kick spikes
   const pts = [];
   for (let i = 0; i < raw.length; i++) {
     const prev = raw[Math.max(0, i - 1)].val;
