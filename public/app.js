@@ -801,22 +801,23 @@ function startBeatSync() {
   const ms = 60000 / detectedBPM;
   function hammerHit() {
     if (!isPlaying) return;
-    const pwr = Math.pow(hammerSmooth, 2.5);
-    if (pwr < 0.001) return;
+    // Use hammerCharge (0-100) as power basis — this is the real "puissance"
+    const pwr = hammerCharge / 100; // 0 to 1
+    if (pwr < 0.02) return; // skip if charge is near-zero
 
-    // Slam intensity scales with power AND stage
-    const stageMultiplier = currentHammerStage === 'max' ? 1.3 : currentHammerStage === 'hot' ? 1.1 : currentHammerStage === 'warm' ? 0.9 : 0.6;
-    const angle = (-8 - pwr * 52) * stageMultiplier;
-    const scl = 1 + pwr * 0.4 * stageMultiplier;
+    // Hit intensity: always visible, scales with charge
+    // At 10% charge: gentle tap. At 100%: massive slam.
+    const angle = -10 - pwr * 50;  // -10° to -60°
+    const scl = 1 + pwr * 0.35;    // 1x to 1.35x
 
     hammerIconEl.style.transform = `rotate(${angle}deg) scale(${scl})`;
-    hammerIconEl.style.transition = 'transform .03s ease-out';
+    hammerIconEl.style.transition = 'transform .04s ease-out';
 
     if (hammerHitTimeout) clearTimeout(hammerHitTimeout);
     hammerHitTimeout = setTimeout(() => {
       hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
-      hammerIconEl.style.transition = 'transform .12s cubic-bezier(.1,.9,.3,1)';
-    }, 60 + pwr * 80);
+      hammerIconEl.style.transition = 'transform .15s cubic-bezier(.1,.9,.3,1)';
+    }, 50 + pwr * 90);
   }
   hammerHit();
   beatIntervalId = setInterval(hammerHit, ms);

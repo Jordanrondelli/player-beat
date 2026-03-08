@@ -458,18 +458,18 @@ body {
 
 /* Stage labels — above circle, tight spacing */
 .hammer-label {
-  font-family: 'Bangers', cursive; font-size: 10px;
-  color: rgba(255, 255, 255, .35); letter-spacing: 2px; text-transform: uppercase;
+  font-family: 'Bangers', cursive; font-size: 14px;
+  color: rgba(255, 255, 255, .45); letter-spacing: 3px; text-transform: uppercase;
   line-height: 1; margin-bottom: -2px;
 }
 .hammer-pct {
-  font-family: 'Bangers', cursive; font-size: 22px;
+  font-family: 'Bangers', cursive; font-size: 26px;
   color: rgba(255, 255, 255, .5); text-shadow: 0 2px 8px rgba(0, 0, 0, .5);
   letter-spacing: 1px; line-height: 1;
   transition: color .3s, transform .08s, text-shadow .3s;
 }
 .hammer-stage {
-  font-family: 'Bangers', cursive; font-size: 12px;
+  font-family: 'Bangers', cursive; font-size: 13px;
   letter-spacing: 3px; text-transform: uppercase;
   color: transparent; height: 16px; line-height: 1;
   transition: color .3s, text-shadow .3s;
