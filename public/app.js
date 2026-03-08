@@ -237,12 +237,9 @@ let currentHammerStage = 'cold';
 let hammerCharge = 0;
 let hammerPeakStage = 'cold';
 // Energy analysis buffers
-let energyLongWindow = [];    // ~10s rolling window for baseline energy
-let energyShortWindow = [];   // ~1s rolling window for current energy
-let spectralRatioWindow = []; // bass-to-mid ratio history
+let energyShortWindow = [];   // ~0.5s rolling window for smoothing
 let trackMaxEnergy = 0.01;    // max energy seen so far in this track
 let trackMinEnergy = 1;       // min energy seen so far in this track
-let chargeVelocity = 0;       // how fast charge is moving
 let detectedBPM = 0;
 let beatIntervalId = null;
 const GAUGE_CIRCUMFERENCE = 326.73; // 2π × 52
@@ -377,78 +374,77 @@ function drawWaveform(currentTime) {
   }
   loudnessSmooth += (loudnessRaw - loudnessSmooth) * 0.12;
 
-  // ===== HAMMER: ENERGY CONTRAST SYSTEM =====
-  // Compares current energy vs track baseline. Needs time to build up.
-  // Intro = low. Build-up = medium. Drop/chorus = high.
+  // ===== HAMMER: ABSOLUTE ENERGY MEASUREMENT =====
+  // Measures how loud the music is RIGHT NOW relative to this track's own range.
+  // 0% = quietest moment. 100% = loudest moment. Simple, intuitive, satisfying.
   if (isPlaying && audioBuffer) {
     analyser.getByteFrequencyData(frequencyData);
-    const binCount = analyser.frequencyBinCount; // 256
+    const binCount = analyser.frequencyBinCount;
 
-    // Bass energy (bins 0-3)
+    // Bass energy (bins 0-3, ~0-340Hz)
     let bassEnergy = 0;
     for (let i = 0; i < 4; i++) bassEnergy += frequencyData[i];
     bassEnergy /= 4 * 255;
 
-    // Mid energy (bins 4-34)
+    // Mid energy (bins 4-34, ~340-3000Hz)
     let midEnergy = 0;
     for (let i = 4; i < 35; i++) midEnergy += frequencyData[i];
     midEnergy /= 31 * 255;
 
-    // High energy (bins 35-139)
+    // High energy (bins 35-139, ~3000-12000Hz)
     let highEnergy = 0;
     for (let i = 35; i < Math.min(140, binCount); i++) highEnergy += frequencyData[i];
     highEnergy /= Math.min(105, binCount - 35) * 255;
 
-    // Combined energy
+    // Combined energy (bass-heavy for electro)
     const energy = bassEnergy * 0.5 + midEnergy * 0.3 + highEnergy * 0.2;
 
-    // Feed hammerSmooth so beat sync still works
+    // Feed hammerSmooth for beat sync
     hammerSmooth += (energy - hammerSmooth) * 0.08;
 
-    // Track energy range
-    trackMaxEnergy = Math.max(trackMaxEnergy, energy);
-    trackMinEnergy = Math.min(trackMinEnergy, energy);
-
-    // Build energy windows
+    // Smooth the energy over ~0.5s to avoid jitter
     energyShortWindow.push(energy);
-    if (energyShortWindow.length > 60) energyShortWindow.shift();   // ~1s
-    energyLongWindow.push(energy);
-    if (energyLongWindow.length > 600) energyLongWindow.shift();    // ~10s
+    if (energyShortWindow.length > 30) energyShortWindow.shift();
+    const smoothEnergy = energyShortWindow.reduce((a, b) => a + b, 0) / energyShortWindow.length;
 
-    const shortAvg = energyShortWindow.reduce((a, b) => a + b, 0) / energyShortWindow.length;
-
-    // CRITICAL: Don't compute contrast until we have enough baseline data (~4s)
-    // During warmup, charge stays at 0
-    if (energyLongWindow.length < 240) {
-      // Warmup phase: just collecting data, charge stays low
-      hammerCharge = Math.max(0, hammerCharge - 0.1);
-    } else {
-      // Baseline = average of the oldest half of the long window (the "past")
-      const halfLen = Math.floor(energyLongWindow.length / 2);
-      const baseline = energyLongWindow.slice(0, halfLen).reduce((a, b) => a + b, 0) / halfLen;
-
-      // How much louder is NOW vs the past baseline
-      const energyRange = Math.max(0.02, trackMaxEnergy - trackMinEnergy);
-      const contrast = (shortAvg - baseline) / energyRange;
-      // contrast: ~0 = same as baseline, ~0.5 = noticeably louder, ~1 = way louder
-
-      // Intensity: purely contrast-driven, clamped 0-1
-      // Needs significant contrast to score high — no freebies from volume alone
-      const intensity = Math.max(0, Math.min(1, contrast * 1.2));
-
-      // Move charge toward target slowly
-      const target = intensity * 100;
-      const diff = target - hammerCharge;
-
-      if (diff > 0) {
-        // Rising: slow ramp
-        hammerCharge += diff * 0.008;
-      } else {
-        // Falling: very slow
-        hammerCharge += diff * 0.002;
-      }
-      hammerCharge = Math.max(0, Math.min(100, hammerCharge));
+    // Track the min/max energy seen so far in this track
+    // Min adapts slowly upward (ignore silence at start)
+    // Max adapts upward immediately
+    trackMaxEnergy = Math.max(trackMaxEnergy, smoothEnergy);
+    // Only start tracking min after a brief warmup (first 1s)
+    if (energyShortWindow.length >= 30) {
+      trackMinEnergy = Math.min(trackMinEnergy, smoothEnergy);
     }
+
+    // Where does current energy sit within the track's range?
+    const range = trackMaxEnergy - trackMinEnergy;
+    let normalizedEnergy;
+    if (range < 0.005) {
+      // Not enough dynamic range yet (first few seconds, or very flat track)
+      normalizedEnergy = 0;
+    } else {
+      normalizedEnergy = Math.max(0, Math.min(1, (smoothEnergy - trackMinEnergy) / range));
+    }
+
+    // Apply a curve to make it more musical:
+    // - Below 50% raw → compresses to ~20% (verses feel "moderate")
+    // - Above 70% raw → expands to fill 60-100% (drops feel "explosive")
+    const shaped = normalizedEnergy < 0.5
+      ? normalizedEnergy * 0.4           // 0-50% energy → 0-20% charge
+      : 0.2 + (normalizedEnergy - 0.5) * 1.6;  // 50-100% energy → 20-100% charge
+
+    const target = Math.max(0, Math.min(1, shaped)) * 100;
+
+    // Smooth charge movement:
+    // - Rise: reacts in ~1-2 seconds (fast enough for drops)
+    // - Fall: decays in ~3-4 seconds (doesn't punish brief breaks)
+    const diff = target - hammerCharge;
+    if (diff > 0) {
+      hammerCharge += diff * 0.04; // rise ~1.5s
+    } else {
+      hammerCharge += diff * 0.015; // fall ~3s
+    }
+    hammerCharge = Math.max(0, Math.min(100, hammerCharge));
   }
 
   const hammerPct = Math.round(hammerCharge);
@@ -830,12 +826,9 @@ function stopBeatSync() {
   }
   // Reset hammer charge and stage
   hammerCharge = 0;
-  chargeVelocity = 0;
   hammerPeakStage = 'cold';
   currentHammerStage = 'cold';
-  energyLongWindow = [];
   energyShortWindow = [];
-  spectralRatioWindow = [];
   trackMaxEnergy = 0.01;
   trackMinEnergy = 1;
   if (hammerCard) hammerCard.setAttribute('data-stage', 'cold');
