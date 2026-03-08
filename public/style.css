@@ -145,7 +145,7 @@ body {
 .wrapper {
   width: 100%; height: 100%; position: relative; z-index: 5;
   display: flex; align-items: center; justify-content: center;
-  padding-left: 8vw;
+  padding-left: 14vw;
 }
 
 /* ===== FIRE IMPACT EFFECTS ===== */
@@ -208,7 +208,7 @@ body {
 /* ===== SCENE (3D perspective) ===== */
 .scene {
   position: relative; z-index: 10;
-  width: min(1200px, 83vw);
+  width: min(1560px, 88vw);
   margin-top: -280px;
   transform-style: preserve-3d;
   transform: perspective(1200px) rotateY(-5deg) rotateX(2deg);
@@ -230,7 +230,7 @@ body {
 
 /* ===== WAVEFORM PANEL ===== */
 .waveform-panel {
-  width: 100%; height: min(380px, 43vh); padding: 0;
+  width: 100%; height: min(400px, 45vh); padding: 0;
   border-radius: 26px;
   border: 1px solid rgba(255, 255, 255, .1);
   border-top-color: rgba(255, 255, 255, .18);
@@ -414,14 +414,14 @@ body {
 }
 
 /* ===== VOTE BUTTONS ===== */
-.vote-left { position: absolute; bottom: -380px; left: calc(50% - 480px); z-index: 35; }
-.vote-right { position: absolute; bottom: -380px; right: calc(50% - 480px); z-index: 35; }
+.vote-left { position: absolute; bottom: -380px; left: calc(50% - 620px); z-index: 35; }
+.vote-right { position: absolute; bottom: -380px; right: calc(50% - 620px); z-index: 35; }
 .vote-icon {
   width: 100%; height: 100%; object-fit: contain; pointer-events: none;
   transition: filter .3s ease;
 }
 .vote-btn {
-  width: 150px; height: 150px; border-radius: 24px; border: none; cursor: pointer;
+  width: 170px; height: 170px; border-radius: 26px; border: none; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   background: transparent;
   position: relative; overflow: visible;
@@ -571,7 +571,7 @@ body {
   transform: translateX(-50%) translateZ(10px);
 }
 .fire-btn {
-  width: 420px; height: 165px; border: none; cursor: pointer;
+  width: 480px; height: 185px; border: none; cursor: pointer;
   background-color: transparent; padding: 0;
   filter:
     drop-shadow(0 0 4px rgba(255, 20, 0, .9))
@@ -655,20 +655,20 @@ body {
 }
 
 /* ===== RESPONSIVE ===== */
-@media (max-width: 900px) {
-  .wrapper { padding-left: 0; }
+@media (max-width: 1100px) {
+  .wrapper { padding-left: 2vw; }
   .scene {
     width: 92vw;
     animation: sceneFloatSm 6s ease-in-out infinite;
   }
-  .vote-left { left: calc(50% - 320px); bottom: -320px; }
-  .vote-right { right: calc(50% - 320px); bottom: -320px; }
-  .vote-btn { width: 110px; height: 110px; border-radius: 20px; }
+  .vote-left { left: calc(50% - 380px); bottom: -320px; }
+  .vote-right { right: calc(50% - 380px); bottom: -320px; }
+  .vote-btn { width: 130px; height: 130px; border-radius: 22px; }
   .fire-wrap { bottom: -260px; }
   .chat-card { width: 180px; font-size: 11px; right: 5px; }
   .user-card { left: 5px; padding: 10px 16px 10px 12px; }
   .user-name { font-size: 16px; }
-  .fire-btn { width: 300px; height: 120px; }
+  .fire-btn { width: 350px; height: 135px; }
   .hammer-card { padding: 8px 14px 8px 10px; }
   .hammer-pct { font-size: 18px; }
   .hammer-icon { width: 36px; height: 36px; }
