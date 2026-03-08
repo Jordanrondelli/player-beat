@@ -274,15 +274,22 @@ function drawWaveform(currentTime) {
     const intensity = Math.min(1, rise * 8 * Math.max(densitySmooth, .3));
     kickDecay = Math.max(kickDecay, intensity);
   }
-  kickDecay *= .88;
-
-
+  kickDecay *= .82; // faster decay for snappy kick response
 
   const windowSec = 8;
   const playheadX = w * 0.35;
   const scrollBack = 0.35 * windowSec;
   const timeStart = currentTime - scrollBack;
   const centerY = h * 0.5;
+
+  // === KICK SHAKE — fast, punchy canvas tremble ===
+  if (kickDecay > .03) {
+    const shakeAmt = kickDecay * 4;
+    const sx = (Math.random() - 0.5) * shakeAmt;
+    const sy = (Math.random() - 0.5) * shakeAmt * 0.6;
+    waveformCtx.save();
+    waveformCtx.translate(sx, sy);
+  }
 
   // Bass bloom pass — extra wide aura on kicks (screen blend)
   if (kickDecay > .02) {
@@ -294,10 +301,15 @@ function drawWaveform(currentTime) {
     waveformCtx.restore();
   }
 
-  // Main neon waveform (handles its own multi-layer glow internally)
+  // Main neon waveform
   waveformCtx.globalAlpha = 1;
   waveformCtx.filter = 'none';
   drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, false);
+
+  // End kick shake
+  if (kickDecay > .03) {
+    waveformCtx.restore();
+  }
 
   // Playhead glow
   const phGlow = waveformCtx.createLinearGradient(playheadX - 30, 0, playheadX + 30, 0);
@@ -386,27 +398,37 @@ function sampleSigned(fIdx) {
 }
 
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
-  // === NEON WAVEFORM — real audio shape with glow ===
-  const pixelStep = 1.5;
-  const numPts = Math.ceil(w / pixelStep) + 1;
+  // === NEON ENVELOPE WAVEFORM — mirrored amplitude silhouette with glow ===
+  const step = 3;
+  const numPts = Math.ceil(w / step) + 1;
   const maxAmp = h * 0.44;
+  const minH = 2;
 
-  // Build points from REAL signed waveform data
-  const pts = [];
+  // Build amplitude envelope points from RMS data
+  const raw = [];
   for (let i = 0; i < numPts; i++) {
-    const x = i * pixelStep;
+    const x = i * step;
     const tSec = timeStart + (x / w) * windowSec;
     const pNorm = tSec / duration;
     let val = 0;
     if (pNorm >= 0 && pNorm <= 1) {
-      const fIdx = pNorm * (waveformSigned.length - 1);
-      val = sampleSigned(fIdx);
+      const fIdx = pNorm * (waveformData.length - 1);
+      val = Math.pow(sampleWaveform(fIdx), 0.75);
     }
-    // Apply slight power curve to boost contrast while preserving sign
-    const sign = val >= 0 ? 1 : -1;
-    val = sign * Math.pow(Math.abs(val), 0.8);
-    pts.push({ x, y: centerY + val * maxAmp });
+    raw.push({ x, val: Math.max(minH, val * maxAmp) });
   }
+
+  // Smooth pass (2x for cartoon roundness)
+  function smooth(arr) {
+    const out = [];
+    for (let i = 0; i < arr.length; i++) {
+      const prev = arr[Math.max(0, i - 1)].val;
+      const next = arr[Math.min(arr.length - 1, i + 1)].val;
+      out.push({ x: arr[i].x, val: prev * 0.25 + arr[i].val * 0.5 + next * 0.25 });
+    }
+    return out;
+  }
+  const pts = smooth(smooth(raw));
 
   // Find playhead split index
   let splitIdx = 0;
@@ -415,95 +437,114 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     if (i === pts.length - 1) splitIdx = pts.length - 1;
   }
 
-  // Helper: build a smooth path segment
-  function buildPath(start, end) {
+  // Build mirrored envelope path (top forward, bottom reverse)
+  function buildEnvelope(start, end) {
     if (end <= start) return;
     ctx.beginPath();
-    ctx.moveTo(pts[start].x, pts[start].y);
-    for (let i = start; i < end - 1; i++) {
-      const cpx = (pts[i].x + pts[i + 1].x) / 2;
-      const cpy = (pts[i].y + pts[i + 1].y) / 2;
-      ctx.quadraticCurveTo(pts[i].x, pts[i].y, cpx, cpy);
+    // Top edge (forward)
+    ctx.moveTo(pts[start].x, centerY - pts[start].val);
+    for (let i = start; i < end; i++) {
+      const p0 = pts[i], p1 = pts[Math.min(i + 1, end)];
+      const cpx = (p0.x + p1.x) / 2;
+      ctx.quadraticCurveTo(p0.x, centerY - p0.val, cpx, centerY - (p0.val + p1.val) / 2);
     }
-    ctx.lineTo(pts[end].x, pts[end].y);
+    ctx.lineTo(pts[end].x, centerY - pts[end].val);
+    // Bottom edge (reverse)
+    ctx.lineTo(pts[end].x, centerY + pts[end].val);
+    for (let i = end; i > start; i--) {
+      const p0 = pts[i], p1 = pts[Math.max(i - 1, start)];
+      const cpx = (p0.x + p1.x) / 2;
+      ctx.quadraticCurveTo(p0.x, centerY + p0.val, cpx, centerY + (p0.val + p1.val) / 2);
+    }
+    ctx.closePath();
   }
 
-  // Helper: draw a neon line with glow layers
-  function drawNeon(start, end, colors, kickScale) {
+  // Draw a neon-glowing envelope section
+  function drawNeonEnvelope(start, end, colors, kickScale) {
     const k = kickScale ? kick : 0;
 
-    // Layer 1: wide outer glow
+    // Layer 1: wide blurred outer glow (stroke the outline)
     ctx.save();
-    ctx.filter = `blur(${12 + k * 10}px)`;
-    ctx.globalAlpha = 0.35 + k * 0.25;
-    buildPath(start, end);
+    ctx.filter = `blur(${10 + k * 12}px)`;
+    ctx.globalAlpha = 0.4 + k * 0.35;
+    buildEnvelope(start, end);
     ctx.strokeStyle = colors.outer;
-    ctx.lineWidth = 8 + k * 6;
-    ctx.lineCap = 'round';
+    ctx.lineWidth = 6 + k * 5;
     ctx.lineJoin = 'round';
     ctx.stroke();
     ctx.restore();
 
     // Layer 2: mid glow
     ctx.save();
-    ctx.filter = `blur(${5 + k * 4}px)`;
-    ctx.globalAlpha = 0.55 + k * 0.2;
-    buildPath(start, end);
+    ctx.filter = `blur(${4 + k * 5}px)`;
+    ctx.globalAlpha = 0.5 + k * 0.25;
+    buildEnvelope(start, end);
     ctx.strokeStyle = colors.mid;
-    ctx.lineWidth = 5 + k * 3;
-    ctx.lineCap = 'round';
+    ctx.lineWidth = 4 + k * 3;
     ctx.lineJoin = 'round';
     ctx.stroke();
     ctx.restore();
 
-    // Layer 3: core bright line
-    buildPath(start, end);
+    // Layer 3: filled interior (semi-transparent)
+    buildEnvelope(start, end);
+    ctx.fillStyle = colors.fill;
+    ctx.fill();
+
+    // Layer 4: sharp bright outline
+    buildEnvelope(start, end);
     ctx.strokeStyle = colors.core;
-    ctx.lineWidth = 2.5 + k * 1;
-    ctx.lineCap = 'round';
+    ctx.lineWidth = 2 + k * 0.8;
     ctx.lineJoin = 'round';
     ctx.stroke();
 
-    // Layer 4: hot white center
-    buildPath(start, end);
+    // Layer 5: hot white edge highlight (top edge only)
+    ctx.save();
+    ctx.globalAlpha = 0.5 + k * 0.2;
+    ctx.beginPath();
+    ctx.moveTo(pts[start].x, centerY - pts[start].val);
+    for (let i = start; i < end; i++) {
+      const p0 = pts[i], p1 = pts[Math.min(i + 1, end)];
+      const cpx = (p0.x + p1.x) / 2;
+      ctx.quadraticCurveTo(p0.x, centerY - p0.val, cpx, centerY - (p0.val + p1.val) / 2);
+    }
+    ctx.lineTo(pts[end].x, centerY - pts[end].val);
     ctx.strokeStyle = colors.hot;
     ctx.lineWidth = 1;
-    ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.stroke();
+    ctx.restore();
   }
 
   const redColors = {
-    outer: 'rgba(255,40,10,0.8)',
-    mid:   'rgba(255,80,40,0.9)',
-    core:  'rgba(255,150,110,1)',
-    hot:   'rgba(255,220,200,0.7)'
+    outer: 'rgba(255,40,10,0.9)',
+    mid:   'rgba(255,70,30,0.9)',
+    fill:  'rgba(220,30,10,0.25)',
+    core:  'rgba(255,140,100,1)',
+    hot:   'rgba(255,220,200,0.8)'
   };
   const blueColors = {
     outer: 'rgba(30,140,255,0.7)',
-    mid:   'rgba(70,185,255,0.8)',
-    core:  'rgba(140,220,255,1)',
-    hot:   'rgba(220,245,255,0.55)'
+    mid:   'rgba(60,170,255,0.8)',
+    fill:  'rgba(40,120,220,0.12)',
+    core:  'rgba(130,210,255,0.9)',
+    hot:   'rgba(210,240,255,0.6)'
   };
 
   // Glow-only pass (bass bloom)
   if (glowOnly) {
     if (splitIdx > 0) {
-      buildPath(0, splitIdx);
-      ctx.strokeStyle = 'rgba(255,60,30,1)';
-      ctx.lineWidth = 5 + kick * 6;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
+      buildEnvelope(0, splitIdx);
+      ctx.fillStyle = 'rgba(255,50,20,1)';
+      ctx.fill();
     }
     return;
   }
 
   // Played side — red neon
-  if (splitIdx > 0) drawNeon(0, splitIdx, redColors, true);
+  if (splitIdx > 0) drawNeonEnvelope(0, splitIdx, redColors, true);
 
   // Unplayed side — blue neon
-  if (splitIdx < pts.length - 1) drawNeon(splitIdx, pts.length - 1, blueColors, false);
+  if (splitIdx < pts.length - 1) drawNeonEnvelope(splitIdx, pts.length - 1, blueColors, false);
 }
 
 // ===== ANIMATION LOOP =====
