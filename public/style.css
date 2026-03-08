@@ -554,49 +554,47 @@ body {
 }
 .fire-btn {
   position: relative;
-  overflow: visible;
+  overflow: hidden;
+  border-radius: 22px;
 }
-/* Inner emergency glow */
+/* Inner emergency glow — panic button pulse */
 .fire-btn::before {
   content: '';
   position: absolute;
-  inset: 10% 5%;
-  background: radial-gradient(ellipse at 50% 55%,
-    rgba(255, 0, 0, .5) 0%,
-    rgba(255, 30, 0, .3) 30%,
-    rgba(255, 60, 0, .12) 55%,
-    transparent 75%
+  inset: 0;
+  background: radial-gradient(ellipse 80% 90% at 50% 50%,
+    rgba(255, 20, 0, .45) 0%,
+    rgba(255, 50, 0, .2) 40%,
+    transparent 70%
   );
-  border-radius: 40%;
-  animation: emergencyPulse .7s ease-in-out infinite alternate;
+  animation: emergencyPulse .6s ease-in-out infinite alternate;
   pointer-events: none;
-  z-index: 1;
+  z-index: 3;
 }
 @keyframes emergencyPulse {
-  0%   { opacity: .4; transform: scale(.92); }
-  100% { opacity: 1;  transform: scale(1.08); }
+  0%   { opacity: .3; }
+  100% { opacity: 1; }
 }
-/* Dynamic shine reflection */
+/* Subtle shine sweep clipped inside button */
 .fire-btn::after {
   content: '';
   position: absolute;
   inset: 0;
   background: linear-gradient(
-    115deg,
-    transparent 25%,
-    rgba(255, 200, 100, .1) 40%,
-    rgba(255, 255, 255, .18) 50%,
-    rgba(255, 200, 100, .1) 60%,
-    transparent 75%
+    110deg,
+    transparent 30%,
+    rgba(255, 255, 255, .12) 45%,
+    rgba(255, 220, 180, .18) 50%,
+    rgba(255, 255, 255, .12) 55%,
+    transparent 70%
   );
-  animation: fireShine 4s ease-in-out infinite;
+  animation: fireShine 5s ease-in-out infinite;
   pointer-events: none;
-  z-index: 3;
-  border-radius: 20px;
+  z-index: 4;
 }
 @keyframes fireShine {
-  0%, 100% { transform: translateX(-80%); opacity: .4; }
-  50% { transform: translateX(80%); opacity: 1; }
+  0%, 100% { transform: translateX(-120%); opacity: .5; }
+  50% { transform: translateX(120%); opacity: 1; }
 }
 .fire-img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; position: relative; z-index: 2; }
 .fire-btn:hover { transform: translateY(-5px) scale(1.03) !important; }
