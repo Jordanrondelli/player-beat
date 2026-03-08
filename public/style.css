@@ -308,15 +308,10 @@ body {
 .time-overlay.left { left: 14px; }
 .time-overlay.right { right: 14px; }
 
-/* ===== MID BAR (hammer | transport | chat) ===== */
-.mid-bar {
-  position: absolute; top: calc(100% + 50px); left: 0; right: 0; z-index: 36;
-  transform: translateZ(8px);
-  display: flex; align-items: center; justify-content: center; gap: 24px;
-}
-
-/* Transport controls (prev / play / next) */
+/* Transport controls (prev / play / next) — below mini-nav */
 .transport-controls {
+  position: absolute; top: calc(100% + 20px); left: 50%; z-index: 36;
+  transform: translateX(-50%) translateZ(8px);
   display: flex; align-items: center; justify-content: center; gap: 10px;
   background: rgba(8, 16, 48, .35);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
@@ -387,14 +382,21 @@ body {
   pointer-events: none; z-index: 25;
 }
 
-/* ===== HAMMER CARD ===== */
+/* ===== HAMMER CARD (top-center) ===== */
 .hammer-card {
+  position: absolute; top: -55px; left: 50%; z-index: 30;
+  transform: translateX(-50%) translateZ(20px);
   display: flex; align-items: center; gap: 8px;
   padding: 10px 16px 10px 12px; border-radius: 16px;
   background: rgba(8, 16, 48, .35);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(190, 215, 255, .15);
   box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
+  animation: floatHammer 5.5s ease-in-out infinite;
+}
+@keyframes floatHammer {
+  0%, 100% { transform: translateX(-50%) translateY(0) translateZ(20px) }
+  50% { transform: translateX(-50%) translateY(-5px) translateZ(20px) }
 }
 .hammer-icon {
   width: 36px; height: 36px; object-fit: contain;
@@ -434,7 +436,7 @@ body {
 
 /* ===== VOTE BAR (pouce rouge | FIRE | pouce vert) ===== */
 .vote-bar {
-  position: absolute; top: calc(100% + 140px); left: 50%; z-index: 35;
+  position: absolute; top: calc(100% + 100px); left: 50%; z-index: 35;
   transform: translateX(-50%) translateZ(8px);
   display: flex; align-items: center; justify-content: center; gap: 20px;
 }
@@ -532,12 +534,18 @@ body {
   color: rgba(255, 200, 50, .85);
 }
 
-/* ===== CHAT CARD (L'avis du chat) ===== */
+/* ===== CHAT CARD (top-right) ===== */
 .chat-card {
-  width: 240px; padding: 18px 20px; border-radius: 16px;
+  position: absolute; top: -20px; right: 20px; z-index: 30;
+  width: 220px; padding: 18px 20px; border-radius: 16px;
   background: url('bloc-chat.png') center / 100% 100% no-repeat;
   border: none;
   box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
+  animation: floatChat 9s ease-in-out infinite;
+}
+@keyframes floatChat {
+  0%, 100% { transform: translateY(0) translateZ(6px) }
+  50% { transform: translateY(-3px) translateZ(8px) }
 }
 .chat-title {
   font-family: 'Bangers', cursive; font-size: 18px; letter-spacing: 2px;
@@ -657,10 +665,9 @@ body {
     width: 94vw;
     animation: sceneFloatSm 6s ease-in-out infinite;
   }
-  .mid-bar { gap: 16px; }
-  .chat-card { width: 200px; padding: 12px 14px; }
+  .chat-card { width: 190px; padding: 14px 16px; right: 10px; }
   .chat-title { font-size: 15px; }
-  .vote-bar { gap: 15px; top: calc(100% + 120px); }
+  .vote-bar { gap: 15px; }
   .vote-btn { width: 70px; height: 70px; border-radius: 16px; }
   .fire-btn { width: 260px; height: 100px; }
   .user-card { left: 10px; padding: 10px 16px 10px 12px; }
@@ -675,10 +682,9 @@ body {
     animation: sceneFloatXs 6s ease-in-out infinite;
   }
   .waveform-panel { height: min(220px, 30vh); }
-  .mid-bar { gap: 10px; flex-wrap: wrap; }
-  .chat-card { width: 160px; padding: 10px 12px; }
+  .chat-card { width: 155px; padding: 10px 12px; right: 5px; top: -15px; }
   .chat-title { font-size: 13px; }
-  .vote-bar { gap: 10px; top: calc(100% + 100px); }
+  .vote-bar { gap: 10px; top: calc(100% + 80px); }
   .vote-btn { width: 55px; height: 55px; border-radius: 14px; }
   .fire-btn { width: 160px; height: 65px; }
   .user-card {
