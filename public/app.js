@@ -234,10 +234,15 @@ const hammerSparks = document.getElementById('hammerSparks');
 const hammerShockwave = document.getElementById('hammerShockwave');
 const hammerStageEl = document.getElementById('hammerStage');
 let currentHammerStage = 'cold';
-let hammerCharge = 0;        // 0-100, accumulates over time
-let hammerPeakStage = 'cold'; // highest stage reached — never goes down
-let prevLoudnessForDrop = 0; // track loudness history for drop detection
-let loudnessHistory = [];     // rolling window for drop detection
+let hammerCharge = 0;
+let hammerPeakStage = 'cold';
+// Energy analysis buffers
+let energyLongWindow = [];    // ~10s rolling window for baseline energy
+let energyShortWindow = [];   // ~1s rolling window for current energy
+let spectralRatioWindow = []; // bass-to-mid ratio history
+let trackMaxEnergy = 0;       // max energy seen so far in this track
+let trackMinEnergy = Infinity;
+let chargeVelocity = 0;       // how fast charge is moving
 let detectedBPM = 0;
 let beatIntervalId = null;
 const GAUGE_CIRCUMFERENCE = 326.73; // 2π × 52
@@ -372,27 +377,83 @@ function drawWaveform(currentTime) {
   }
   loudnessSmooth += (loudnessRaw - loudnessSmooth) * 0.12;
 
-  // Hammer charge system — accumulates over time, drops boost it
+  // ===== HAMMER: ENERGY CONTRAST SYSTEM =====
+  // Measures HOW MUCH harder the music hits NOW vs what came before.
+  // Intro kicks = low charge. Drop/chorus = high charge. Based on contrast, not volume.
   if (isPlaying && audioBuffer) {
-    const loudNorm = Math.min(1, Math.max(0, (loudnessSmooth - 0.03) / 0.4));
+    // Get frequency spectrum for spectral analysis
+    analyser.getByteFrequencyData(frequencyData);
 
-    // Base charge: slow accumulation proportional to loudness (~30s to fill at full volume)
-    const chargeRate = loudNorm * 0.06; // ~0.06 per frame at 60fps = ~3.6/sec at max
-    hammerCharge = Math.min(100, hammerCharge + chargeRate);
+    // Bass energy (20-150Hz, bins 0-6 approx at 44100/2048)
+    let bassEnergy = 0;
+    for (let i = 0; i < 7; i++) bassEnergy += frequencyData[i];
+    bassEnergy /= 7 * 255; // normalize 0-1
 
-    // Drop detection: compare current loudness to recent average
-    loudnessHistory.push(loudNorm);
-    if (loudnessHistory.length > 90) loudnessHistory.shift(); // ~1.5s window at 60fps
-    if (loudnessHistory.length >= 30) {
-      const oldAvg = loudnessHistory.slice(0, 30).reduce((a, b) => a + b, 0) / 30;
-      const recentAvg = loudnessHistory.slice(-15).reduce((a, b) => a + b, 0) / 15;
-      const dropRise = recentAvg - oldAvg;
-      // Big energy jump = drop detected → boost charge significantly
-      if (dropRise > 0.15) {
-        const boost = Math.min(25, dropRise * 80);
-        hammerCharge = Math.min(100, hammerCharge + boost);
-      }
+    // Mid energy (300-3000Hz, bins ~14-140)
+    let midEnergy = 0;
+    for (let i = 14; i < 140; i++) midEnergy += frequencyData[i];
+    midEnergy /= 126 * 255;
+
+    // High energy (3000-10000Hz)
+    let highEnergy = 0;
+    for (let i = 140; i < 470; i++) highEnergy += frequencyData[i];
+    highEnergy /= 330 * 255;
+
+    // Combined energy (weighted: bass matters most in electro)
+    const energy = bassEnergy * 0.5 + midEnergy * 0.3 + highEnergy * 0.2;
+
+    // Track energy range for normalization within THIS song
+    trackMaxEnergy = Math.max(trackMaxEnergy, energy);
+    trackMinEnergy = Math.min(trackMinEnergy, energy);
+
+    // Spectral contrast: bass-to-mid ratio (drops have more bass relative to mids)
+    const spectralRatio = midEnergy > 0.001 ? bassEnergy / (midEnergy + 0.001) : 0;
+    spectralRatioWindow.push(spectralRatio);
+    if (spectralRatioWindow.length > 300) spectralRatioWindow.shift(); // ~5s
+
+    // Build energy windows
+    energyShortWindow.push(energy);
+    if (energyShortWindow.length > 60) energyShortWindow.shift();  // ~1s
+    energyLongWindow.push(energy);
+    if (energyLongWindow.length > 600) energyLongWindow.shift();   // ~10s
+
+    // Current vs baseline energy
+    const shortAvg = energyShortWindow.reduce((a, b) => a + b, 0) / energyShortWindow.length;
+    const longAvg = energyLongWindow.length > 120
+      ? energyLongWindow.slice(0, -60).reduce((a, b) => a + b, 0) / (energyLongWindow.length - 60)
+      : shortAvg * 0.5; // early in track, assume baseline is lower
+
+    // Contrast: how much louder is NOW vs the recent baseline
+    const energyRange = Math.max(0.01, trackMaxEnergy - trackMinEnergy);
+    const contrast = Math.max(0, (shortAvg - longAvg) / energyRange);
+
+    // Spectral excitement: how varied is the spectrum (drops = full spectrum)
+    const spectralFullness = Math.min(1, (bassEnergy + midEnergy + highEnergy) / 0.5);
+
+    // Combined "intensity score" 0-1
+    // High when: energy is above baseline AND spectrum is full AND bass is pumping
+    const intensity = Math.min(1,
+      contrast * 1.5 +                                    // energy contrast (main driver)
+      Math.max(0, spectralFullness - 0.3) * 0.4 +        // spectral fullness bonus
+      Math.max(0, bassEnergy - 0.3) * 0.3                 // heavy bass bonus
+    );
+
+    // Charge moves toward intensity * 100, but SLOWLY
+    // Low intensity = charge drifts down gently. High intensity = charge rises.
+    const target = intensity * 100;
+    const diff = target - hammerCharge;
+
+    if (diff > 0) {
+      // Rising: moderate speed, faster on big jumps (drops)
+      chargeVelocity += diff * 0.003;
+      chargeVelocity = Math.min(chargeVelocity, 1.5); // cap rise speed
+    } else {
+      // Falling: very slow — don't punish brief quiet moments
+      chargeVelocity += diff * 0.0003;
+      chargeVelocity = Math.max(chargeVelocity, -0.3); // cap fall speed
     }
+    chargeVelocity *= 0.95; // damping
+    hammerCharge = Math.max(0, Math.min(100, hammerCharge + chargeVelocity));
   }
 
   const hammerPct = Math.round(hammerCharge);
@@ -773,9 +834,14 @@ function stopBeatSync() {
   }
   // Reset hammer charge and stage
   hammerCharge = 0;
+  chargeVelocity = 0;
   hammerPeakStage = 'cold';
   currentHammerStage = 'cold';
-  loudnessHistory = [];
+  energyLongWindow = [];
+  energyShortWindow = [];
+  spectralRatioWindow = [];
+  trackMaxEnergy = 0;
+  trackMinEnergy = Infinity;
   if (hammerCard) hammerCard.setAttribute('data-stage', 'cold');
   if (hammerStageEl) hammerStageEl.textContent = '';
   if (gaugeFill) gaugeFill.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
