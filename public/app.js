@@ -869,7 +869,6 @@ function updateHammerVisuals(pct, kick) {
   if (!hPctEl) return;
 
   hPctEl.textContent = pct + '%';
-  hPctEl.style.transform = kick > .3 ? `scale(${1 + kick * .2})` : '';
 
   // Update circular gauge
   const offset = GAUGE_CIRCUMFERENCE * (1 - pct / 100);
@@ -879,14 +878,14 @@ function updateHammerVisuals(pct, kick) {
   // Scale hammer icon with percentage — bigger as power grows
   const hammerIconWrap = document.getElementById('hammerIconWrap');
   if (hammerIconWrap) {
-    const baseSize = 36;
-    const maxExtra = 20; // grows up to +20px at 100%
+    const baseSize = 44;
+    const maxExtra = 22; // grows up to +22px at 100%
     const size = baseSize + (pct / 100) * maxExtra;
     hammerIconWrap.style.width = size + 'px';
     hammerIconWrap.style.height = size + 'px';
   }
 
-  // Determine stage — LOCKED: once reached, never goes back down
+  // Determine stage — follows current percentage dynamically
   const stageOrder = ['cool', 'chaud', 'enfeu', 'lourd', 'overload'];
   let newStage = 'cool';
   if (pct >= 100) { newStage = 'overload'; }
@@ -894,7 +893,7 @@ function updateHammerVisuals(pct, kick) {
   else if (pct >= 60) { newStage = 'enfeu'; }
   else if (pct >= 40) { newStage = 'chaud'; }
 
-  // Lock: only go up, never down
+  // Track peak for triggering one-shot activation effects (shockwave, etc.)
   const peakIdx = stageOrder.indexOf(hammerPeakStage);
   const newIdx = stageOrder.indexOf(newStage);
   if (newIdx > peakIdx) {
@@ -902,12 +901,12 @@ function updateHammerVisuals(pct, kick) {
     triggerHammerActivation(newStage);
   }
 
-  // Visual stage always follows peak (locked)
-  if (hammerPeakStage !== currentHammerStage) {
-    currentHammerStage = hammerPeakStage;
-    if (hammerCard) hammerCard.setAttribute('data-stage', hammerPeakStage);
+  // Visual stage follows current percentage (not locked)
+  if (newStage !== currentHammerStage) {
+    currentHammerStage = newStage;
+    if (hammerCard) hammerCard.setAttribute('data-stage', newStage);
     const labels = { cool: '', chaud: 'CHAUD', enfeu: 'EN FEU', lourd: 'TRÈS LOURD', overload: 'OVERLOAD' };
-    if (hammerStageEl) hammerStageEl.textContent = labels[hammerPeakStage];
+    if (hammerStageEl) hammerStageEl.textContent = labels[newStage];
   }
 }
 
@@ -1024,7 +1023,7 @@ function stopBeatSync() {
   if (gaugeFill) gaugeFill.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   if (gaugeGlow) gaugeGlow.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   const hammerIconWrap = document.getElementById('hammerIconWrap');
-  if (hammerIconWrap) { hammerIconWrap.style.width = '54px'; hammerIconWrap.style.height = '54px'; }
+  if (hammerIconWrap) { hammerIconWrap.style.width = '44px'; hammerIconWrap.style.height = '44px'; }
 }
 
 // ===== PLAYBACK CONTROLS =====
