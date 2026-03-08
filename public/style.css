@@ -229,7 +229,7 @@ body {
 
 /* ===== WAVEFORM PANEL ===== */
 .waveform-panel {
-  width: 100%; height: min(340px, 38vh); padding: 0;
+  width: 100%; height: min(400px, 44vh); padding: 0;
   border-radius: 26px;
   border: 1px solid rgba(255, 255, 255, .1);
   border-top-color: rgba(255, 255, 255, .18);
@@ -297,26 +297,26 @@ body {
   background: radial-gradient(ellipse at 50% 50%, rgba(220, 40, 25, .15), transparent 60%);
   filter: blur(20px); pointer-events: none; transition: opacity .08s, filter .08s;
 }
-#waveformCanvas { width: calc(100% - 16px); height: calc(100% - 16px); margin: 8px; display: block; position: relative; z-index: 1; }
+#waveformCanvas { width: calc(100% - 16px); height: calc(100% - 60px); margin: 8px 8px 52px 8px; display: block; position: relative; z-index: 1; }
 
 /* Time overlays */
 .time-overlay {
-  position: absolute; bottom: 10px; z-index: 5;
+  position: absolute; bottom: 52px; z-index: 5;
   font-family: 'Bangers', cursive; font-size: 14px; letter-spacing: 1px;
   color: rgba(255, 255, 255, .35);
 }
 .time-overlay.left { left: 14px; }
 .time-overlay.right { right: 14px; }
 
-/* Transport controls (prev / play / next) — below mini-nav */
+/* Transport controls (inside waveform panel, bottom center) */
 .transport-controls {
-  position: absolute; top: calc(100% + 55px); left: 50%; z-index: 36;
-  transform: translateX(-50%) translateZ(8px);
+  position: absolute; bottom: 10px; left: 50%; z-index: 36;
+  transform: translateX(-50%);
   display: flex; align-items: center; justify-content: center; gap: 10px;
   background: rgba(8, 16, 48, .35);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(190, 215, 255, .15);
-  border-radius: 50px; padding: 8px 18px;
+  border-radius: 50px; padding: 6px 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
 }
 .play-btn {
@@ -342,7 +342,7 @@ body {
 
 /* Volume control */
 .volume-wrap {
-  position: absolute; bottom: 10px; right: 14px; z-index: 10;
+  position: absolute; bottom: 52px; right: 14px; z-index: 10;
   display: flex; align-items: center; gap: 6px;
 }
 .volume-icon {
@@ -382,10 +382,10 @@ body {
   pointer-events: none; z-index: 25;
 }
 
-/* ===== HAMMER CARD (integrated inside waveform) ===== */
+/* ===== HAMMER CARD (above waveform panel) ===== */
 .hammer-card {
-  position: absolute; top: 10px; left: 50%; z-index: 30;
-  transform: translateX(-50%);
+  position: absolute; top: -80px; left: 50%; z-index: 30;
+  transform: translateX(-50%) translateZ(8px);
   display: flex; align-items: center; gap: 8px;
   padding: 4px 14px 4px 4px;
   background: rgba(5, 10, 30, .45);
@@ -563,11 +563,11 @@ body {
   animation: overloadCardShake .08s linear infinite;
 }
 @keyframes overloadCardShake {
-  0% { transform: translateX(-50%) translate(0, 0); }
-  25% { transform: translateX(-50%) translate(-1px, 1px); }
-  50% { transform: translateX(-50%) translate(1px, -1px); }
-  75% { transform: translateX(-50%) translate(-1px, -1px); }
-  100% { transform: translateX(-50%) translate(1px, 0); }
+  0% { transform: translateX(-50%) translateZ(8px) translate(0, 0); }
+  25% { transform: translateX(-50%) translateZ(8px) translate(-1px, 1px); }
+  50% { transform: translateX(-50%) translateZ(8px) translate(1px, -1px); }
+  75% { transform: translateX(-50%) translateZ(8px) translate(-1px, -1px); }
+  100% { transform: translateX(-50%) translateZ(8px) translate(1px, 0); }
 }
 
 /* Overload chromatic aberration overlay */
@@ -637,7 +637,7 @@ body {
 
 /* ===== VOTE BAR (pouce rouge | FIRE | pouce vert) ===== */
 .vote-bar {
-  position: absolute; top: calc(100% + 135px); left: 50%; z-index: 35;
+  position: absolute; top: calc(100% + 55px); left: 50%; z-index: 35;
   transform: translateX(-50%) translateZ(8px);
   display: flex; align-items: center; justify-content: center; gap: 20px;
 }
@@ -883,10 +883,10 @@ body {
     width: 96vw;
     animation: sceneFloatXs 6s ease-in-out infinite;
   }
-  .waveform-panel { height: min(220px, 30vh); }
+  .waveform-panel { height: min(260px, 34vh); }
   .chat-card { width: 155px; padding: 10px 12px; right: 5px; top: -15px; }
   .chat-title { font-size: 13px; }
-  .vote-bar { gap: 10px; top: calc(100% + 80px); }
+  .vote-bar { gap: 10px; top: calc(100% + 55px); }
   .vote-btn { width: 55px; height: 55px; border-radius: 14px; }
   .fire-btn { width: 160px; height: 65px; }
   .user-card {
@@ -902,5 +902,8 @@ body {
   .hammer-gauge-wrap { width: 50px; height: 50px; }
   .hammer-pct { font-size: 14px; }
   .hammer-stage { font-size: 9px; }
-  .hammer-card { gap: 4px; padding: 2px 8px 2px 2px; top: 6px; }
+  .hammer-card { gap: 4px; padding: 2px 8px 2px 2px; top: -65px; }
+  .play-btn img { height: 40px; }
+  .transport-controls { padding: 4px 12px; gap: 8px; }
+  .transport-btn { width: 32px; height: 32px; }
 }

@@ -241,6 +241,7 @@ const loudnessFreqData = new Uint8Array(loudnessAnalyser.frequencyBinCount);
 let hammerKickSmooth = 0;     // smoothed kick impact for scoring
 let criteriaMax = { sub: 0.001, bass: 0.001, kick: 0.001, fullness: 0.001, loudness: 0.001 };
 let criteriaSmooth = { sub: 0, bass: 0, kick: 0, fullness: 0, loudness: 0 };
+let prescanDone = false; // true once offline pre-scan has set criteriaMax
 
 // A-weighting: attempt IEC 61672 standard curve
 // Models human ear sensitivity — boosts 2-5kHz, attenuates sub-bass
@@ -257,6 +258,124 @@ const aWeightTable = new Float32Array(loudnessAnalyser.frequencyBinCount);
   const binHz = audioCtx.sampleRate / loudnessAnalyser.fftSize;
   for (let i = 0; i < aWeightTable.length; i++) aWeightTable[i] = aWeight(i * binHz);
 }
+// ===== MINI RADIX-2 FFT =====
+function fftReal(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const half = len >> 1;
+    const ang = -2 * Math.PI / len;
+    const wR = Math.cos(ang), wI = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let curR = 1, curI = 0;
+      for (let j = 0; j < half; j++) {
+        const uR = re[i + j], uI = im[i + j];
+        const vR = re[i + j + half] * curR - im[i + j + half] * curI;
+        const vI = re[i + j + half] * curI + im[i + j + half] * curR;
+        re[i + j] = uR + vR; im[i + j] = uI + vI;
+        re[i + j + half] = uR - vR; im[i + j + half] = uI - vI;
+        const tmpR = curR * wR - curI * wI;
+        curI = curR * wI + curI * wR;
+        curR = tmpR;
+      }
+    }
+  }
+}
+
+// ===== OFFLINE PRE-SCAN =====
+// Analyzes the full track buffer to compute criteriaMax BEFORE playback.
+// This prevents score saturation when seeking or during early frames.
+function prescanTrackCriteria(buffer) {
+  const sr = buffer.sampleRate;
+  const data = buffer.getChannelData(0);
+  const fftSize = 2048;
+  const binHz = sr / fftSize;
+  const hopSize = Math.floor(sr * 0.2); // analyze every 200ms (fast enough)
+  const numFrames = Math.floor((data.length - fftSize) / hopSize);
+  if (numFrames < 1) return;
+
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const bandEdges = [80, 200, 400, 800, 1600, 3200, 6000, 10000, 16000];
+  const awTable = new Float32Array(fftSize / 2);
+  for (let i = 0; i < awTable.length; i++) awTable[i] = aWeight(i * binHz);
+
+  let maxSub = 0, maxBass = 0, maxPunch = 0, maxFull = 0, maxLoud = 0;
+  const subS = Math.max(1, Math.round(20 / binHz)), subE = Math.round(80 / binHz);
+  const bassS = subE, bassE = Math.round(300 / binHz);
+  const loudEnd = Math.min(750, fftSize / 2);
+  const maxBin = Math.min(Math.round(16000 / binHz) + 1, fftSize / 2);
+
+  for (let f = 0; f < numFrames; f++) {
+    const offset = f * hopSize;
+    // Hann window + FFT
+    for (let i = 0; i < fftSize; i++) {
+      re[i] = (data[offset + i] || 0) * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (fftSize - 1)));
+      im[i] = 0;
+    }
+    fftReal(re, im);
+
+    // Magnitude (normalized to 0-1 range like getByteFrequencyData/255)
+    const mag = new Float32Array(fftSize / 2);
+    for (let i = 0; i < fftSize / 2; i++) {
+      mag[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]) / fftSize;
+    }
+
+    // Sub (20-80Hz)
+    let subSum = 0;
+    for (let i = subS; i < subE; i++) subSum += mag[i];
+    const subRaw = subSum / (subE - subS);
+
+    // Bass (80-300Hz)
+    let bassSum = 0;
+    for (let i = bassS; i < bassE; i++) bassSum += mag[i];
+    const bassRaw = bassSum / (bassE - bassS);
+
+    // Punch
+    const punchRaw = Math.max(subRaw * 0.8, bassRaw * 0.6);
+
+    // Fullness
+    let activeBands = 0;
+    for (let b = 0; b < bandEdges.length - 1; b++) {
+      const bS = Math.round(bandEdges[b] / binHz);
+      const bE = Math.min(Math.round(bandEdges[b + 1] / binHz), maxBin);
+      let bSum = 0;
+      for (let i = bS; i < bE; i++) bSum += mag[i];
+      if (bSum / (bE - bS) > 0.002) activeBands++;
+    }
+    const fullRaw = activeBands / (bandEdges.length - 1);
+
+    // A-weighted loudness
+    let wSum = 0, wTotal = 0;
+    for (let i = 1; i < loudEnd; i++) {
+      wSum += mag[i] * awTable[i];
+      wTotal += awTable[i];
+    }
+    const aLoudRaw = wTotal > 0 ? wSum / wTotal : 0;
+
+    if (subRaw > maxSub) maxSub = subRaw;
+    if (bassRaw > maxBass) maxBass = bassRaw;
+    if (punchRaw > maxPunch) maxPunch = punchRaw;
+    if (fullRaw > maxFull) maxFull = fullRaw;
+    if (aLoudRaw > maxLoud) maxLoud = aLoudRaw;
+  }
+
+  criteriaMax.sub = Math.max(0.001, maxSub);
+  criteriaMax.bass = Math.max(0.001, maxBass);
+  criteriaMax.kick = Math.max(0.001, maxPunch);
+  criteriaMax.fullness = Math.max(0.001, maxFull);
+  criteriaMax.loudness = Math.max(0.001, maxLoud);
+  prescanDone = true;
+}
+
 let detectedBPM = 0;
 let beatIntervalId = null;
 const GAUGE_CIRCUMFERENCE = 326.73; // 2π × 52
@@ -442,7 +561,7 @@ function drawWaveform(currentTime) {
     // Feed hammerSmooth for beat sync
     hammerSmooth += (aLoudRaw - hammerSmooth) * 0.12;
 
-    // Normalize each within track's own range
+    // Update running max (always, even after prescan — real-time data may exceed offline estimates)
     criteriaMax.sub = Math.max(criteriaMax.sub, subRaw);
     criteriaMax.bass = Math.max(criteriaMax.bass, bassRaw);
     criteriaMax.kick = Math.max(criteriaMax.kick, punchRaw);
@@ -474,8 +593,9 @@ function drawWaveform(currentTime) {
     const minCore = Math.min(s.sub, s.bass, s.fullness, s.loudness);
     const score = base * 0.60 + minCore * 0.40;
 
-    // Gentle curve — 100% is rare but reachable on real drops
-    const shaped = Math.pow(Math.min(1, score), 1.15) * 100;
+    // Aggressive curve — only real drops/climaxes reach 90%+
+    // score^1.8 separates mid-range much better than ^1.15
+    const shaped = Math.pow(Math.min(1, score), 1.8) * 100;
 
     // Fast charge: rise ~0.4s, fall ~1.5s
     const diff = shaped - hammerCharge;
@@ -890,12 +1010,14 @@ function stopBeatSync() {
   if (hammerIconEl) {
     hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
   }
-  // Reset hammer charge and stage
+  // Reset hammer charge and stage (but NOT criteriaMax if prescan ran — keeps seek stable)
   hammerCharge = 0;
   hammerPeakStage = 'cool';
   currentHammerStage = 'cool';
   hammerKickSmooth = 0;
-  criteriaMax = { sub: 0.001, bass: 0.001, kick: 0.001, fullness: 0.001, loudness: 0.001 };
+  if (!prescanDone) {
+    criteriaMax = { sub: 0.001, bass: 0.001, kick: 0.001, fullness: 0.001, loudness: 0.001 };
+  }
   criteriaSmooth = { sub: 0, bass: 0, kick: 0, fullness: 0, loudness: 0 };
   if (hammerCard) hammerCard.setAttribute('data-stage', 'cold');
   if (hammerStageEl) hammerStageEl.textContent = '';
@@ -981,6 +1103,7 @@ async function loadTrack(index) {
   if (index < 0 || index >= playlist.length) return;
   currentTrackIndex = index;
   loadingOverlay.classList.add('visible');
+  prescanDone = false; // reset before loading new track
   stopAudio();
 
   try {
@@ -988,6 +1111,7 @@ async function loadTrack(index) {
     const bufferCopy = playlist[index].arrayBuffer.slice(0);
     audioBuffer = await audioCtx.decodeAudioData(bufferCopy);
     extractWaveformData(audioBuffer);
+    prescanTrackCriteria(audioBuffer);
     detectedBPM = await detectBPM(audioBuffer);
     console.log('Detected BPM:', detectedBPM);
     resizeCanvases();
