@@ -414,14 +414,14 @@ body {
 }
 
 /* ===== VOTE BUTTONS ===== */
-.vote-left { position: absolute; bottom: -380px; left: calc(50% - 620px); z-index: 35; }
-.vote-right { position: absolute; bottom: -380px; right: calc(50% - 620px); z-index: 35; }
+.vote-left { position: absolute; bottom: -510px; left: calc(50% - 100px); z-index: 35; }
+.vote-right { position: absolute; bottom: -510px; right: calc(50% - 100px); z-index: 35; }
 .vote-icon {
   width: 100%; height: 100%; object-fit: contain; pointer-events: none;
   transition: filter .3s ease;
 }
 .vote-btn {
-  width: 170px; height: 170px; border-radius: 26px; border: none; cursor: pointer;
+  width: 90px; height: 90px; border-radius: 18px; border: none; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   background: transparent;
   position: relative; overflow: visible;
@@ -442,12 +442,12 @@ body {
 .vote-left .vote-btn { animation: floatL 4s ease-in-out infinite; transform-origin: center; }
 .vote-right .vote-btn { animation: floatR 4.5s ease-in-out infinite; }
 @keyframes floatL {
-  0%, 100% { transform: translateY(0) rotate(-1deg) translateZ(8px) }
-  50% { transform: translateY(-5px) rotate(0.8deg) translateZ(8px) }
+  0%, 100% { transform: translateY(0) rotate(-1deg) translateZ(4px) }
+  50% { transform: translateY(-3px) rotate(0.5deg) translateZ(4px) }
 }
 @keyframes floatR {
-  0%, 100% { transform: translateY(0) rotate(1deg) translateZ(8px) }
-  50% { transform: translateY(-6px) rotate(-0.8deg) translateZ(8px) }
+  0%, 100% { transform: translateY(0) rotate(1deg) translateZ(4px) }
+  50% { transform: translateY(-3px) rotate(-0.5deg) translateZ(4px) }
 }
 
 .vote-btn:active {
@@ -661,9 +661,9 @@ body {
     width: 92vw;
     animation: sceneFloatSm 6s ease-in-out infinite;
   }
-  .vote-left { left: calc(50% - 380px); bottom: -320px; }
-  .vote-right { right: calc(50% - 380px); bottom: -320px; }
-  .vote-btn { width: 130px; height: 130px; border-radius: 22px; }
+  .vote-left { left: calc(50% - 90px); bottom: -420px; }
+  .vote-right { right: calc(50% - 90px); bottom: -420px; }
+  .vote-btn { width: 80px; height: 80px; border-radius: 16px; }
   .fire-wrap { bottom: -260px; }
   .chat-card { width: 180px; font-size: 11px; right: 5px; }
   .user-card { left: 5px; padding: 10px 16px 10px 12px; }
@@ -680,9 +680,9 @@ body {
     animation: sceneFloatXs 6s ease-in-out infinite;
   }
   .waveform-panel { height: min(240px, 35vh); }
-  .vote-left { left: 10px; bottom: -260px; }
-  .vote-right { right: 10px; bottom: -260px; }
-  .vote-btn { width: 90px; height: 90px; border-radius: 16px; }
+  .vote-left { left: calc(50% - 80px); bottom: -340px; }
+  .vote-right { right: calc(50% - 80px); bottom: -340px; }
+  .vote-btn { width: 65px; height: 65px; border-radius: 14px; }
   .chat-card { width: 160px; right: 2px; padding: 10px 12px; }
   .chat-title { font-size: 12px; }
   .user-card {
