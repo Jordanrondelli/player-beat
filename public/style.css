@@ -310,7 +310,7 @@ body {
 
 /* Transport controls (prev / play / next) — below mini-nav */
 .transport-controls {
-  position: absolute; top: calc(100% + 20px); left: 50%; z-index: 36;
+  position: absolute; top: calc(100% + 55px); left: 50%; z-index: 36;
   transform: translateX(-50%) translateZ(8px);
   display: flex; align-items: center; justify-content: center; gap: 10px;
   background: rgba(8, 16, 48, .35);
@@ -436,7 +436,7 @@ body {
 
 /* ===== VOTE BAR (pouce rouge | FIRE | pouce vert) ===== */
 .vote-bar {
-  position: absolute; top: calc(100% + 100px); left: 50%; z-index: 35;
+  position: absolute; top: calc(100% + 135px); left: 50%; z-index: 35;
   transform: translateX(-50%) translateZ(8px);
   display: flex; align-items: center; justify-content: center; gap: 20px;
 }
