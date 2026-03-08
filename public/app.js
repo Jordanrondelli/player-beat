@@ -227,8 +227,16 @@ let hammerSmooth = 0;
 let loudnessSmooth = 0;
 let hammerHitTimeout = null;
 const hammerIconEl = document.getElementById('hammerIcon');
+const hammerCard = document.getElementById('hammerMeter');
+const gaugeFill = document.getElementById('gaugeFill');
+const gaugeGlow = document.getElementById('gaugeGlow');
+const hammerSparks = document.getElementById('hammerSparks');
+const hammerShockwave = document.getElementById('hammerShockwave');
+const hammerStageEl = document.getElementById('hammerStage');
+let currentHammerStage = 'cold';
 let detectedBPM = 0;
 let beatIntervalId = null;
+const GAUGE_CIRCUMFERENCE = 326.73; // 2π × 52
 
 // ===== MAIN WAVEFORM DRAW =====
 function drawWaveform(currentTime) {
@@ -361,22 +369,10 @@ function drawWaveform(currentTime) {
   loudnessSmooth += (loudnessRaw - loudnessSmooth) * 0.12;
 
   // Hammer power % — based on loudness (how loud/saturated the sound is)
-  // RMS typically ranges 0.05 (quiet) to 0.45 (loud/saturated)
   const hammerRaw = Math.min(1, Math.max(0, (loudnessSmooth - 0.03) / 0.4));
   hammerSmooth += (hammerRaw - hammerSmooth) * .08;
   const hammerPct = Math.round(Math.pow(hammerSmooth, 0.7) * 100);
-  const hPctEl = document.getElementById('hammerPct');
-  if (hPctEl) {
-    hPctEl.textContent = hammerPct + '%';
-    if (hammerPct < 33) {
-      hPctEl.style.color = 'rgba(255, 255, 255, .45)';
-    } else if (hammerPct < 66) {
-      hPctEl.style.color = 'rgba(250, 204, 21, .7)';
-    } else {
-      hPctEl.style.color = 'rgba(239, 68, 68, .85)';
-    }
-    hPctEl.style.transform = kickDecay > .3 ? `scale(${1 + kickDecay * .15})` : '';
-  }
+  updateHammerVisuals(hammerPct, kickDecay);
 
 
 
@@ -635,25 +631,138 @@ function detectBPM(buffer) {
   });
 }
 
+// ===== HAMMER VISUALS =====
+function updateHammerVisuals(pct, kick) {
+  const hPctEl = document.getElementById('hammerPct');
+  if (!hPctEl) return;
+
+  hPctEl.textContent = pct + '%';
+  // Kick bounce on percentage
+  hPctEl.style.transform = kick > .3 ? `scale(${1 + kick * .2})` : '';
+
+  // Update circular gauge
+  const offset = GAUGE_CIRCUMFERENCE * (1 - pct / 100);
+  if (gaugeFill) gaugeFill.style.strokeDashoffset = offset;
+  if (gaugeGlow) gaugeGlow.style.strokeDashoffset = offset;
+
+  // Determine stage
+  let newStage = 'cold';
+  let stageLabel = '';
+  if (pct >= 90) { newStage = 'max'; stageLabel = 'MAXIMUM'; }
+  else if (pct >= 66) { newStage = 'hot'; stageLabel = 'EN FEU'; }
+  else if (pct >= 33) { newStage = 'warm'; stageLabel = 'CHAUD'; }
+
+  // Stage transition activation
+  if (newStage !== currentHammerStage) {
+    const stageOrder = ['cold', 'warm', 'hot', 'max'];
+    const oldIdx = stageOrder.indexOf(currentHammerStage);
+    const newIdx = stageOrder.indexOf(newStage);
+
+    // Only trigger activation on stage UP (not down)
+    if (newIdx > oldIdx) {
+      triggerHammerActivation(newStage);
+    }
+
+    currentHammerStage = newStage;
+    if (hammerCard) hammerCard.setAttribute('data-stage', newStage);
+    if (hammerStageEl) hammerStageEl.textContent = stageLabel;
+  }
+}
+
+function triggerHammerActivation(stage) {
+  // Shockwave
+  if (hammerShockwave) {
+    hammerShockwave.classList.remove('active');
+    void hammerShockwave.offsetWidth;
+    hammerShockwave.classList.add('active');
+    setTimeout(() => hammerShockwave.classList.remove('active'), 700);
+  }
+
+  // Sparks
+  const sparkCount = stage === 'max' ? 16 : stage === 'hot' ? 10 : 6;
+  spawnHammerSparks(sparkCount, stage);
+
+  // Hammer slam
+  if (hammerIconEl) {
+    hammerIconEl.classList.remove('slam');
+    void hammerIconEl.offsetWidth;
+    hammerIconEl.classList.add('slam');
+    setTimeout(() => hammerIconEl.classList.remove('slam'), 200);
+  }
+
+  // Screen shake on HOT/MAX
+  if (stage === 'max' || stage === 'hot') {
+    const wrapper = document.getElementById('wrapper');
+    if (wrapper) {
+      wrapper.classList.add('shaking');
+      setTimeout(() => wrapper.classList.remove('shaking'), 400);
+    }
+  }
+
+  // Flash on MAX
+  if (stage === 'max') {
+    const flash = document.createElement('div');
+    flash.className = 'fire-flash';
+    flash.style.background = 'radial-gradient(ellipse at center, rgba(255, 200, 50, .4) 0%, rgba(255, 100, 0, .2) 40%, transparent 70%)';
+    document.body.appendChild(flash);
+    flash.addEventListener('animationend', () => flash.remove());
+  }
+}
+
+function spawnHammerSparks(count, stage) {
+  if (!hammerSparks) return;
+  const colors = {
+    warm: ['#ffcc00', '#ffaa00', '#ffe066'],
+    hot:  ['#ff6600', '#ff3300', '#ffaa00', '#ff0000'],
+    max:  ['#ff0000', '#ff3300', '#ffffff', '#ffcc00', '#ff6600']
+  };
+  const palette = colors[stage] || colors.warm;
+
+  for (let i = 0; i < count; i++) {
+    const spark = document.createElement('div');
+    spark.className = 'hammer-spark';
+    const angle = (Math.PI * 2 * i) / count + (Math.random() - .5) * .5;
+    const dist = 25 + Math.random() * 40;
+    const size = 2 + Math.random() * 4;
+    const color = palette[Math.floor(Math.random() * palette.length)];
+    spark.style.cssText = `
+      width: ${size}px; height: ${size}px;
+      background: ${color};
+      box-shadow: 0 0 ${size * 2}px ${color};
+      --sx: ${Math.cos(angle) * dist}px;
+      --sy: ${Math.sin(angle) * dist}px;
+    `;
+    hammerSparks.appendChild(spark);
+    setTimeout(() => spark.remove(), 600);
+  }
+}
+
 function startBeatSync() {
   stopBeatSync();
   if (!detectedBPM || !hammerIconEl) return;
   const ms = 60000 / detectedBPM;
   function hammerHit() {
     if (!isPlaying) return;
-    // Power-driven amplitude (exponential curve)
     const pwr = Math.pow(hammerSmooth, 2.5);
-    if (pwr < 0.001) return; // 0% power = no movement
-    const angle = -8 - pwr * 52;
-    const scl = 1 + pwr * 0.4;
+    if (pwr < 0.001) return;
+
+    // Slam intensity scales with power AND stage
+    const stageMultiplier = currentHammerStage === 'max' ? 1.3 : currentHammerStage === 'hot' ? 1.1 : currentHammerStage === 'warm' ? 0.9 : 0.6;
+    const angle = (-8 - pwr * 52) * stageMultiplier;
+    const scl = 1 + pwr * 0.4 * stageMultiplier;
+
     hammerIconEl.style.transform = `rotate(${angle}deg) scale(${scl})`;
     hammerIconEl.style.transition = 'transform .03s ease-out';
-    hammerIconEl.style.filter = `drop-shadow(0 ${2 + pwr * 6}px ${8 + pwr * 16}px rgba(255,120,0,${0.3 + pwr * 0.5}))`;
+
+    // Sparks on strong beats at hot/max
+    if (pwr > 0.4 && (currentHammerStage === 'hot' || currentHammerStage === 'max')) {
+      spawnHammerSparks(Math.floor(pwr * 5), currentHammerStage);
+    }
+
     if (hammerHitTimeout) clearTimeout(hammerHitTimeout);
     hammerHitTimeout = setTimeout(() => {
       hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
       hammerIconEl.style.transition = 'transform .12s cubic-bezier(.1,.9,.3,1)';
-      hammerIconEl.style.filter = 'drop-shadow(0 2px 8px rgba(255,120,0,.4))';
     }, 60 + pwr * 80);
   }
   hammerHit();
@@ -664,8 +773,13 @@ function stopBeatSync() {
   if (beatIntervalId) { clearInterval(beatIntervalId); beatIntervalId = null; }
   if (hammerIconEl) {
     hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
-    hammerIconEl.style.filter = 'drop-shadow(0 2px 8px rgba(255,120,0,.4))';
   }
+  // Reset hammer stage
+  currentHammerStage = 'cold';
+  if (hammerCard) hammerCard.setAttribute('data-stage', 'cold');
+  if (hammerStageEl) hammerStageEl.textContent = '';
+  if (gaugeFill) gaugeFill.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
+  if (gaugeGlow) gaugeGlow.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
 }
 
 // ===== PLAYBACK CONTROLS =====
