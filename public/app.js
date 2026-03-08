@@ -1,20 +1,26 @@
 // ===== FLAME GENERATION =====
 function createFlames(container, count, hMin, hMax, wMin, wMax) {
+  const palettes = [
+    // core orange-red
+    { inner: 'rgba(255,220,80,.7)', mid: 'rgba(255,120,20,.5)', outer: 'rgba(255,40,0,.15)' },
+    // hot white-yellow
+    { inner: 'rgba(255,250,200,.6)', mid: 'rgba(255,180,50,.45)', outer: 'rgba(255,80,0,.1)' },
+    // deep red
+    { inner: 'rgba(255,80,20,.65)', mid: 'rgba(200,30,0,.4)', outer: 'rgba(150,10,0,.1)' },
+    // bright orange
+    { inner: 'rgba(255,160,40,.6)', mid: 'rgba(255,100,0,.45)', outer: 'rgba(255,50,0,.12)' },
+  ];
   for (let i = 0; i < count; i++) {
     const flame = document.createElement('div');
     flame.className = 'flame';
-    const color = Math.random() > .6
-      ? 'rgba(255,60,0,.6)'
-      : Math.random() > .4
-        ? 'rgba(255,120,0,.5)'
-        : 'rgba(255,180,40,.4)';
+    const p = palettes[Math.floor(Math.random() * palettes.length)];
     flame.style.cssText = `
       width:${wMin + Math.random() * (wMax - wMin)}px;
       height:${hMin + Math.random() * (hMax - hMin)}px;
       left:${Math.random() * 100}%;
-      background:radial-gradient(ellipse at 50% 80%,${color},rgba(255,80,0,.2) 50%,transparent 70%);
-      --dur:${.4 + Math.random() * .6}s;
-      --op:${.4 + Math.random() * .3};
+      background:radial-gradient(ellipse at 50% 85%,${p.inner},${p.mid} 40%,${p.outer} 70%,transparent 90%);
+      --dur:${.3 + Math.random() * .5}s;
+      --op:${.45 + Math.random() * .35};
       animation-delay:${Math.random() * -.8}s;
     `;
     container.appendChild(flame);
@@ -704,6 +710,7 @@ document.getElementById('btnUp').addEventListener('click', function () {
 
 // ===== FIRE BUTTON =====
 let fireTimeout = null;
+let fireFadeTimeout = null;
 
 function triggerFire() {
   const overlay = document.getElementById('fireOverlay');
@@ -713,38 +720,55 @@ function triggerFire() {
   const wrapper = document.getElementById('wrapper');
 
   if (fireTimeout) clearTimeout(fireTimeout);
+  if (fireFadeTimeout) clearTimeout(fireFadeTimeout);
 
   flameBottom.innerHTML = '';
   flameTop.innerHTML = '';
   emberContainer.innerHTML = '';
 
-  createFlames(flameBottom, 35, 80, 260, 40, 150);
-  createFlames(flameTop, 15, 50, 150, 30, 100);
+  // Set BPM-synced pulse speed
+  const bpm = detectedBPM || 120;
+  const beatDur = (60 / bpm) + 's';
+  overlay.style.setProperty('--beat-dur', beatDur);
+
+  createFlames(flameBottom, 45, 90, 300, 45, 170);
+  createFlames(flameTop, 20, 55, 170, 35, 110);
 
   const types = ['ember-orange', 'ember-red', 'ember-yellow'];
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 100; i++) {
     const ember = document.createElement('div');
     ember.className = 'ember ' + types[Math.floor(Math.random() * 3)];
     ember.style.left = Math.random() * 100 + '%';
-    ember.style.animationDelay = Math.random() * 4 + 's';
-    ember.style.animationDuration = (2.5 + Math.random() * 5) + 's';
-    ember.style.setProperty('--drift', (Math.random() - .5) * 60 + 'px');
-    const size = 1.5 + Math.random() * 4;
+    ember.style.animationDelay = Math.random() * 6 + 's';
+    ember.style.animationDuration = (3 + Math.random() * 6) + 's';
+    ember.style.setProperty('--drift', (Math.random() - .5) * 80 + 'px');
+    const size = 1.5 + Math.random() * 5;
     ember.style.width = size + 'px';
     ember.style.height = size + 'px';
     emberContainer.appendChild(ember);
   }
 
   overlay.style.transition = 'opacity .3s';
+  overlay.style.opacity = '';
+  overlay.classList.remove('on');
+  // Force reflow to restart animation
+  void overlay.offsetWidth;
   overlay.classList.add('on');
   wrapper.classList.add('shaking');
 
-  setTimeout(() => wrapper.classList.remove('shaking'), 2500);
+  setTimeout(() => wrapper.classList.remove('shaking'), 600);
+
+  // Progressive fade-out: start dimming at 5s, fully gone at 8s
+  fireFadeTimeout = setTimeout(() => {
+    overlay.style.transition = 'opacity 3s ease-out';
+    overlay.style.opacity = '0';
+  }, 5000);
 
   fireTimeout = setTimeout(() => {
-    overlay.style.transition = 'opacity 2.5s ease-out';
     overlay.classList.remove('on');
-  }, 2500);
+    overlay.style.opacity = '';
+    overlay.style.transition = '';
+  }, 8000);
 }
 
 document.getElementById('btnFire').addEventListener('click', function () {
@@ -753,15 +777,6 @@ document.getElementById('btnFire').addEventListener('click', function () {
   const r = this.getBoundingClientRect();
   const cx = r.left + r.width / 2;
   const cy = r.top + r.height / 2;
-
-  // Shockwave from button center
-  const shock = document.createElement('div');
-  shock.className = 'fire-shockwave';
-  shock.style.left = cx + 'px';
-  shock.style.top = cy + 'px';
-  shock.style.transform = 'translate(-50%, -50%)';
-  document.body.appendChild(shock);
-  shock.addEventListener('animationend', () => shock.remove());
 
   // Flash bang
   const flash = document.createElement('div');
