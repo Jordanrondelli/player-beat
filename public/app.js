@@ -168,7 +168,7 @@ function generateDemoData() {
 
 function extractWaveformData(buffer) {
   const raw = buffer.getChannelData(0);
-  const n = 20000;
+  const n = 40000;
   const blockLen = Math.floor(raw.length / n);
   waveformData = [];
   waveformSigned = [];
@@ -398,13 +398,13 @@ function sampleSigned(fIdx) {
 }
 
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
-  // === NEON ENVELOPE WAVEFORM — mirrored amplitude silhouette with glow ===
-  const step = 3;
+  // === NEON ENVELOPE WAVEFORM — high-def mirrored amplitude with peak transients ===
+  const step = 1.5;
   const numPts = Math.ceil(w / step) + 1;
   const maxAmp = h * 0.44;
-  const minH = 2;
+  const minH = 1.5;
 
-  // Build amplitude envelope points from RMS data
+  // Build amplitude envelope from PEAK data (preserves transients like kicks)
   const raw = [];
   for (let i = 0; i < numPts; i++) {
     const x = i * step;
@@ -412,23 +412,22 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     const pNorm = tSec / duration;
     let val = 0;
     if (pNorm >= 0 && pNorm <= 1) {
-      const fIdx = pNorm * (waveformData.length - 1);
-      val = Math.pow(sampleWaveform(fIdx), 0.75);
+      const fIdx = pNorm * (waveformSigned.length - 1);
+      // Use absolute peak for sharp transients, blend with RMS for body
+      const peak = Math.abs(sampleSigned(fIdx));
+      const rms = sampleWaveform(fIdx);
+      val = peak * 0.7 + rms * 0.3; // peaks dominate for kick definition
     }
     raw.push({ x, val: Math.max(minH, val * maxAmp) });
   }
 
-  // Smooth pass (2x for cartoon roundness)
-  function smooth(arr) {
-    const out = [];
-    for (let i = 0; i < arr.length; i++) {
-      const prev = arr[Math.max(0, i - 1)].val;
-      const next = arr[Math.min(arr.length - 1, i + 1)].val;
-      out.push({ x: arr[i].x, val: prev * 0.25 + arr[i].val * 0.5 + next * 0.25 });
-    }
-    return out;
+  // Light single smooth pass — preserves transient spikes
+  const pts = [];
+  for (let i = 0; i < raw.length; i++) {
+    const prev = raw[Math.max(0, i - 1)].val;
+    const next = raw[Math.min(raw.length - 1, i + 1)].val;
+    pts.push({ x: raw[i].x, val: prev * 0.2 + raw[i].val * 0.6 + next * 0.2 });
   }
-  const pts = smooth(smooth(raw));
 
   // Find playhead split index
   let splitIdx = 0;
