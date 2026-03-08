@@ -240,8 +240,8 @@ let hammerPeakStage = 'cold';
 let energyLongWindow = [];    // ~10s rolling window for baseline energy
 let energyShortWindow = [];   // ~1s rolling window for current energy
 let spectralRatioWindow = []; // bass-to-mid ratio history
-let trackMaxEnergy = 0;       // max energy seen so far in this track
-let trackMinEnergy = Infinity;
+let trackMaxEnergy = 0.01;    // max energy seen so far in this track
+let trackMinEnergy = 1;       // min energy seen so far in this track
 let chargeVelocity = 0;       // how fast charge is moving
 let detectedBPM = 0;
 let beatIntervalId = null;
@@ -384,20 +384,26 @@ function drawWaveform(currentTime) {
     // Get frequency spectrum for spectral analysis
     analyser.getByteFrequencyData(frequencyData);
 
-    // Bass energy (20-150Hz, bins 0-6 approx at 44100/2048)
+    // fftSize=512 → 256 bins. Bin width = (sampleRate/2)/256 ≈ 86Hz per bin at 44100
+    const binCount = analyser.frequencyBinCount; // 256
+
+    // Bass energy (20-250Hz, bins 0-3)
     let bassEnergy = 0;
-    for (let i = 0; i < 7; i++) bassEnergy += frequencyData[i];
-    bassEnergy /= 7 * 255; // normalize 0-1
+    const bassEnd = Math.min(4, binCount);
+    for (let i = 0; i < bassEnd; i++) bassEnergy += frequencyData[i];
+    bassEnergy /= bassEnd * 255;
 
-    // Mid energy (300-3000Hz, bins ~14-140)
+    // Mid energy (250-3000Hz, bins 3-35)
     let midEnergy = 0;
-    for (let i = 14; i < 140; i++) midEnergy += frequencyData[i];
-    midEnergy /= 126 * 255;
+    const midStart = bassEnd, midEnd = Math.min(35, binCount);
+    for (let i = midStart; i < midEnd; i++) midEnergy += frequencyData[i];
+    midEnergy /= (midEnd - midStart) * 255;
 
-    // High energy (3000-10000Hz)
+    // High energy (3000-12000Hz, bins 35-140)
     let highEnergy = 0;
-    for (let i = 140; i < 470; i++) highEnergy += frequencyData[i];
-    highEnergy /= 330 * 255;
+    const hiStart = midEnd, hiEnd = Math.min(140, binCount);
+    for (let i = hiStart; i < hiEnd; i++) highEnergy += frequencyData[i];
+    highEnergy /= (hiEnd - hiStart) * 255;
 
     // Combined energy (weighted: bass matters most in electro)
     const energy = bassEnergy * 0.5 + midEnergy * 0.3 + highEnergy * 0.2;
@@ -732,8 +738,8 @@ function updateHammerVisuals(pct, kick) {
   // Scale hammer icon with percentage — bigger as power grows
   const hammerIconWrap = document.getElementById('hammerIconWrap');
   if (hammerIconWrap) {
-    const baseSize = 54;
-    const maxExtra = 36; // grows up to +36px at 100%
+    const baseSize = 46;
+    const maxExtra = 30; // grows up to +30px at 100%
     const size = baseSize + (pct / 100) * maxExtra;
     hammerIconWrap.style.width = size + 'px';
     hammerIconWrap.style.height = size + 'px';
@@ -840,14 +846,14 @@ function stopBeatSync() {
   energyLongWindow = [];
   energyShortWindow = [];
   spectralRatioWindow = [];
-  trackMaxEnergy = 0;
-  trackMinEnergy = Infinity;
+  trackMaxEnergy = 0.01;
+  trackMinEnergy = 1;
   if (hammerCard) hammerCard.setAttribute('data-stage', 'cold');
   if (hammerStageEl) hammerStageEl.textContent = '';
   if (gaugeFill) gaugeFill.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   if (gaugeGlow) gaugeGlow.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   const hammerIconWrap = document.getElementById('hammerIconWrap');
-  if (hammerIconWrap) { hammerIconWrap.style.width = '54px'; hammerIconWrap.style.height = '54px'; }
+  if (hammerIconWrap) { hammerIconWrap.style.width = '46px'; hammerIconWrap.style.height = '46px'; }
 }
 
 // ===== PLAYBACK CONTROLS =====
