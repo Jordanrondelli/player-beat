@@ -270,7 +270,7 @@ function drawWaveform(currentTime) {
 
 
 
-  const windowSec = 4;
+  const windowSec = 8;
   const playheadX = w * 0.35;
   const scrollBack = 0.35 * windowSec;
   const timeStart = currentTime - scrollBack;
@@ -372,12 +372,10 @@ function sampleWaveform(fIdx) {
 
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
   // === NEON SINE-WAVE STYLE ===
-  // The waveform amplitude modulates a continuous sine oscillation
+  // Envelope modulates a sine — high contrast so you SEE the structure
   const pixelStep = 2;
   const numPts = Math.ceil(w / pixelStep) + 1;
-  const maxAmp = h * 0.42;
-  // Oscillation frequency — how many wiggles per pixel
-  const freq = 0.045 + kick * 0.008;
+  const maxAmp = h * 0.44;
 
   // Build wave points: y = sin(phase) * envelope(amplitude)
   const points = [];
@@ -389,27 +387,30 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     let envelope = 0;
     if (pNorm >= 0 && pNorm <= 1) {
       const fIdx = pNorm * (waveformData.length - 1);
-      envelope = Math.pow(sampleWaveform(fIdx), 0.7);
+      // Aggressive power curve — quiet parts shrink hard, loud parts pop
+      envelope = Math.pow(sampleWaveform(fIdx), 0.5);
     }
-    // Minimum wiggle so the line is never flat
-    const amp = Math.max(3, envelope * maxAmp);
+    // Very small minimum so quiet sections are nearly flat lines
+    const amp = Math.max(2, envelope * maxAmp);
     const y = centerY + Math.sin(phase) * amp;
-    phase += freq * (1 + envelope * 0.5);
+    // Frequency scales with envelope: quiet = tight wiggles, loud = wide waves
+    const freq = 0.03 + envelope * 0.04 + kick * 0.005;
+    phase += freq;
     points.push({ x, y, envelope });
   }
 
-  // Smooth the points for cartoon roundness (2-pass)
+  // Light smooth for cartoon roundness (single pass only — preserve dynamics)
   function smoothPts(arr) {
     const out = [];
     for (let i = 0; i < arr.length; i++) {
       const prev = arr[Math.max(0, i - 1)];
       const cur = arr[i];
       const next = arr[Math.min(arr.length - 1, i + 1)];
-      out.push({ x: cur.x, y: prev.y * 0.2 + cur.y * 0.6 + next.y * 0.2, envelope: cur.envelope });
+      out.push({ x: cur.x, y: prev.y * 0.15 + cur.y * 0.7 + next.y * 0.15, envelope: cur.envelope });
     }
     return out;
   }
-  const pts = smoothPts(smoothPts(points));
+  const pts = smoothPts(points);
 
   // Find playhead split index
   let splitIdx = 0;
