@@ -460,15 +460,16 @@ body {
   position: absolute; top: -65px; left: 15px; z-index: 30;
   display: flex; align-items: center; gap: 14px;
   padding: 28px 45px 28px 35px; border-radius: 18px;
-  background: url('bloc-titre.png') center / calc(100% + 40px) calc(100% + 30px) no-repeat !important;
+  background: url('bloc-titre.png') center / 100% 100% no-repeat !important;
+  border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   animation: floatUser 8s ease-in-out infinite;
-  box-shadow:
-    0 0 18px rgba(60, 120, 220, .35),
-    0 0 40px rgba(40, 90, 200, .15),
-    inset 0 0 30px rgba(80, 140, 255, .06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
   overflow: hidden;
+}
+.user-card::before, .user-card::after {
+  display: none !important;
 }
 .user-card::before {
   content: '';
@@ -513,14 +514,15 @@ body {
   position: absolute; top: -20px; right: 15px; z-index: 30;
   width: 210px; padding: 20px 22px; border-radius: 16px;
   background: url('bloc-chat.png') center / 100% 100% no-repeat !important;
+  border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   animation: floatChat 9s ease-in-out infinite;
-  box-shadow:
-    0 0 18px rgba(60, 120, 220, .35),
-    0 0 40px rgba(40, 90, 200, .15),
-    inset 0 0 30px rgba(80, 140, 255, .06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
   overflow: hidden;
+}
+.chat-card::before, .chat-card::after {
+  display: none !important;
 }
 .chat-card::before {
   content: '';
