@@ -236,6 +236,7 @@ const hammerStageEl = document.getElementById('hammerStage');
 let currentHammerStage = 'cool';
 let hammerCharge = 0;
 let hammerPeakStage = 'cool';
+let hammerCooldownStart = 0; // timestamp when we dropped below 75%
 // Multi-criteria power scoring state
 const loudnessFreqData = new Uint8Array(loudnessAnalyser.frequencyBinCount);
 let hammerKickSmooth = 0;     // smoothed kick impact for scoring
@@ -893,6 +894,19 @@ function updateHammerVisuals(pct, kick) {
   else if (pct >= 60) { newStage = 'enfeu'; }
   else if (pct >= 40) { newStage = 'chaud'; }
 
+  // Cooldown: if below 75% for 5 continuous seconds, reset peak so animations can retrigger
+  const now = performance.now();
+  if (pct < 75) {
+    if (hammerCooldownStart === 0) hammerCooldownStart = now;
+    else if (now - hammerCooldownStart >= 5000) {
+      // Reset peak to current stage — allows re-entering higher stages to retrigger
+      hammerPeakStage = newStage;
+      hammerCooldownStart = 0;
+    }
+  } else {
+    hammerCooldownStart = 0; // above 75%, cancel cooldown timer
+  }
+
   // Track peak for triggering one-shot activation effects (shockwave, etc.)
   const peakIdx = stageOrder.indexOf(hammerPeakStage);
   const newIdx = stageOrder.indexOf(newStage);
@@ -1013,6 +1027,7 @@ function stopBeatSync() {
   hammerCharge = 0;
   hammerPeakStage = 'cool';
   currentHammerStage = 'cool';
+  hammerCooldownStart = 0;
   hammerKickSmooth = 0;
   if (!prescanDone) {
     criteriaMax = { sub: 0.001, bass: 0.001, kick: 0.001, fullness: 0.001, loudness: 0.001 };

@@ -407,11 +407,11 @@ body {
   transform: rotate(-90deg);
 }
 
-/* Percentage overlaid inside the circle */
+/* Percentage overlaid in lower half of circle */
 .hammer-pct {
-  position: absolute; top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  font-family: 'Bangers', cursive; font-size: 28px;
+  position: absolute; bottom: 12px; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Bangers', cursive; font-size: 22px;
   color: rgba(255, 255, 255, .6);
   text-shadow: 0 2px 10px rgba(0, 0, 0, .6);
   letter-spacing: 2px; line-height: 1;
@@ -450,9 +450,9 @@ body {
   filter: blur(6px);
 }
 
-/* Hammer icon centered in gauge */
+/* Hammer icon in upper half of gauge */
 .hammer-icon-wrap {
-  position: absolute; top: 22%; left: 50%;
+  position: absolute; top: 16px; left: 50%;
   transform: translateX(-50%);
   width: 38px; height: 38px;
   transition: width .4s ease-out, height .4s ease-out;
@@ -656,10 +656,25 @@ body {
   position: relative; overflow: visible;
   transition: filter .3s ease, transform .15s;
   animation: floatVote 4s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+.vote-btn-red {
+  animation: floatVoteLeft 4.5s ease-in-out infinite;
+}
+.vote-btn-green {
+  animation: floatVoteRight 5s ease-in-out infinite;
 }
 @keyframes floatVote {
-  0%, 100% { transform: translateY(0) }
-  50% { transform: translateY(-3px) }
+  0%, 100% { transform: translateY(0) perspective(400px) rotateY(0deg) }
+  50% { transform: translateY(-6px) perspective(400px) rotateY(2deg) }
+}
+@keyframes floatVoteLeft {
+  0%, 100% { transform: translateY(0) perspective(400px) rotateY(3deg) rotateX(1deg) }
+  50% { transform: translateY(-8px) perspective(400px) rotateY(-2deg) rotateX(-1deg) }
+}
+@keyframes floatVoteRight {
+  0%, 100% { transform: translateY(0) perspective(400px) rotateY(-3deg) rotateX(-1deg) }
+  50% { transform: translateY(-7px) perspective(400px) rotateY(2deg) rotateX(1deg) }
 }
 .vote-btn-red .vote-icon {
   filter: drop-shadow(0 0 12px rgba(220, 40, 40, .45)) drop-shadow(0 0 25px rgba(200, 20, 20, .2));
@@ -688,35 +703,40 @@ body {
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  animation: floatUser 8s ease-in-out infinite;
+  animation: floatUser 6s ease-in-out infinite;
   box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
   overflow: hidden;
+  transform-style: preserve-3d;
 }
-.user-card::before, .user-card::after {
+.user-card::after {
   display: none !important;
 }
 .user-card::before {
-  content: '';
+  content: '' !important; display: block !important;
   position: absolute; inset: 0;
   background: linear-gradient(
     115deg,
     transparent 30%,
-    rgba(255, 255, 255, .08) 45%,
+    rgba(255, 255, 255, .06) 45%,
     rgba(255, 255, 255, .14) 50%,
-    rgba(255, 255, 255, .08) 55%,
+    rgba(255, 255, 255, .06) 55%,
     transparent 70%
   );
-  animation: shineReflect 8s ease-in-out infinite;
+  animation: shineReflect 5s ease-in-out infinite;
   pointer-events: none;
   border-radius: 18px;
+  z-index: 10;
 }
 @keyframes shineReflect {
-  0%, 100% { transform: translateX(-60%); opacity: 0.5; }
-  50% { transform: translateX(60%); opacity: 1; }
+  0%, 100% { transform: translateX(-120%); opacity: 0; }
+  40% { opacity: 1; }
+  60% { opacity: 1; }
+  100% { transform: translateX(120%); opacity: 0; }
 }
 @keyframes floatUser {
-  0%, 100% { transform: rotateX(0.5deg) rotateY(1deg) translateY(0) translateZ(8px) }
-  50% { transform: rotateX(-0.3deg) rotateY(-0.5deg) translateY(-3px) translateZ(10px) }
+  0%, 100% { transform: rotateX(1deg) rotateY(2deg) translateY(0) translateZ(8px) }
+  33% { transform: rotateX(-0.5deg) rotateY(-1deg) translateY(-6px) translateZ(12px) }
+  66% { transform: rotateX(0.8deg) rotateY(0.5deg) translateY(-3px) translateZ(9px) }
 }
 .user-avatar {
   width: 54px; height: 54px; border-radius: 50%;
@@ -746,11 +766,13 @@ body {
   background: url('bloc-chat.png') center / 100% 100% no-repeat;
   border: none;
   box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
-  animation: floatChat 9s ease-in-out infinite;
+  animation: floatChat 7s ease-in-out infinite;
+  transform-style: preserve-3d;
 }
 @keyframes floatChat {
-  0%, 100% { transform: translateY(0) translateZ(6px) }
-  50% { transform: translateY(-3px) translateZ(8px) }
+  0%, 100% { transform: translateY(0) translateZ(6px) rotateY(-2deg) rotateX(1deg) }
+  33% { transform: translateY(-5px) translateZ(10px) rotateY(0deg) rotateX(-0.5deg) }
+  66% { transform: translateY(-2px) translateZ(7px) rotateY(-1deg) rotateX(1.5deg) }
 }
 .chat-title {
   font-family: 'Bangers', cursive; font-size: 18px; letter-spacing: 2px;
