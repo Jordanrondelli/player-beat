@@ -378,7 +378,7 @@ function prescanTrackCriteria(buffer) {
 
 let detectedBPM = 0;
 let beatIntervalId = null;
-const GAUGE_CIRCUMFERENCE = 389.56; // 2π × 62
+const GAUGE_CIRCUMFERENCE = 326.73; // 2π × 52
 
 // ===== MAIN WAVEFORM DRAW =====
 function drawWaveform(currentTime) {
@@ -539,6 +539,7 @@ function drawWaveform(currentTime) {
 
     // --- CRITERION 4: SPECTRAL FULLNESS ---
     // How many frequency bands are active simultaneously
+    // Threshold raised to 0.18 — only bands with real energy count
     const bandEdges = [80, 200, 400, 800, 1600, 3200, 6000, 10000, 16000];
     let activeBands = 0;
     for (let b = 0; b < bandEdges.length - 1; b++) {
@@ -546,7 +547,7 @@ function drawWaveform(currentTime) {
       const bE = Math.min(Math.round(bandEdges[b + 1] / binHz), hrBins);
       let bSum = 0;
       for (let i = bS; i < bE; i++) bSum += loudnessFreqData[i];
-      if (bSum / ((bE - bS) * 255) > 0.05) activeBands++;
+      if (bSum / ((bE - bS) * 255) > 0.18) activeBands++;
     }
     const fullnessRaw = activeBands / (bandEdges.length - 1);
 
@@ -575,31 +576,30 @@ function drawWaveform(currentTime) {
     const fullN = norm(fullnessRaw, criteriaMax.fullness);
     const loudN = norm(aLoudRaw, criteriaMax.loudness);
 
-    // Fast smoothing — react within ~0.15s
-    criteriaSmooth.sub += (subN - criteriaSmooth.sub) * 0.25;
-    criteriaSmooth.bass += (bassN - criteriaSmooth.bass) * 0.25;
-    criteriaSmooth.kick += (punchN - criteriaSmooth.kick) * 0.30;
-    criteriaSmooth.fullness += (fullN - criteriaSmooth.fullness) * 0.15;
-    criteriaSmooth.loudness += (loudN - criteriaSmooth.loudness) * 0.25;
+    // Smoothing with separate rise/fall alphas — fast attack, faster decay
+    const smooth = (cur, target, up, down) => cur + (target - cur) * (target > cur ? up : down);
+    criteriaSmooth.sub = smooth(criteriaSmooth.sub, subN, 0.25, 0.15);
+    criteriaSmooth.bass = smooth(criteriaSmooth.bass, bassN, 0.25, 0.15);
+    criteriaSmooth.kick = smooth(criteriaSmooth.kick, punchN, 0.30, 0.20);
+    criteriaSmooth.fullness = smooth(criteriaSmooth.fullness, fullN, 0.15, 0.12);
+    criteriaSmooth.loudness = smooth(criteriaSmooth.loudness, loudN, 0.25, 0.15);
 
     const s = criteriaSmooth;
-    // Weighted sum — each criterion contributes additively
-    // Sub+Bass heavy (40% combined) for 808/trap responsiveness
+    // Weighted sum — Sub+Bass heavy (40%) for 808/trap responsiveness
     const base = s.sub * 0.20 + s.bass * 0.20 + s.kick * 0.15 +
                  s.fullness * 0.20 + s.loudness * 0.25;
 
-    // Convergence bonus: when ALL criteria are high, push toward 100%
-    // Exclude kick from gate (808s don't always have sharp transients)
+    // Convergence bonus reduced to 25% — prevents artificial inflation
     const minCore = Math.min(s.sub, s.bass, s.fullness, s.loudness);
-    const score = base * 0.60 + minCore * 0.40;
+    const score = base * 0.75 + minCore * 0.25;
 
-    // Aggressive curve — only real drops/climaxes reach 90%+
-    // score^1.8 separates mid-range much better than ^1.15
-    const shaped = Math.pow(Math.min(1, score), 1.8) * 100;
+    // Aggressive curve — score^2.0 gives massive separation
+    // Quiet passage (score 0.5) → shaped 25%. Drop (score 0.9) → shaped 81%.
+    const shaped = Math.pow(Math.min(1, score), 2.0) * 100;
 
-    // Fast charge: rise ~0.4s, fall ~1.5s
+    // Charge dynamics: fast rise (~0.3s), much faster fall (~0.5s)
     const diff = shaped - hammerCharge;
-    hammerCharge += diff * (diff > 0 ? 0.12 : 0.04);
+    hammerCharge += diff * (diff > 0 ? 0.14 : 0.10);
     hammerCharge = Math.max(0, Math.min(100, hammerCharge));
   }
 
@@ -868,7 +868,7 @@ function updateHammerVisuals(pct, kick) {
   const hPctEl = document.getElementById('hammerPct');
   if (!hPctEl) return;
 
-  hPctEl.textContent = 'PUISSANCE ' + pct + '%';
+  hPctEl.textContent = pct + '%';
 
   // Update circular gauge
   const offset = GAUGE_CIRCUMFERENCE * (1 - pct / 100);
@@ -878,8 +878,8 @@ function updateHammerVisuals(pct, kick) {
   // Scale hammer icon with percentage — bigger as power grows
   const hammerIconWrap = document.getElementById('hammerIconWrap');
   if (hammerIconWrap) {
-    const baseSize = 56;
-    const maxExtra = 24; // grows up to +24px at 100%
+    const baseSize = 38;
+    const maxExtra = 18; // grows up to +18px at 100%
     const size = baseSize + (pct / 100) * maxExtra;
     hammerIconWrap.style.width = size + 'px';
     hammerIconWrap.style.height = size + 'px';
@@ -1023,7 +1023,7 @@ function stopBeatSync() {
   if (gaugeFill) gaugeFill.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   if (gaugeGlow) gaugeGlow.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   const hammerIconWrap = document.getElementById('hammerIconWrap');
-  if (hammerIconWrap) { hammerIconWrap.style.width = '56px'; hammerIconWrap.style.height = '56px'; }
+  if (hammerIconWrap) { hammerIconWrap.style.width = '38px'; hammerIconWrap.style.height = '38px'; }
 }
 
 // ===== PLAYBACK CONTROLS =====

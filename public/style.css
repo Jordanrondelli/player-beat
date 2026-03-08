@@ -384,68 +384,77 @@ body {
 
 /* ===== HAMMER CARD (above waveform panel) ===== */
 .hammer-card {
-  position: absolute; top: -130px; left: 50%; z-index: 30;
+  position: absolute; top: -140px; left: 50%; z-index: 30;
   transform: translateX(-50%) translateZ(8px);
-  display: flex; align-items: center; justify-content: center;
-  padding: 0;
-  background: none;
-  border: none;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
   pointer-events: none;
+}
+
+/* "PUISSANCE" label above gauge */
+.hammer-label {
+  font-family: 'Bangers', cursive; font-size: 14px;
+  color: rgba(255, 255, 255, .4); letter-spacing: 5px; text-transform: uppercase;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, .5);
+  margin-bottom: 2px;
 }
 
 /* Gauge wrapper */
 .hammer-gauge-wrap {
-  position: relative; width: 160px; height: 160px; flex-shrink: 0;
+  position: relative; width: 110px; height: 110px; flex-shrink: 0;
 }
 .hammer-gauge {
   width: 100%; height: 100%;
   transform: rotate(-90deg);
-  overflow: visible;
 }
 
-/* Curved text on SVG arcs */
-.hammer-pct-curved {
-  font-family: 'Bangers', cursive; font-size: 17px;
-  letter-spacing: 4px; fill: rgba(255, 255, 255, .55);
-  transform: rotate(90deg);
-  transform-origin: 100px 100px;
-  transition: fill .3s;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, .6));
+/* Percentage overlaid inside the circle */
+.hammer-pct {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Bangers', cursive; font-size: 28px;
+  color: rgba(255, 255, 255, .6);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .6);
+  letter-spacing: 2px; line-height: 1;
+  transition: color .3s, text-shadow .3s;
+  z-index: 5;
 }
-.hammer-stage-curved {
-  font-family: 'Bangers', cursive; font-size: 16px;
+
+/* Stage label below gauge */
+.hammer-stage {
+  font-family: 'Bangers', cursive; font-size: 20px;
   letter-spacing: 4px; text-transform: uppercase;
-  fill: transparent;
-  transform: rotate(90deg);
-  transform-origin: 100px 100px;
-  transition: fill .3s;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .5));
+  color: transparent; min-height: 26px; line-height: 1;
+  text-shadow: none;
+  transition: color .3s, text-shadow .3s;
+  text-align: center;
+  margin-top: 2px;
 }
+
 .gauge-track {
-  fill: none; stroke: rgba(255,255,255,.04); stroke-width: 3;
+  fill: none; stroke: rgba(255,255,255,.06); stroke-width: 4;
 }
 .gauge-fill {
-  fill: none; stroke: rgba(255,200,50,.8); stroke-width: 5;
+  fill: none; stroke: rgba(255,200,50,.8); stroke-width: 6;
   stroke-linecap: round;
-  stroke-dasharray: 389.56; /* 2π × 52 */
-  stroke-dashoffset: 389.56;
+  stroke-dasharray: 326.73; /* 2π × 52 */
+  stroke-dashoffset: 326.73;
   transition: stroke-dashoffset .3s ease-out, stroke .3s;
   filter: drop-shadow(0 0 4px rgba(255,200,50,.5));
 }
 .gauge-glow {
-  fill: none; stroke: rgba(255,200,50,.3); stroke-width: 10;
+  fill: none; stroke: rgba(255,200,50,.3); stroke-width: 12;
   stroke-linecap: round;
-  stroke-dasharray: 389.56;
-  stroke-dashoffset: 389.56;
+  stroke-dasharray: 326.73;
+  stroke-dashoffset: 326.73;
   transition: stroke-dashoffset .3s ease-out, stroke .3s;
   filter: blur(6px);
 }
 
-/* Hammer icon centered in gauge — grows dynamically via JS */
+/* Hammer icon centered in gauge */
 .hammer-icon-wrap {
-  position: absolute; top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 56px; height: 56px;
+  position: absolute; top: 22%; left: 50%;
+  transform: translateX(-50%);
+  width: 38px; height: 38px;
   transition: width .4s ease-out, height .4s ease-out;
 }
 .hammer-icon {
@@ -476,20 +485,21 @@ body {
 /* Stage: COOL (0-40%) — cold blue */
 .hammer-card[data-stage="cool"] .gauge-fill { stroke: rgba(100,180,255,.6); }
 .hammer-card[data-stage="cool"] .gauge-glow { stroke: rgba(100,180,255,.2); }
-.hammer-card[data-stage="cool"] .hammer-pct-curved { fill: rgba(150,200,255,.6); }
+.hammer-card[data-stage="cool"] .hammer-pct { color: rgba(150,200,255,.7); }
+.hammer-card[data-stage="cool"] .hammer-label { color: rgba(150,200,255,.35); }
 
 /* Stage: CHAUD (40-60%) — warm orange */
 .hammer-card[data-stage="chaud"] .gauge-fill { stroke: rgba(255,200,50,.85); }
 .hammer-card[data-stage="chaud"] .gauge-glow { stroke: rgba(255,200,50,.35); }
-.hammer-card[data-stage="chaud"] .hammer-pct-curved { fill: rgba(255,210,80,.85); filter: drop-shadow(0 0 12px rgba(255,180,0,.3)); }
-.hammer-card[data-stage="chaud"] .hammer-stage-curved { fill: rgba(255,200,50,.7); }
+.hammer-card[data-stage="chaud"] .hammer-pct { color: rgba(255,210,80,.9); text-shadow: 0 0 14px rgba(255,180,0,.4); }
+.hammer-card[data-stage="chaud"] .hammer-stage { color: rgba(255,200,50,.8); text-shadow: 0 0 8px rgba(255,180,0,.3); }
 .hammer-card[data-stage="chaud"] .hammer-icon { filter: drop-shadow(0 2px 10px rgba(255,180,0,.5)); }
 
 /* Stage: EN FEU (60-80%) — orange-red, pulse starts */
 .hammer-card[data-stage="enfeu"] .gauge-fill { stroke: rgba(255,100,20,.9); }
 .hammer-card[data-stage="enfeu"] .gauge-glow { stroke: rgba(255,80,0,.4); }
-.hammer-card[data-stage="enfeu"] .hammer-pct-curved { fill: rgba(255,120,40,.95); filter: drop-shadow(0 0 14px rgba(255,80,0,.4)); }
-.hammer-card[data-stage="enfeu"] .hammer-stage-curved { fill: rgba(255,100,30,.85); }
+.hammer-card[data-stage="enfeu"] .hammer-pct { color: rgba(255,120,40,.95); text-shadow: 0 0 16px rgba(255,80,0,.5); }
+.hammer-card[data-stage="enfeu"] .hammer-stage { color: rgba(255,100,30,.9); text-shadow: 0 0 12px rgba(255,80,0,.4); }
 .hammer-card[data-stage="enfeu"] .hammer-icon {
   filter: drop-shadow(0 0 10px rgba(255,80,0,.6)) drop-shadow(0 0 20px rgba(255,40,0,.3));
 }
@@ -504,8 +514,8 @@ body {
 /* Stage: TRÈS LOURD (80-99%) — deep red, heavy pulse */
 .hammer-card[data-stage="lourd"] .gauge-fill { stroke: rgba(255,30,0,1); }
 .hammer-card[data-stage="lourd"] .gauge-glow { stroke: rgba(255,20,0,.55); }
-.hammer-card[data-stage="lourd"] .hammer-pct-curved { fill: rgba(255,60,20,.95); filter: drop-shadow(0 0 18px rgba(255,30,0,.6)); }
-.hammer-card[data-stage="lourd"] .hammer-stage-curved { fill: rgba(255,40,20,.9); filter: drop-shadow(0 0 10px rgba(255,20,0,.4)); }
+.hammer-card[data-stage="lourd"] .hammer-pct { color: rgba(255,60,20,.95); text-shadow: 0 0 20px rgba(255,30,0,.7); }
+.hammer-card[data-stage="lourd"] .hammer-stage { color: rgba(255,40,20,.95); text-shadow: 0 0 14px rgba(255,20,0,.5); }
 .hammer-card[data-stage="lourd"] .hammer-icon {
   filter: drop-shadow(0 0 14px rgba(255,40,0,.8)) drop-shadow(0 0 30px rgba(255,20,0,.5));
 }
@@ -520,18 +530,18 @@ body {
 /* Stage: OVERLOAD (100%) — white-hot, everything trembles */
 .hammer-card[data-stage="overload"] .gauge-fill { stroke: #fff; filter: drop-shadow(0 0 8px rgba(255,50,0,1)); }
 .hammer-card[data-stage="overload"] .gauge-glow { stroke: rgba(255,30,0,.8); filter: blur(8px); }
-.hammer-card[data-stage="overload"] .hammer-pct-curved {
-  fill: #fff;
-  filter: drop-shadow(0 0 20px rgba(255,40,0,1)) drop-shadow(0 0 40px rgba(255,20,0,.6));
+.hammer-card[data-stage="overload"] .hammer-pct {
+  color: #fff;
+  text-shadow: 0 0 20px rgba(255,40,0,1), 0 0 40px rgba(255,20,0,.6);
   animation: overloadTextPulse .25s ease-in-out infinite alternate;
 }
 @keyframes overloadTextPulse {
-  0% { opacity: .85; }
-  100% { opacity: 1; }
+  0% { opacity: .85; transform: translate(-50%,-50%) scale(1); }
+  100% { opacity: 1; transform: translate(-50%,-50%) scale(1.08); }
 }
-.hammer-card[data-stage="overload"] .hammer-stage-curved {
-  fill: #fff;
-  filter: drop-shadow(0 0 15px rgba(255,30,0,.9)) drop-shadow(0 0 30px rgba(255,0,0,.5));
+.hammer-card[data-stage="overload"] .hammer-stage {
+  color: #fff;
+  text-shadow: 0 0 15px rgba(255,30,0,.9), 0 0 30px rgba(255,0,0,.5);
   animation: overloadLabelBlink .3s ease-in-out infinite alternate;
 }
 @keyframes overloadLabelBlink {
@@ -867,10 +877,10 @@ body {
   .fire-btn { width: 260px; height: 100px; }
   .user-card { left: 10px; padding: 10px 16px 10px 12px; }
   .user-name { font-size: 18px; }
-  .hammer-gauge-wrap { width: 130px; height: 130px; }
-  .hammer-pct-curved { font-size: 14px; }
-  .hammer-stage-curved { font-size: 13px; }
-  .hammer-card { top: -110px; }
+  .hammer-gauge-wrap { width: 95px; height: 95px; }
+  .hammer-pct { font-size: 24px; }
+  .hammer-stage { font-size: 17px; }
+  .hammer-card { top: -125px; }
 }
 
 @media (max-width: 600px) {
@@ -893,10 +903,11 @@ body {
   .user-crown { font-size: 22px; }
   .volume-wrap { right: 50px; }
   .volume-slider { width: 40px; }
-  .hammer-gauge-wrap { width: 110px; height: 110px; }
-  .hammer-pct-curved { font-size: 12px; }
-  .hammer-stage-curved { font-size: 11px; }
-  .hammer-card { top: -95px; }
+  .hammer-gauge-wrap { width: 80px; height: 80px; }
+  .hammer-pct { font-size: 20px; }
+  .hammer-stage { font-size: 14px; }
+  .hammer-label { font-size: 11px; }
+  .hammer-card { top: -105px; }
   .play-btn img { height: 40px; }
   .transport-controls { padding: 4px 12px; gap: 8px; }
   .transport-btn { width: 32px; height: 32px; }

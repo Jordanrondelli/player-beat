@@ -39,31 +39,20 @@
     <div class="scene" id="scene">
       <!-- Hammer meter (above waveform) -->
       <div class="hammer-card" id="hammerMeter">
+        <div class="hammer-label">PUISSANCE</div>
         <div class="hammer-gauge-wrap">
-          <svg class="hammer-gauge" viewBox="0 0 200 200">
-            <defs>
-              <!-- Arc for "PUISSANCE XX%" above the circle -->
-              <path id="curveTop" d="M 16,100 A 84,84 0 0,1 184,100" fill="none" />
-              <!-- Arc for stage label below the circle -->
-              <path id="curveBottom" d="M 30,108 A 74,74 0 0,0 170,108" fill="none" />
-            </defs>
-            <circle class="gauge-track" cx="100" cy="100" r="62" />
-            <circle class="gauge-fill" id="gaugeFill" cx="100" cy="100" r="62" />
-            <circle class="gauge-glow" id="gaugeGlow" cx="100" cy="100" r="62" />
-            <!-- "PUISSANCE XX%" curved above -->
-            <text class="hammer-pct-curved">
-              <textPath href="#curveTop" startOffset="50%" text-anchor="middle" id="hammerPct">PUISSANCE 0%</textPath>
-            </text>
-            <!-- Stage label curved below -->
-            <text class="hammer-stage-curved">
-              <textPath href="#curveBottom" startOffset="50%" text-anchor="middle" id="hammerStage"></textPath>
-            </text>
+          <svg class="hammer-gauge" viewBox="0 0 120 120">
+            <circle class="gauge-track" cx="60" cy="60" r="52" />
+            <circle class="gauge-fill" id="gaugeFill" cx="60" cy="60" r="52" />
+            <circle class="gauge-glow" id="gaugeGlow" cx="60" cy="60" r="52" />
           </svg>
           <div class="hammer-icon-wrap" id="hammerIconWrap">
             <img src="marteau.png" alt="Marteau" class="hammer-icon" id="hammerIcon">
           </div>
+          <div class="hammer-pct" id="hammerPct">0%</div>
           <div class="hammer-shockwave" id="hammerShockwave"></div>
         </div>
+        <div class="hammer-stage" id="hammerStage"></div>
       </div>
 
       <!-- Waveform panel -->
