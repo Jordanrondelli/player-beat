@@ -378,48 +378,85 @@ function sampleWaveform(fIdx) {
 }
 
 function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, duration, kick, glowOnly) {
-  const barW = 2, gap = 1, step = barW + gap;
-  const numBars = Math.ceil(w / step);
+  const step = 3;
+  const numPts = Math.ceil(w / step) + 1;
 
-  // Played region gradient
-  const gradPlayed = ctx.createLinearGradient(0, centerY - h * .42, 0, centerY + h * .42);
-  gradPlayed.addColorStop(0, 'rgba(150,15,10,0.55)');
-  gradPlayed.addColorStop(.2, 'rgba(200,25,15,0.95)');
-  gradPlayed.addColorStop(.5, 'rgba(220,30,20,1)');
-  gradPlayed.addColorStop(.8, 'rgba(200,25,15,0.95)');
-  gradPlayed.addColorStop(1, 'rgba(150,15,10,0.55)');
-
-  for (let i = 0; i < numBars; i++) {
+  // Build array of {x, val, pNorm} points
+  const pts = [];
+  for (let i = 0; i < numPts; i++) {
     const x = i * step;
     const tSec = timeStart + (x / w) * windowSec;
     const pNorm = tSec / duration;
-    if (pNorm < 0 || pNorm > 1) continue;
-
-    // Interpolated sample with contrast boost
-    const fIdx = pNorm * (waveformData.length - 1);
-    let val = Math.pow(sampleWaveform(fIdx), 0.85);
-
-    const barH = Math.max(1, val * h * .42);
-    const isPlayed = x < playheadX;
-
-    if (glowOnly) {
-      if (!isPlayed) continue;
-      ctx.fillStyle = 'rgba(200,25,15,1)';
-      ctx.fillRect(x, centerY - barH, barW, barH * 2);
-      continue;
+    let val = 0;
+    if (pNorm >= 0 && pNorm <= 1) {
+      const fIdx = pNorm * (waveformData.length - 1);
+      val = Math.pow(sampleWaveform(fIdx), 0.80);
     }
+    pts.push({ x, val: val * h * .44, pNorm });
+  }
 
-    if (isPlayed) {
-      ctx.fillStyle = gradPlayed;
-    } else {
-      const fadeAlpha = Math.max(0.06, 0.5 - ((x - playheadX) / (w - playheadX)) * 0.44);
-      ctx.fillStyle = `rgba(200,210,230,${fadeAlpha})`;
-    }
-
-    // Draw bar (mirrored top/bottom)
+  // Helper: draw a smooth filled blob shape from pts[start..end]
+  function drawBlob(start, end, fillStyle) {
+    if (end - start < 1) return;
+    ctx.fillStyle = fillStyle;
     ctx.beginPath();
-    ctx.roundRect(x, centerY - barH, barW, barH * 2, 1.5);
+    // Top curve (negative = upward)
+    ctx.moveTo(pts[start].x, centerY - Math.max(1, pts[start].val));
+    for (let i = start; i < end; i++) {
+      const p0 = pts[i], p1 = pts[Math.min(i + 1, end)];
+      const cpx = (p0.x + p1.x) / 2;
+      const v0 = Math.max(1, p0.val), v1 = Math.max(1, p1.val);
+      ctx.quadraticCurveTo(p0.x, centerY - v0, cpx, centerY - (v0 + v1) / 2);
+    }
+    const last = pts[end];
+    ctx.lineTo(last.x, centerY - Math.max(1, last.val));
+    // Bottom curve (mirrored, positive = downward)
+    ctx.lineTo(last.x, centerY + Math.max(1, last.val));
+    for (let i = end; i > start; i--) {
+      const p0 = pts[i], p1 = pts[Math.max(i - 1, start)];
+      const cpx = (p0.x + p1.x) / 2;
+      const v0 = Math.max(1, p0.val), v1 = Math.max(1, p1.val);
+      ctx.quadraticCurveTo(p0.x, centerY + v0, cpx, centerY + (v0 + v1) / 2);
+    }
+    ctx.closePath();
     ctx.fill();
+  }
+
+  // Find playhead split index
+  let splitIdx = 0;
+  for (let i = 0; i < pts.length; i++) {
+    if (pts[i].x >= playheadX) { splitIdx = i; break; }
+    if (i === pts.length - 1) splitIdx = pts.length - 1;
+  }
+
+  if (glowOnly) {
+    // Glow: only played side
+    if (splitIdx > 0) {
+      drawBlob(0, splitIdx, 'rgba(200,25,15,1)');
+    }
+    return;
+  }
+
+  // Played region gradient
+  const gradPlayed = ctx.createLinearGradient(0, centerY - h * .44, 0, centerY + h * .44);
+  gradPlayed.addColorStop(0, 'rgba(150,15,10,0.55)');
+  gradPlayed.addColorStop(.15, 'rgba(200,25,15,0.95)');
+  gradPlayed.addColorStop(.5, 'rgba(220,30,20,1)');
+  gradPlayed.addColorStop(.85, 'rgba(200,25,15,0.95)');
+  gradPlayed.addColorStop(1, 'rgba(150,15,10,0.55)');
+
+  // Unplayed region gradient (light blue, fading out)
+  const gradUnplayed = ctx.createLinearGradient(playheadX, 0, w, 0);
+  gradUnplayed.addColorStop(0, 'rgba(180,200,230,0.50)');
+  gradUnplayed.addColorStop(1, 'rgba(180,200,230,0.08)');
+
+  // Draw played blob
+  if (splitIdx > 0) {
+    drawBlob(0, splitIdx, gradPlayed);
+  }
+  // Draw unplayed blob
+  if (splitIdx < pts.length - 1) {
+    drawBlob(splitIdx, pts.length - 1, gradUnplayed);
   }
 }
 
