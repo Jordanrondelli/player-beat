@@ -735,8 +735,8 @@ document.addEventListener('keydown', (e) => {
 
 // ===== PLAYLIST / TRACK LOADING =====
 function updateTransportButtons() {
-  document.getElementById('prevBtn').disabled = playlist.length <= 1;
-  document.getElementById('nextBtn').disabled = playlist.length <= 1;
+  document.getElementById('prevBtn').disabled = playlist.length === 0;
+  document.getElementById('nextBtn').disabled = playlist.length === 0;
 }
 updateTransportButtons();
 
@@ -781,13 +781,15 @@ document.getElementById('audioFileInput').addEventListener('change', async (e) =
 });
 
 document.getElementById('prevBtn').addEventListener('click', () => {
-  if (playlist.length <= 1) return;
+  if (playlist.length === 0) return;
+  if (playlist.length === 1) { loadTrack(0); return; }
   const prev = (currentTrackIndex - 1 + playlist.length) % playlist.length;
   loadTrack(prev);
 });
 
 document.getElementById('nextBtn').addEventListener('click', () => {
-  if (playlist.length <= 1) return;
+  if (playlist.length === 0) return;
+  if (playlist.length === 1) { loadTrack(0); return; }
   const next = (currentTrackIndex + 1) % playlist.length;
   loadTrack(next);
 });

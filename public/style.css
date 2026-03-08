@@ -310,7 +310,7 @@ body {
 
 /* Transport controls (prev / play / next) */
 .transport-controls {
-  position: absolute; bottom: -80px; left: 50%; z-index: 36;
+  position: absolute; bottom: -110px; left: 50%; z-index: 36;
   transform: translateX(-50%) translateZ(8px);
   display: flex; align-items: center; justify-content: center; gap: 10px;
   background: rgba(8, 16, 48, .35);
@@ -337,8 +337,8 @@ body {
 .transport-btn:hover { transform: scale(1.12); background: rgba(255,255,255,.14); }
 .transport-btn:active { transform: scale(0.9); }
 .transport-btn svg { width: 20px; height: 20px; }
-.transport-btn:disabled { opacity: .3; cursor: default; }
-.transport-btn:disabled:hover { transform: none; background: rgba(255,255,255,.06); }
+.transport-btn:disabled { opacity: .25; cursor: default; pointer-events: none; }
+
 
 /* Volume control */
 .volume-wrap {
@@ -434,7 +434,7 @@ body {
 
 /* ===== VOTE BAR (pouce rouge | FIRE | pouce vert) ===== */
 .vote-bar {
-  position: absolute; bottom: -260px; left: 50%; z-index: 35;
+  position: absolute; bottom: -290px; left: 50%; z-index: 35;
   transform: translateX(-50%) translateZ(8px);
   display: flex; align-items: center; justify-content: center; gap: 20px;
 }
