@@ -386,48 +386,45 @@ body {
 .hammer-card {
   position: absolute; top: -140px; left: 50%; z-index: 30;
   transform: translateX(-50%) translateZ(8px);
-  display: flex; flex-direction: column; align-items: center; gap: 0;
+  display: flex; align-items: center; gap: 14px;
   pointer-events: none;
 }
 
-/* "PUISSANCE" label above gauge */
-.hammer-label {
-  font-family: 'Bangers', cursive; font-size: 14px;
-  color: rgba(255, 255, 255, .4); letter-spacing: 5px; text-transform: uppercase;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, .5);
-  margin-bottom: 2px;
-}
-
-/* Gauge wrapper */
+/* Gauge wrapper — circle + hammer only */
 .hammer-gauge-wrap {
-  position: relative; width: 110px; height: 110px; flex-shrink: 0;
+  position: relative; width: 90px; height: 90px; flex-shrink: 0;
 }
 .hammer-gauge {
   width: 100%; height: 100%;
   transform: rotate(-90deg);
 }
 
-/* Percentage overlaid in lower half of circle */
+/* Text info block — right of circle */
+.hammer-info {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.hammer-pct-line {
+  display: flex; align-items: baseline; gap: 8px;
+}
+.hammer-label {
+  font-family: 'Bangers', cursive; font-size: 16px;
+  color: rgba(255, 255, 255, .35); letter-spacing: 4px; text-transform: uppercase;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, .5);
+  line-height: 1;
+}
 .hammer-pct {
-  position: absolute; bottom: 12px; left: 50%;
-  transform: translateX(-50%);
-  font-family: 'Bangers', cursive; font-size: 22px;
-  color: rgba(255, 255, 255, .6);
+  font-family: 'Bangers', cursive; font-size: 32px;
+  color: rgba(255, 255, 255, .7);
   text-shadow: 0 2px 10px rgba(0, 0, 0, .6);
   letter-spacing: 2px; line-height: 1;
   transition: color .3s, text-shadow .3s;
-  z-index: 5;
 }
-
-/* Stage label below gauge */
 .hammer-stage {
-  font-family: 'Bangers', cursive; font-size: 20px;
+  font-family: 'Bangers', cursive; font-size: 18px;
   letter-spacing: 4px; text-transform: uppercase;
-  color: transparent; min-height: 26px; line-height: 1;
+  color: transparent; min-height: 22px; line-height: 1;
   text-shadow: none;
   transition: color .3s, text-shadow .3s;
-  text-align: center;
-  margin-top: 2px;
 }
 
 .gauge-track {
@@ -450,11 +447,11 @@ body {
   filter: blur(6px);
 }
 
-/* Hammer icon in upper half of gauge */
+/* Hammer icon centered in gauge */
 .hammer-icon-wrap {
-  position: absolute; top: 16px; left: 50%;
-  transform: translateX(-50%);
-  width: 38px; height: 38px;
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 42px; height: 42px;
   transition: width .4s ease-out, height .4s ease-out;
 }
 .hammer-icon {
@@ -536,8 +533,8 @@ body {
   animation: overloadTextPulse .25s ease-in-out infinite alternate;
 }
 @keyframes overloadTextPulse {
-  0% { opacity: .85; transform: translate(-50%,-50%) scale(1); }
-  100% { opacity: 1; transform: translate(-50%,-50%) scale(1.08); }
+  0% { opacity: .85; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1.08); }
 }
 .hammer-card[data-stage="overload"] .hammer-stage {
   color: #fff;
@@ -899,10 +896,11 @@ body {
   .fire-btn { width: 260px; height: 100px; }
   .user-card { left: 10px; padding: 10px 16px 10px 12px; }
   .user-name { font-size: 18px; }
-  .hammer-gauge-wrap { width: 95px; height: 95px; }
-  .hammer-pct { font-size: 24px; }
-  .hammer-stage { font-size: 17px; }
-  .hammer-card { top: -125px; }
+  .hammer-gauge-wrap { width: 80px; height: 80px; }
+  .hammer-pct { font-size: 28px; }
+  .hammer-stage { font-size: 16px; }
+  .hammer-label { font-size: 14px; }
+  .hammer-card { top: -115px; gap: 10px; }
 }
 
 @media (max-width: 600px) {
@@ -925,11 +923,11 @@ body {
   .user-crown { font-size: 22px; }
   .volume-wrap { right: 50px; }
   .volume-slider { width: 40px; }
-  .hammer-gauge-wrap { width: 80px; height: 80px; }
-  .hammer-pct { font-size: 20px; }
-  .hammer-stage { font-size: 14px; }
-  .hammer-label { font-size: 11px; }
-  .hammer-card { top: -105px; }
+  .hammer-gauge-wrap { width: 65px; height: 65px; }
+  .hammer-pct { font-size: 22px; }
+  .hammer-stage { font-size: 13px; }
+  .hammer-label { font-size: 12px; letter-spacing: 3px; }
+  .hammer-card { top: -95px; gap: 8px; }
   .play-btn img { height: 40px; }
   .transport-controls { padding: 4px 12px; gap: 8px; }
   .transport-btn { width: 32px; height: 32px; }

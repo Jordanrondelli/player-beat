@@ -879,8 +879,8 @@ function updateHammerVisuals(pct, kick) {
   // Scale hammer icon with percentage — bigger as power grows
   const hammerIconWrap = document.getElementById('hammerIconWrap');
   if (hammerIconWrap) {
-    const baseSize = 38;
-    const maxExtra = 18; // grows up to +18px at 100%
+    const baseSize = 42;
+    const maxExtra = 14; // grows up to +14px at 100%
     const size = baseSize + (pct / 100) * maxExtra;
     hammerIconWrap.style.width = size + 'px';
     hammerIconWrap.style.height = size + 'px';
@@ -1038,7 +1038,7 @@ function stopBeatSync() {
   if (gaugeFill) gaugeFill.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   if (gaugeGlow) gaugeGlow.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   const hammerIconWrap = document.getElementById('hammerIconWrap');
-  if (hammerIconWrap) { hammerIconWrap.style.width = '38px'; hammerIconWrap.style.height = '38px'; }
+  if (hammerIconWrap) { hammerIconWrap.style.width = '42px'; hammerIconWrap.style.height = '42px'; }
 }
 
 // ===== PLAYBACK CONTROLS =====
