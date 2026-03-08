@@ -33,7 +33,7 @@
     <!-- File input -->
     <div class="file-input-wrap">
       <label for="audioFileInput">Charger un son</label>
-      <input type="file" id="audioFileInput" accept="audio/*" aria-label="Charger un fichier audio">
+      <input type="file" id="audioFileInput" accept="audio/*" multiple aria-label="Charger un fichier audio">
     </div>
 
     <div class="scene" id="scene">
@@ -51,10 +51,18 @@
           <canvas id="waveformCanvas"></canvas>
           <span class="time-overlay left" id="currentTime">0:00</span>
           <span class="time-overlay right" id="totalTime">0:00</span>
-          <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
-            <img src="play.png" alt="Play" class="play-img" id="playImg">
-            <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
-          </button>
+          <div class="transport-controls">
+            <button class="transport-btn" id="prevBtn" aria-label="Son précédent">
+              <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" transform="scale(-1,1) translate(-24,0)"/></svg>
+            </button>
+            <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
+              <img src="play.png" alt="Play" class="play-img" id="playImg">
+              <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
+            </button>
+            <button class="transport-btn" id="nextBtn" aria-label="Son suivant">
+              <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+            </button>
+          </div>
           <div class="volume-wrap">
             <span class="volume-icon" id="volumeIcon" role="button" tabindex="0" aria-label="Volume">&#128266;</span>
             <input type="range" class="volume-slider" id="volumeSlider"

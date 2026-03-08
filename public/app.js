@@ -35,6 +35,8 @@ let sourceNode = null;
 let isPlaying = false;
 let startTime = 0;
 let pauseOffset = 0;
+let playlist = []; // array of { name, arrayBuffer }
+let currentTrackIndex = -1;
 let waveformData = [];
 let waveformSigned = []; // signed samples for neon line display
 
@@ -555,6 +557,11 @@ function animationLoop() {
       stopAudio();
       currentTime = 0;
       pauseOffset = 0;
+      // Auto-advance to next track
+      if (playlist.length > 1) {
+        const next = (currentTrackIndex + 1) % playlist.length;
+        loadTrack(next);
+      }
     }
   } else if (audioBuffer) {
     currentTime = pauseOffset;
@@ -726,17 +733,23 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// File input with loading + error handling
-document.getElementById('audioFileInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+// ===== PLAYLIST / TRACK LOADING =====
+function updateTransportButtons() {
+  document.getElementById('prevBtn').disabled = playlist.length <= 1;
+  document.getElementById('nextBtn').disabled = playlist.length <= 1;
+}
+updateTransportButtons();
 
+async function loadTrack(index) {
+  if (index < 0 || index >= playlist.length) return;
+  currentTrackIndex = index;
   loadingOverlay.classList.add('visible');
   stopAudio();
 
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    // decodeAudioData consumes the buffer, so we need a copy each time
+    const bufferCopy = playlist[index].arrayBuffer.slice(0);
+    audioBuffer = await audioCtx.decodeAudioData(bufferCopy);
     extractWaveformData(audioBuffer);
     detectedBPM = await detectBPM(audioBuffer);
     console.log('Detected BPM:', detectedBPM);
@@ -750,6 +763,33 @@ document.getElementById('audioFileInput').addEventListener('change', async (e) =
   } finally {
     loadingOverlay.classList.remove('visible');
   }
+}
+
+// File input with loading + error handling
+document.getElementById('audioFileInput').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+
+  for (const file of files) {
+    const arrayBuffer = await file.arrayBuffer();
+    playlist.push({ name: file.name, arrayBuffer });
+  }
+
+  updateTransportButtons();
+  // Load the first of the newly added files
+  await loadTrack(playlist.length - files.length);
+});
+
+document.getElementById('prevBtn').addEventListener('click', () => {
+  if (playlist.length <= 1) return;
+  const prev = (currentTrackIndex - 1 + playlist.length) % playlist.length;
+  loadTrack(prev);
+});
+
+document.getElementById('nextBtn').addEventListener('click', () => {
+  if (playlist.length <= 1) return;
+  const next = (currentTrackIndex + 1) % playlist.length;
+  loadTrack(next);
 });
 
 // ===== VOTES =====
