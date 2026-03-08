@@ -234,6 +234,10 @@ const hammerSparks = document.getElementById('hammerSparks');
 const hammerShockwave = document.getElementById('hammerShockwave');
 const hammerStageEl = document.getElementById('hammerStage');
 let currentHammerStage = 'cold';
+let hammerCharge = 0;        // 0-100, accumulates over time
+let hammerPeakStage = 'cold'; // highest stage reached — never goes down
+let prevLoudnessForDrop = 0; // track loudness history for drop detection
+let loudnessHistory = [];     // rolling window for drop detection
 let detectedBPM = 0;
 let beatIntervalId = null;
 const GAUGE_CIRCUMFERENCE = 326.73; // 2π × 52
@@ -368,10 +372,30 @@ function drawWaveform(currentTime) {
   }
   loudnessSmooth += (loudnessRaw - loudnessSmooth) * 0.12;
 
-  // Hammer power % — based on loudness (how loud/saturated the sound is)
-  const hammerRaw = Math.min(1, Math.max(0, (loudnessSmooth - 0.03) / 0.4));
-  hammerSmooth += (hammerRaw - hammerSmooth) * .08;
-  const hammerPct = Math.round(Math.pow(hammerSmooth, 0.7) * 100);
+  // Hammer charge system — accumulates over time, drops boost it
+  if (isPlaying && audioBuffer) {
+    const loudNorm = Math.min(1, Math.max(0, (loudnessSmooth - 0.03) / 0.4));
+
+    // Base charge: slow accumulation proportional to loudness (~30s to fill at full volume)
+    const chargeRate = loudNorm * 0.06; // ~0.06 per frame at 60fps = ~3.6/sec at max
+    hammerCharge = Math.min(100, hammerCharge + chargeRate);
+
+    // Drop detection: compare current loudness to recent average
+    loudnessHistory.push(loudNorm);
+    if (loudnessHistory.length > 90) loudnessHistory.shift(); // ~1.5s window at 60fps
+    if (loudnessHistory.length >= 30) {
+      const oldAvg = loudnessHistory.slice(0, 30).reduce((a, b) => a + b, 0) / 30;
+      const recentAvg = loudnessHistory.slice(-15).reduce((a, b) => a + b, 0) / 15;
+      const dropRise = recentAvg - oldAvg;
+      // Big energy jump = drop detected → boost charge significantly
+      if (dropRise > 0.15) {
+        const boost = Math.min(25, dropRise * 80);
+        hammerCharge = Math.min(100, hammerCharge + boost);
+      }
+    }
+  }
+
+  const hammerPct = Math.round(hammerCharge);
   updateHammerVisuals(hammerPct, kickDecay);
 
 
@@ -637,7 +661,6 @@ function updateHammerVisuals(pct, kick) {
   if (!hPctEl) return;
 
   hPctEl.textContent = pct + '%';
-  // Kick bounce on percentage
   hPctEl.style.transform = kick > .3 ? `scale(${1 + kick * .2})` : '';
 
   // Update circular gauge
@@ -645,27 +668,38 @@ function updateHammerVisuals(pct, kick) {
   if (gaugeFill) gaugeFill.style.strokeDashoffset = offset;
   if (gaugeGlow) gaugeGlow.style.strokeDashoffset = offset;
 
-  // Determine stage
+  // Scale hammer icon with percentage — bigger as power grows
+  const hammerIconWrap = document.getElementById('hammerIconWrap');
+  if (hammerIconWrap) {
+    const baseSize = 54;
+    const maxExtra = 36; // grows up to +36px at 100%
+    const size = baseSize + (pct / 100) * maxExtra;
+    hammerIconWrap.style.width = size + 'px';
+    hammerIconWrap.style.height = size + 'px';
+  }
+
+  // Determine stage — LOCKED: once reached, never goes back down
+  const stageOrder = ['cold', 'warm', 'hot', 'max'];
   let newStage = 'cold';
   let stageLabel = '';
   if (pct >= 90) { newStage = 'max'; stageLabel = 'MAXIMUM'; }
   else if (pct >= 66) { newStage = 'hot'; stageLabel = 'EN FEU'; }
   else if (pct >= 33) { newStage = 'warm'; stageLabel = 'CHAUD'; }
 
-  // Stage transition activation
-  if (newStage !== currentHammerStage) {
-    const stageOrder = ['cold', 'warm', 'hot', 'max'];
-    const oldIdx = stageOrder.indexOf(currentHammerStage);
-    const newIdx = stageOrder.indexOf(newStage);
+  // Lock: only go up, never down
+  const peakIdx = stageOrder.indexOf(hammerPeakStage);
+  const newIdx = stageOrder.indexOf(newStage);
+  if (newIdx > peakIdx) {
+    hammerPeakStage = newStage;
+    triggerHammerActivation(newStage);
+  }
 
-    // Only trigger activation on stage UP (not down)
-    if (newIdx > oldIdx) {
-      triggerHammerActivation(newStage);
-    }
-
-    currentHammerStage = newStage;
-    if (hammerCard) hammerCard.setAttribute('data-stage', newStage);
-    if (hammerStageEl) hammerStageEl.textContent = stageLabel;
+  // Visual stage always follows peak (locked)
+  if (hammerPeakStage !== currentHammerStage) {
+    currentHammerStage = hammerPeakStage;
+    if (hammerCard) hammerCard.setAttribute('data-stage', hammerPeakStage);
+    const labels = { cold: '', warm: 'CHAUD', hot: 'EN FEU', max: 'MAXIMUM' };
+    if (hammerStageEl) hammerStageEl.textContent = labels[hammerPeakStage];
   }
 }
 
@@ -677,10 +711,6 @@ function triggerHammerActivation(stage) {
     hammerShockwave.classList.add('active');
     setTimeout(() => hammerShockwave.classList.remove('active'), 700);
   }
-
-  // Sparks
-  const sparkCount = stage === 'max' ? 16 : stage === 'hot' ? 10 : 6;
-  spawnHammerSparks(sparkCount, stage);
 
   // Hammer slam
   if (hammerIconEl) {
@@ -709,34 +739,6 @@ function triggerHammerActivation(stage) {
   }
 }
 
-function spawnHammerSparks(count, stage) {
-  if (!hammerSparks) return;
-  const colors = {
-    warm: ['#ffcc00', '#ffaa00', '#ffe066'],
-    hot:  ['#ff6600', '#ff3300', '#ffaa00', '#ff0000'],
-    max:  ['#ff0000', '#ff3300', '#ffffff', '#ffcc00', '#ff6600']
-  };
-  const palette = colors[stage] || colors.warm;
-
-  for (let i = 0; i < count; i++) {
-    const spark = document.createElement('div');
-    spark.className = 'hammer-spark';
-    const angle = (Math.PI * 2 * i) / count + (Math.random() - .5) * .5;
-    const dist = 25 + Math.random() * 40;
-    const size = 2 + Math.random() * 4;
-    const color = palette[Math.floor(Math.random() * palette.length)];
-    spark.style.cssText = `
-      width: ${size}px; height: ${size}px;
-      background: ${color};
-      box-shadow: 0 0 ${size * 2}px ${color};
-      --sx: ${Math.cos(angle) * dist}px;
-      --sy: ${Math.sin(angle) * dist}px;
-    `;
-    hammerSparks.appendChild(spark);
-    setTimeout(() => spark.remove(), 600);
-  }
-}
-
 function startBeatSync() {
   stopBeatSync();
   if (!detectedBPM || !hammerIconEl) return;
@@ -754,11 +756,6 @@ function startBeatSync() {
     hammerIconEl.style.transform = `rotate(${angle}deg) scale(${scl})`;
     hammerIconEl.style.transition = 'transform .03s ease-out';
 
-    // Sparks on strong beats at hot/max
-    if (pwr > 0.4 && (currentHammerStage === 'hot' || currentHammerStage === 'max')) {
-      spawnHammerSparks(Math.floor(pwr * 5), currentHammerStage);
-    }
-
     if (hammerHitTimeout) clearTimeout(hammerHitTimeout);
     hammerHitTimeout = setTimeout(() => {
       hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
@@ -774,12 +771,17 @@ function stopBeatSync() {
   if (hammerIconEl) {
     hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
   }
-  // Reset hammer stage
+  // Reset hammer charge and stage
+  hammerCharge = 0;
+  hammerPeakStage = 'cold';
   currentHammerStage = 'cold';
+  loudnessHistory = [];
   if (hammerCard) hammerCard.setAttribute('data-stage', 'cold');
   if (hammerStageEl) hammerStageEl.textContent = '';
   if (gaugeFill) gaugeFill.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   if (gaugeGlow) gaugeGlow.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
+  const hammerIconWrap = document.getElementById('hammerIconWrap');
+  if (hammerIconWrap) { hammerIconWrap.style.width = '54px'; hammerIconWrap.style.height = '54px'; }
 }
 
 // ===== PLAYBACK CONTROLS =====

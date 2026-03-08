@@ -398,14 +398,14 @@ body {
 
 /* Gauge wrapper */
 .hammer-gauge-wrap {
-  position: relative; width: 100px; height: 100px;
+  position: relative; width: 120px; height: 120px;
 }
 .hammer-gauge {
   width: 100%; height: 100%;
   transform: rotate(-90deg);
 }
 .gauge-track {
-  fill: none; stroke: rgba(255,255,255,.06); stroke-width: 5;
+  fill: none; stroke: rgba(255,255,255,.04); stroke-width: 3;
 }
 .gauge-fill {
   fill: none; stroke: rgba(255,200,50,.8); stroke-width: 5;
@@ -424,11 +424,12 @@ body {
   filter: blur(6px);
 }
 
-/* Hammer icon centered in gauge */
+/* Hammer icon centered in gauge — grows dynamically via JS */
 .hammer-icon-wrap {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   width: 54px; height: 54px;
+  transition: width .4s ease-out, height .4s ease-out;
 }
 .hammer-icon {
   width: 100%; height: 100%; object-fit: contain;
@@ -436,20 +437,6 @@ body {
   transform: rotate(0deg) scale(1);
   transition: transform .12s cubic-bezier(.1,.9,.3,1);
   filter: drop-shadow(0 2px 8px rgba(255,120,0,.4));
-}
-
-/* Sparks container */
-.hammer-sparks {
-  position: absolute; inset: -20px; pointer-events: none; overflow: visible;
-}
-.hammer-spark {
-  position: absolute; border-radius: 50%;
-  top: 50%; left: 50%;
-  animation: sparkFly .6s ease-out forwards;
-}
-@keyframes sparkFly {
-  0% { transform: translate(0, 0) scale(1); opacity: 1; }
-  100% { transform: translate(var(--sx), var(--sy)) scale(0); opacity: 0; }
 }
 
 /* Shockwave */
@@ -799,8 +786,7 @@ body {
   .fire-btn { width: 260px; height: 100px; }
   .user-card { left: 10px; padding: 10px 16px 10px 12px; }
   .user-name { font-size: 18px; }
-  .hammer-gauge-wrap { width: 80px; height: 80px; }
-  .hammer-icon-wrap { width: 44px; height: 44px; }
+  .hammer-gauge-wrap { width: 100px; height: 100px; }
   .hammer-pct { font-size: 18px; }
 }
 
@@ -825,8 +811,7 @@ body {
   .volume-wrap { right: 50px; }
   .volume-slider { width: 40px; }
   .hammer-label { display: none; }
-  .hammer-gauge-wrap { width: 65px; height: 65px; }
-  .hammer-icon-wrap { width: 36px; height: 36px; }
+  .hammer-gauge-wrap { width: 80px; height: 80px; }
   .hammer-pct { font-size: 14px; }
   .hammer-stage { font-size: 10px; }
 }
