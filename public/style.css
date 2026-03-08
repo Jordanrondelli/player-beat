@@ -144,8 +144,8 @@ body {
 /* ===== MAIN WRAPPER ===== */
 .wrapper {
   width: 100%; height: 100%; position: relative; z-index: 5;
-  display: flex; align-items: center; justify-content: center;
-  padding-left: 14vw;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 6vh;
 }
 
 /* ===== FIRE IMPACT EFFECTS ===== */
@@ -208,8 +208,7 @@ body {
 /* ===== SCENE (3D perspective) ===== */
 .scene {
   position: relative; z-index: 10;
-  width: min(1560px, 88vw);
-  margin-top: -280px;
+  width: min(1560px, 92vw);
   transform-style: preserve-3d;
   transform: perspective(1200px) rotateY(-5deg) rotateX(2deg);
   transform-origin: 55% 50%;
@@ -230,7 +229,7 @@ body {
 
 /* ===== WAVEFORM PANEL ===== */
 .waveform-panel {
-  width: 100%; height: min(400px, 45vh); padding: 0;
+  width: 100%; height: min(340px, 38vh); padding: 0;
   border-radius: 26px;
   border: 1px solid rgba(255, 255, 255, .1);
   border-top-color: rgba(255, 255, 255, .18);
@@ -311,30 +310,33 @@ body {
 
 /* Play button */
 .transport-controls {
-  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); z-index: 10;
-  display: flex; align-items: center; justify-content: center; gap: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: rgba(8, 16, 48, .35);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(190, 215, 255, .15);
+  border-radius: 50px; padding: 8px 18px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
 }
 .play-btn {
   border: none; cursor: pointer; background: transparent; padding: 0;
   display: flex; align-items: center; justify-content: center;
   transition: transform .12s;
 }
-.play-btn:hover { transform: scale(1.05); }
-.play-btn:active { transform: scale(0.95); }
-.play-btn img { height: 60px; width: auto; display: block; }
+.play-btn:hover { transform: scale(1.08); }
+.play-btn:active { transform: scale(0.92); }
+.play-btn img { height: 52px; width: auto; display: block; }
 .play-img, .pause-img { pointer-events: none; }
 .transport-btn {
-  border: none; cursor: pointer; background: rgba(255,255,255,.08);
-  border-radius: 50%; width: 40px; height: 40px;
+  border: none; cursor: pointer; background: rgba(255,255,255,.06);
+  border-radius: 50%; width: 38px; height: 38px;
   display: flex; align-items: center; justify-content: center;
   transition: transform .12s, background .2s;
-  backdrop-filter: blur(4px);
 }
-.transport-btn:hover { transform: scale(1.1); background: rgba(255,255,255,.15); }
+.transport-btn:hover { transform: scale(1.12); background: rgba(255,255,255,.14); }
 .transport-btn:active { transform: scale(0.9); }
-.transport-btn svg { width: 22px; height: 22px; }
+.transport-btn svg { width: 20px; height: 20px; }
 .transport-btn:disabled { opacity: .3; cursor: default; }
-.transport-btn:disabled:hover { transform: none; background: rgba(255,255,255,.08); }
+.transport-btn:disabled:hover { transform: none; background: rgba(255,255,255,.06); }
 
 /* Volume control */
 .volume-wrap {
@@ -428,19 +430,27 @@ body {
   pointer-events: none; transition: width .1s linear;
 }
 
-/* ===== VOTE BUTTONS ===== */
-.vote-left { position: absolute; bottom: -340px; left: calc(50% - 380px); z-index: 35; }
-.vote-right { position: absolute; bottom: -340px; right: calc(50% - 380px); z-index: 35; }
+/* ===== CONTROL BAR (votes + fire below waveform) ===== */
+.control-bar {
+  position: absolute; bottom: -120px; left: 50%; z-index: 35;
+  transform: translateX(-50%) translateZ(8px);
+  display: flex; align-items: center; justify-content: center; gap: 30px;
+}
 .vote-icon {
   width: 100%; height: 100%; object-fit: contain; pointer-events: none;
   transition: filter .3s ease;
 }
 .vote-btn {
-  width: 120px; height: 120px; border-radius: 22px; border: none; cursor: pointer;
+  width: 80px; height: 80px; border-radius: 18px; border: none; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   background: transparent;
   position: relative; overflow: visible;
-  transition: filter .3s ease;
+  transition: filter .3s ease, transform .15s;
+  animation: floatVote 4s ease-in-out infinite;
+}
+@keyframes floatVote {
+  0%, 100% { transform: translateY(0) }
+  50% { transform: translateY(-3px) }
 }
 .vote-btn-red .vote-icon {
   filter: drop-shadow(0 0 12px rgba(220, 40, 40, .45)) drop-shadow(0 0 25px rgba(200, 20, 20, .2));
@@ -454,17 +464,7 @@ body {
 .vote-btn-green:hover .vote-icon {
   filter: drop-shadow(0 0 18px rgba(40, 200, 60, .7)) drop-shadow(0 0 40px rgba(20, 180, 40, .35));
 }
-.vote-left .vote-btn { animation: floatL 4s ease-in-out infinite; transform-origin: center; }
-.vote-right .vote-btn { animation: floatR 4.5s ease-in-out infinite; }
-@keyframes floatL {
-  0%, 100% { transform: translateY(0) rotate(-1deg) translateZ(4px) }
-  50% { transform: translateY(-3px) rotate(0.5deg) translateZ(4px) }
-}
-@keyframes floatR {
-  0%, 100% { transform: translateY(0) rotate(1deg) translateZ(4px) }
-  50% { transform: translateY(-3px) rotate(-0.5deg) translateZ(4px) }
-}
-
+.vote-btn:hover { transform: translateY(-4px) scale(1.05); }
 .vote-btn:active {
   animation: none !important;
   transform: translateY(3px) scale(.92) !important;
@@ -472,7 +472,7 @@ body {
 
 /* ===== USER CARD ===== */
 .user-card {
-  position: absolute; top: -65px; left: 15px; z-index: 30;
+  position: absolute; top: -60px; left: 20px; z-index: 30;
   display: flex; align-items: center; gap: 14px;
   padding: 28px 45px 28px 35px; border-radius: 18px;
   background: url('bloc-titre.png') center / 100% 100% no-repeat !important;
@@ -526,7 +526,7 @@ body {
 
 /* ===== CHAT CARD (L'avis du chat) ===== */
 .chat-card {
-  position: absolute; top: -20px; right: 15px; z-index: 30;
+  position: absolute; top: -15px; right: 20px; z-index: 30;
   width: 210px; padding: 20px 22px; border-radius: 16px;
   background: url('bloc-chat.png') center / 100% 100% no-repeat !important;
   border: none !important;
@@ -584,11 +584,10 @@ body {
 
 /* ===== FIRE PANIC BUTTON ===== */
 .fire-wrap {
-  position: absolute; bottom: -300px; left: 50%; z-index: 40;
-  transform: translateX(-50%) translateZ(10px);
+  display: flex; align-items: center; justify-content: center;
 }
 .fire-btn {
-  width: 480px; height: 185px; border: none; cursor: pointer;
+  width: 320px; height: 125px; border: none; cursor: pointer;
   background-color: transparent; padding: 0;
   filter:
     drop-shadow(0 0 4px rgba(255, 20, 0, .9))
@@ -673,19 +672,16 @@ body {
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1100px) {
-  .wrapper { padding-left: 2vw; }
   .scene {
-    width: 92vw;
+    width: 94vw;
     animation: sceneFloatSm 6s ease-in-out infinite;
   }
-  .vote-left { left: calc(50% - 300px); bottom: -290px; }
-  .vote-right { right: calc(50% - 300px); bottom: -290px; }
-  .vote-btn { width: 100px; height: 100px; border-radius: 18px; }
-  .fire-wrap { bottom: -260px; }
-  .chat-card { width: 180px; font-size: 11px; right: 5px; }
-  .user-card { left: 5px; padding: 10px 16px 10px 12px; }
+  .control-bar { gap: 20px; bottom: -100px; }
+  .vote-btn { width: 70px; height: 70px; border-radius: 16px; }
+  .fire-btn { width: 260px; height: 100px; }
+  .chat-card { width: 180px; font-size: 11px; right: 10px; }
+  .user-card { left: 10px; padding: 10px 16px 10px 12px; }
   .user-name { font-size: 16px; }
-  .fire-btn { width: 350px; height: 135px; }
   .hammer-card { padding: 8px 14px 8px 10px; }
   .hammer-pct { font-size: 18px; }
   .hammer-icon { width: 36px; height: 36px; }
@@ -693,24 +689,22 @@ body {
 
 @media (max-width: 600px) {
   .scene {
-    width: 95vw;
+    width: 96vw;
     animation: sceneFloatXs 6s ease-in-out infinite;
   }
-  .waveform-panel { height: min(240px, 35vh); }
-  .vote-left { left: calc(50% - 230px); bottom: -230px; }
-  .vote-right { right: calc(50% - 230px); bottom: -230px; }
-  .vote-btn { width: 80px; height: 80px; border-radius: 16px; }
-  .chat-card { width: 160px; right: 2px; padding: 10px 12px; }
+  .waveform-panel { height: min(220px, 30vh); }
+  .control-bar { gap: 12px; bottom: -85px; }
+  .vote-btn { width: 55px; height: 55px; border-radius: 14px; }
+  .fire-btn { width: 160px; height: 65px; }
+  .chat-card { width: 160px; right: 5px; padding: 10px 12px; }
   .chat-title { font-size: 12px; }
   .user-card {
-    top: -45px; left: 2px; gap: 8px;
+    top: -45px; left: 5px; gap: 8px;
     padding: 8px 12px 8px 8px; border-radius: 14px;
   }
   .user-avatar { width: 38px; height: 38px; font-size: 16px; }
   .user-name { font-size: 14px; }
   .user-crown { font-size: 22px; }
-  .fire-wrap { bottom: -220px; }
-  .fire-btn { width: 200px; height: 90px; }
   .volume-wrap { right: 50px; }
   .volume-slider { width: 40px; }
   .hammer-card { padding: 6px 10px; }

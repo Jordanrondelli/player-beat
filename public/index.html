@@ -51,18 +51,6 @@
           <canvas id="waveformCanvas"></canvas>
           <span class="time-overlay left" id="currentTime">0:00</span>
           <span class="time-overlay right" id="totalTime">0:00</span>
-          <div class="transport-controls">
-            <button class="transport-btn" id="prevBtn" aria-label="Son précédent">
-              <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" transform="scale(-1,1) translate(-24,0)"/></svg>
-            </button>
-            <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
-              <img src="play.png" alt="Play" class="play-img" id="playImg">
-              <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
-            </button>
-            <button class="transport-btn" id="nextBtn" aria-label="Son suivant">
-              <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-            </button>
-          </div>
           <div class="volume-wrap">
             <span class="volume-icon" id="volumeIcon" role="button" tabindex="0" aria-label="Volume">&#128266;</span>
             <input type="range" class="volume-slider" id="volumeSlider"
@@ -78,21 +66,6 @@
         <div class="mini-progress" id="miniProgress"></div>
       </div>
 
-      <!-- Hammer meter card -->
-      <div class="hammer-card glass-panel" id="hammerMeter">
-        <img src="marteau.png" alt="Marteau" class="hammer-icon" id="hammerIcon">
-        <div class="hammer-label">PUISSANCE</div>
-        <div class="hammer-pct" id="hammerPct">0%</div>
-      </div>
-
-      <!-- Vote buttons -->
-      <div class="vote-left">
-        <button class="vote-btn vote-btn-red" id="btnDown" aria-label="Je n'aime pas"><img src="pouce-rouge.png" alt="Pouce rouge" class="vote-icon"></button>
-      </div>
-      <div class="vote-right">
-        <button class="vote-btn vote-btn-green" id="btnUp" aria-label="J'aime"><img src="pouce-vert.png" alt="Pouce vert" class="vote-icon"></button>
-      </div>
-
       <!-- User card -->
       <div class="user-card">
         <div class="user-avatar">&#127925;</div>
@@ -102,6 +75,13 @@
         </div>
         <span class="user-crown">&#128081;</span>
         <div><div class="user-rank">GOLD</div></div>
+      </div>
+
+      <!-- Hammer meter card -->
+      <div class="hammer-card glass-panel" id="hammerMeter">
+        <img src="marteau.png" alt="Marteau" class="hammer-icon" id="hammerIcon">
+        <div class="hammer-label">PUISSANCE</div>
+        <div class="hammer-pct" id="hammerPct">0%</div>
       </div>
 
       <!-- L'avis du chat -->
@@ -127,11 +107,27 @@
         </div>
       </div>
 
-      <!-- Fire panic button -->
-      <div class="fire-wrap">
-        <button class="fire-btn" id="btnFire" aria-label="FIRE! Vote coup de coeur">
-          <img src="fire.png" alt="FIRE" class="fire-img">
-        </button>
+      <!-- Control bar below waveform -->
+      <div class="control-bar">
+        <button class="vote-btn vote-btn-red" id="btnDown" aria-label="Je n'aime pas"><img src="pouce-rouge.png" alt="Pouce rouge" class="vote-icon"></button>
+        <div class="transport-controls">
+          <button class="transport-btn" id="prevBtn" aria-label="Son précédent">
+            <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" transform="scale(-1,1) translate(-24,0)"/></svg>
+          </button>
+          <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
+            <img src="play.png" alt="Play" class="play-img" id="playImg">
+            <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
+          </button>
+          <button class="transport-btn" id="nextBtn" aria-label="Son suivant">
+            <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </button>
+        </div>
+        <button class="vote-btn vote-btn-green" id="btnUp" aria-label="J'aime"><img src="pouce-vert.png" alt="Pouce vert" class="vote-icon"></button>
+        <div class="fire-wrap">
+          <button class="fire-btn" id="btnFire" aria-label="FIRE! Vote coup de coeur">
+            <img src="fire.png" alt="FIRE" class="fire-img">
+          </button>
+        </div>
       </div>
     </div>
   </div>
