@@ -378,7 +378,7 @@ function prescanTrackCriteria(buffer) {
 
 let detectedBPM = 0;
 let beatIntervalId = null;
-const GAUGE_CIRCUMFERENCE = 326.73; // 2π × 52
+const GAUGE_CIRCUMFERENCE = 389.56; // 2π × 62
 
 // ===== MAIN WAVEFORM DRAW =====
 function drawWaveform(currentTime) {
@@ -868,7 +868,7 @@ function updateHammerVisuals(pct, kick) {
   const hPctEl = document.getElementById('hammerPct');
   if (!hPctEl) return;
 
-  hPctEl.textContent = pct + '%';
+  hPctEl.textContent = 'PUISSANCE ' + pct + '%';
 
   // Update circular gauge
   const offset = GAUGE_CIRCUMFERENCE * (1 - pct / 100);
@@ -878,8 +878,8 @@ function updateHammerVisuals(pct, kick) {
   // Scale hammer icon with percentage — bigger as power grows
   const hammerIconWrap = document.getElementById('hammerIconWrap');
   if (hammerIconWrap) {
-    const baseSize = 44;
-    const maxExtra = 22; // grows up to +22px at 100%
+    const baseSize = 56;
+    const maxExtra = 24; // grows up to +24px at 100%
     const size = baseSize + (pct / 100) * maxExtra;
     hammerIconWrap.style.width = size + 'px';
     hammerIconWrap.style.height = size + 'px';
@@ -1023,7 +1023,7 @@ function stopBeatSync() {
   if (gaugeFill) gaugeFill.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   if (gaugeGlow) gaugeGlow.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   const hammerIconWrap = document.getElementById('hammerIconWrap');
-  if (hammerIconWrap) { hammerIconWrap.style.width = '44px'; hammerIconWrap.style.height = '44px'; }
+  if (hammerIconWrap) { hammerIconWrap.style.width = '56px'; hammerIconWrap.style.height = '56px'; }
 }
 
 // ===== PLAYBACK CONTROLS =====

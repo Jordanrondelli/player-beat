@@ -40,20 +40,21 @@
       <!-- Hammer meter (above waveform) -->
       <div class="hammer-card" id="hammerMeter">
         <div class="hammer-gauge-wrap">
-          <svg class="hammer-gauge" viewBox="0 0 140 140">
-            <!-- Curved text paths -->
+          <svg class="hammer-gauge" viewBox="0 0 200 200">
             <defs>
-              <path id="curveTop" d="M 10,70 A 60,60 0 0,1 130,70" fill="none" />
-              <path id="curveBottom" d="M 18,70 A 52,52 0 0,0 122,70" fill="none" />
+              <!-- Arc for "PUISSANCE XX%" above the circle -->
+              <path id="curveTop" d="M 16,100 A 84,84 0 0,1 184,100" fill="none" />
+              <!-- Arc for stage label below the circle -->
+              <path id="curveBottom" d="M 30,108 A 74,74 0 0,0 170,108" fill="none" />
             </defs>
-            <circle class="gauge-track" cx="70" cy="70" r="52" />
-            <circle class="gauge-fill" id="gaugeFill" cx="70" cy="70" r="52" />
-            <circle class="gauge-glow" id="gaugeGlow" cx="70" cy="70" r="52" />
-            <!-- Curved percentage text above -->
+            <circle class="gauge-track" cx="100" cy="100" r="62" />
+            <circle class="gauge-fill" id="gaugeFill" cx="100" cy="100" r="62" />
+            <circle class="gauge-glow" id="gaugeGlow" cx="100" cy="100" r="62" />
+            <!-- "PUISSANCE XX%" curved above -->
             <text class="hammer-pct-curved">
-              <textPath href="#curveTop" startOffset="50%" text-anchor="middle" id="hammerPct">0%</textPath>
+              <textPath href="#curveTop" startOffset="50%" text-anchor="middle" id="hammerPct">PUISSANCE 0%</textPath>
             </text>
-            <!-- Curved stage label below -->
+            <!-- Stage label curved below -->
             <text class="hammer-stage-curved">
               <textPath href="#curveBottom" startOffset="50%" text-anchor="middle" id="hammerStage"></textPath>
             </text>

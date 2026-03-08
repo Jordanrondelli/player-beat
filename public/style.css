@@ -384,7 +384,7 @@ body {
 
 /* ===== HAMMER CARD (above waveform panel) ===== */
 .hammer-card {
-  position: absolute; top: -100px; left: 50%; z-index: 30;
+  position: absolute; top: -130px; left: 50%; z-index: 30;
   transform: translateX(-50%) translateZ(8px);
   display: flex; align-items: center; justify-content: center;
   padding: 0;
@@ -395,7 +395,7 @@ body {
 
 /* Gauge wrapper */
 .hammer-gauge-wrap {
-  position: relative; width: 110px; height: 110px; flex-shrink: 0;
+  position: relative; width: 160px; height: 160px; flex-shrink: 0;
 }
 .hammer-gauge {
   width: 100%; height: 100%;
@@ -405,20 +405,21 @@ body {
 
 /* Curved text on SVG arcs */
 .hammer-pct-curved {
-  font-family: 'Bangers', cursive; font-size: 18px;
-  letter-spacing: 3px; fill: rgba(255, 255, 255, .5);
+  font-family: 'Bangers', cursive; font-size: 17px;
+  letter-spacing: 4px; fill: rgba(255, 255, 255, .55);
   transform: rotate(90deg);
-  transform-origin: 70px 70px;
+  transform-origin: 100px 100px;
   transition: fill .3s;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .5));
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, .6));
 }
 .hammer-stage-curved {
-  font-family: 'Bangers', cursive; font-size: 11px;
-  letter-spacing: 3px; text-transform: uppercase;
+  font-family: 'Bangers', cursive; font-size: 16px;
+  letter-spacing: 4px; text-transform: uppercase;
   fill: transparent;
   transform: rotate(90deg);
-  transform-origin: 70px 70px;
+  transform-origin: 100px 100px;
   transition: fill .3s;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .5));
 }
 .gauge-track {
   fill: none; stroke: rgba(255,255,255,.04); stroke-width: 3;
@@ -426,16 +427,16 @@ body {
 .gauge-fill {
   fill: none; stroke: rgba(255,200,50,.8); stroke-width: 5;
   stroke-linecap: round;
-  stroke-dasharray: 326.73; /* 2π × 52 */
-  stroke-dashoffset: 326.73;
+  stroke-dasharray: 389.56; /* 2π × 52 */
+  stroke-dashoffset: 389.56;
   transition: stroke-dashoffset .3s ease-out, stroke .3s;
   filter: drop-shadow(0 0 4px rgba(255,200,50,.5));
 }
 .gauge-glow {
   fill: none; stroke: rgba(255,200,50,.3); stroke-width: 10;
   stroke-linecap: round;
-  stroke-dasharray: 326.73;
-  stroke-dashoffset: 326.73;
+  stroke-dasharray: 389.56;
+  stroke-dashoffset: 389.56;
   transition: stroke-dashoffset .3s ease-out, stroke .3s;
   filter: blur(6px);
 }
@@ -444,7 +445,7 @@ body {
 .hammer-icon-wrap {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 44px; height: 44px;
+  width: 56px; height: 56px;
   transition: width .4s ease-out, height .4s ease-out;
 }
 .hammer-icon {
@@ -866,9 +867,10 @@ body {
   .fire-btn { width: 260px; height: 100px; }
   .user-card { left: 10px; padding: 10px 16px 10px 12px; }
   .user-name { font-size: 18px; }
-  .hammer-gauge-wrap { width: 90px; height: 90px; }
-  .hammer-pct-curved { font-size: 15px; }
-  .hammer-card { top: -85px; }
+  .hammer-gauge-wrap { width: 130px; height: 130px; }
+  .hammer-pct-curved { font-size: 14px; }
+  .hammer-stage-curved { font-size: 13px; }
+  .hammer-card { top: -110px; }
 }
 
 @media (max-width: 600px) {
@@ -891,10 +893,10 @@ body {
   .user-crown { font-size: 22px; }
   .volume-wrap { right: 50px; }
   .volume-slider { width: 40px; }
-  .hammer-gauge-wrap { width: 75px; height: 75px; }
-  .hammer-pct-curved { font-size: 13px; }
-  .hammer-stage-curved { font-size: 9px; }
-  .hammer-card { top: -70px; }
+  .hammer-gauge-wrap { width: 110px; height: 110px; }
+  .hammer-pct-curved { font-size: 12px; }
+  .hammer-stage-curved { font-size: 11px; }
+  .hammer-card { top: -95px; }
   .play-btn img { height: 40px; }
   .transport-controls { padding: 4px 12px; gap: 8px; }
   .transport-btn { width: 32px; height: 32px; }
