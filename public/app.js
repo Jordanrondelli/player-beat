@@ -751,13 +751,32 @@ document.getElementById('btnFire').addEventListener('click', function () {
   sendVote('fire');
   triggerFire();
   const r = this.getBoundingClientRect();
-  for (let i = 0; i < 12; i++) {
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+
+  // Shockwave from button center
+  const shock = document.createElement('div');
+  shock.className = 'fire-shockwave';
+  shock.style.left = cx + 'px';
+  shock.style.top = cy + 'px';
+  shock.style.transform = 'translate(-50%, -50%)';
+  document.body.appendChild(shock);
+  shock.addEventListener('animationend', () => shock.remove());
+
+  // Flash bang
+  const flash = document.createElement('div');
+  flash.className = 'fire-flash';
+  document.body.appendChild(flash);
+  flash.addEventListener('animationend', () => flash.remove());
+
+  // Emoji explosion
+  for (let i = 0; i < 20; i++) {
     setTimeout(() => {
       showEmojiSplash('\uD83D\uDD25',
-        r.left + r.width / 2 - 30 + (Math.random() - .5) * 200,
-        r.top - 20 + (Math.random() - .5) * 100
+        cx - 30 + (Math.random() - .5) * 300,
+        cy - 20 + (Math.random() - .5) * 200
       );
-    }, i * 90);
+    }, i * 60);
   }
 });
 
