@@ -213,7 +213,7 @@ function drawMiniWaveform() {
 // ===== LOUDNESS ANALYSER =====
 const loudnessAnalyser = audioCtx.createAnalyser();
 loudnessAnalyser.fftSize = 2048;
-loudnessAnalyser.smoothingTimeConstant = 0.3;
+loudnessAnalyser.smoothingTimeConstant = 0.15;
 const loudnessTimeData = new Uint8Array(loudnessAnalyser.fftSize);
 gainNode.connect(loudnessAnalyser);
 
@@ -392,96 +392,94 @@ function drawWaveform(currentTime) {
   loudnessSmooth += (loudnessRaw - loudnessSmooth) * 0.12;
 
   // ===== HAMMER: MULTI-CRITERIA POWER SCORING =====
-  // 5 criteria must ALL converge for 100%. Weighted geometric mean.
-  // Sub + Bass + Kick Impact + Spectral Fullness + A-Weighted Loudness
+  // Weighted sum + convergence bonus. Reactive to 808s, drops, builds.
   if (isPlaying && audioBuffer) {
     // High-resolution spectrum (1024 bins, ~21Hz/bin at 44100Hz)
     loudnessAnalyser.getByteFrequencyData(loudnessFreqData);
     const hrBins = loudnessAnalyser.frequencyBinCount;
     const binHz = audioCtx.sampleRate / loudnessAnalyser.fftSize;
 
-    // --- CRITERION 1: SUB PRESENCE (20-60Hz) ---
-    // The rumble you feel in your chest
-    const subS = Math.max(1, Math.round(20 / binHz)), subE = Math.round(60 / binHz);
+    // --- CRITERION 1: SUB PRESENCE (20-80Hz) ---
+    // 808s live here. Wider range to catch tuned 808 slides.
+    const subS = Math.max(1, Math.round(20 / binHz)), subE = Math.round(80 / binHz);
     let subSum = 0;
     for (let i = subS; i < subE; i++) subSum += loudnessFreqData[i];
     const subRaw = subSum / ((subE - subS) * 255);
 
-    // --- CRITERION 2: BASS POWER (60-250Hz) ---
-    // Sustained low-end, the wall of sound
-    const bassS = subE, bassE = Math.round(250 / binHz);
+    // --- CRITERION 2: BASS POWER (80-300Hz) ---
+    // Sustained low-end, kick body, 808 harmonics
+    const bassS = subE, bassE = Math.round(300 / binHz);
     let bassSum = 0;
     for (let i = bassS; i < bassE; i++) bassSum += loudnessFreqData[i];
     const bassRaw = bassSum / ((bassE - bassS) * 255);
 
-    // --- CRITERION 3: KICK IMPACT ---
-    // Smoothed kick transients (from kick detection above)
-    hammerKickSmooth += (kickDecay - hammerKickSmooth) * 0.15;
-    const kickRaw = hammerKickSmooth;
+    // --- CRITERION 3: LOW-END PUNCH ---
+    // Combines kick transients AND sustained sub energy.
+    // 808s score high here even without sharp transients.
+    const punchRaw = Math.max(kickDecay, subRaw * 0.8, bassRaw * 0.6);
 
     // --- CRITERION 4: SPECTRAL FULLNESS ---
     // How many frequency bands are active simultaneously
-    // Drop = everything lit up. Intro = sparse.
-    const bandEdges = [60, 150, 300, 600, 1200, 2400, 4000, 6500, 10000, 16000];
+    const bandEdges = [80, 200, 400, 800, 1600, 3200, 6000, 10000, 16000];
     let activeBands = 0;
     for (let b = 0; b < bandEdges.length - 1; b++) {
       const bS = Math.round(bandEdges[b] / binHz);
       const bE = Math.min(Math.round(bandEdges[b + 1] / binHz), hrBins);
       let bSum = 0;
       for (let i = bS; i < bE; i++) bSum += loudnessFreqData[i];
-      if (bSum / ((bE - bS) * 255) > 0.06) activeBands++;
+      if (bSum / ((bE - bS) * 255) > 0.05) activeBands++;
     }
     const fullnessRaw = activeBands / (bandEdges.length - 1);
 
     // --- CRITERION 5: A-WEIGHTED LOUDNESS ---
-    // Perceived loudness using human ear sensitivity curve
     let wSum = 0, wTotal = 0;
     for (let i = 1; i < Math.min(750, hrBins); i++) {
       wSum += (loudnessFreqData[i] / 255) * aWeightTable[i];
       wTotal += aWeightTable[i];
     }
-    const loudnessRaw = wSum / wTotal;
+    const aLoudRaw = wSum / wTotal;
 
     // Feed hammerSmooth for beat sync
-    hammerSmooth += (loudnessRaw - hammerSmooth) * 0.08;
+    hammerSmooth += (aLoudRaw - hammerSmooth) * 0.12;
 
-    // Normalize each within this track's own range (max seen so far)
+    // Normalize each within track's own range
     criteriaMax.sub = Math.max(criteriaMax.sub, subRaw);
     criteriaMax.bass = Math.max(criteriaMax.bass, bassRaw);
-    criteriaMax.kick = Math.max(criteriaMax.kick, kickRaw);
+    criteriaMax.kick = Math.max(criteriaMax.kick, punchRaw);
     criteriaMax.fullness = Math.max(criteriaMax.fullness, fullnessRaw);
-    criteriaMax.loudness = Math.max(criteriaMax.loudness, loudnessRaw);
+    criteriaMax.loudness = Math.max(criteriaMax.loudness, aLoudRaw);
 
     const norm = (val, max) => max > 0.001 ? Math.min(1, val / max) : 0;
     const subN = norm(subRaw, criteriaMax.sub);
     const bassN = norm(bassRaw, criteriaMax.bass);
-    const kickN = norm(kickRaw, criteriaMax.kick);
+    const punchN = norm(punchRaw, criteriaMax.kick);
     const fullN = norm(fullnessRaw, criteriaMax.fullness);
-    const loudN = norm(loudnessRaw, criteriaMax.loudness);
+    const loudN = norm(aLoudRaw, criteriaMax.loudness);
 
-    // Smooth each criterion (~0.3s) to avoid jitter
-    criteriaSmooth.sub += (subN - criteriaSmooth.sub) * 0.12;
-    criteriaSmooth.bass += (bassN - criteriaSmooth.bass) * 0.12;
-    criteriaSmooth.kick += (kickN - criteriaSmooth.kick) * 0.18; // kicks are fast
-    criteriaSmooth.fullness += (fullN - criteriaSmooth.fullness) * 0.08; // band count is jumpy
-    criteriaSmooth.loudness += (loudN - criteriaSmooth.loudness) * 0.12;
+    // Fast smoothing — react within ~0.15s
+    criteriaSmooth.sub += (subN - criteriaSmooth.sub) * 0.25;
+    criteriaSmooth.bass += (bassN - criteriaSmooth.bass) * 0.25;
+    criteriaSmooth.kick += (punchN - criteriaSmooth.kick) * 0.30;
+    criteriaSmooth.fullness += (fullN - criteriaSmooth.fullness) * 0.15;
+    criteriaSmooth.loudness += (loudN - criteriaSmooth.loudness) * 0.25;
 
-    // Weighted geometric mean — ALL criteria must converge
-    // eps floor prevents a single zero from killing the score
-    const eps = 0.01;
-    const score =
-      Math.pow(criteriaSmooth.sub + eps, 0.10) *       // sub: 10%
-      Math.pow(criteriaSmooth.bass + eps, 0.25) *      // bass: 25%
-      Math.pow(criteriaSmooth.kick + eps, 0.20) *      // impact: 20%
-      Math.pow(criteriaSmooth.fullness + eps, 0.20) *  // spectral: 20%
-      Math.pow(criteriaSmooth.loudness + eps, 0.25);   // perceived vol: 25%
+    const s = criteriaSmooth;
+    // Weighted sum — each criterion contributes additively
+    // Sub+Bass heavy (40% combined) for 808/trap responsiveness
+    const base = s.sub * 0.20 + s.bass * 0.20 + s.kick * 0.15 +
+                 s.fullness * 0.20 + s.loudness * 0.25;
 
-    // Final curve — makes 80-100% really hard to earn
-    const shaped = Math.pow(Math.min(1, score), 1.3) * 100;
+    // Convergence bonus: when ALL criteria are high, push toward 100%
+    // Exclude kick from gate (808s don't always have sharp transients)
+    const minCore = Math.min(s.sub, s.bass, s.fullness, s.loudness);
+    const score = base * 0.60 + minCore * 0.40;
 
-    // Smooth charge: rise ~1s, fall ~2.5s
+    // Gentle curve — 100% is rare but reachable on real drops
+    const shaped = Math.pow(Math.min(1, score), 1.15) * 100;
+
+    // Fast charge: rise ~0.4s, fall ~1.5s
     const diff = shaped - hammerCharge;
-    hammerCharge += diff * (diff > 0 ? 0.05 : 0.02);
+    hammerCharge += diff * (diff > 0 ? 0.12 : 0.04);
     hammerCharge = Math.max(0, Math.min(100, hammerCharge));
   }
 
@@ -761,8 +759,8 @@ function updateHammerVisuals(pct, kick) {
   // Scale hammer icon with percentage — bigger as power grows
   const hammerIconWrap = document.getElementById('hammerIconWrap');
   if (hammerIconWrap) {
-    const baseSize = 54;
-    const maxExtra = 36; // grows up to +36px at 100%
+    const baseSize = 36;
+    const maxExtra = 20; // grows up to +20px at 100%
     const size = baseSize + (pct / 100) * maxExtra;
     hammerIconWrap.style.width = size + 'px';
     hammerIconWrap.style.height = size + 'px';
