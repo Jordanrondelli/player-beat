@@ -77,48 +77,51 @@
         <div><div class="user-rank">GOLD</div></div>
       </div>
 
-      <!-- Hammer meter card -->
-      <div class="hammer-card glass-panel" id="hammerMeter">
-        <img src="marteau.png" alt="Marteau" class="hammer-icon" id="hammerIcon">
-        <div class="hammer-label">PUISSANCE</div>
-        <div class="hammer-pct" id="hammerPct">0%</div>
-      </div>
+      <!-- Mid bar: hammer | transport | chat -->
+      <div class="mid-bar">
+        <!-- Hammer meter card -->
+        <div class="hammer-card" id="hammerMeter">
+          <img src="marteau.png" alt="Marteau" class="hammer-icon" id="hammerIcon">
+          <div class="hammer-label">PUISSANCE</div>
+          <div class="hammer-pct" id="hammerPct">0%</div>
+        </div>
 
-      <!-- L'avis du chat -->
-      <div class="chat-card glass-panel">
-        <div class="chat-title">L'avis du chat</div>
-        <div class="chat-row c-fire">
-          <span class="chat-label">&#128293;</span>
-          <span class="chat-pct" id="chatPct1">56%</span>
-          <div class="chat-bar-bg"><div class="chat-bar-fill" id="chatBar1" style="width:56%"></div></div>
-          <span class="chat-count" id="chatCount1">(430)</span>
+        <!-- Transport controls (prev / play / next) -->
+        <div class="transport-controls">
+          <button class="transport-btn" id="prevBtn" aria-label="Son précédent">
+            <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" transform="scale(-1,1) translate(-24,0)"/></svg>
+          </button>
+          <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
+            <img src="play.png" alt="Play" class="play-img" id="playImg">
+            <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
+          </button>
+          <button class="transport-btn" id="nextBtn" aria-label="Son suivant">
+            <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </button>
         </div>
-        <div class="chat-row c-up">
-          <span class="chat-label">&#128077;</span>
-          <span class="chat-pct" id="chatPct2">30%</span>
-          <div class="chat-bar-bg"><div class="chat-bar-fill" id="chatBar2" style="width:30%"></div></div>
-          <span class="chat-count" id="chatCount2">(96)</span>
-        </div>
-        <div class="chat-row c-down">
-          <span class="chat-label">&#128078;</span>
-          <span class="chat-pct" id="chatPct3">14%</span>
-          <div class="chat-bar-bg"><div class="chat-bar-fill" id="chatBar3" style="width:14%"></div></div>
-          <span class="chat-count" id="chatCount3">(111)</span>
-        </div>
-      </div>
 
-      <!-- Transport controls (prev / play / next) -->
-      <div class="transport-controls">
-        <button class="transport-btn" id="prevBtn" aria-label="Son précédent">
-          <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" transform="scale(-1,1) translate(-24,0)"/></svg>
-        </button>
-        <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
-          <img src="play.png" alt="Play" class="play-img" id="playImg">
-          <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
-        </button>
-        <button class="transport-btn" id="nextBtn" aria-label="Son suivant">
-          <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-        </button>
+        <!-- L'avis du chat -->
+        <div class="chat-card">
+          <div class="chat-title">L'AVIS DU CHAT</div>
+          <div class="chat-row c-fire">
+            <span class="chat-label">&#128293;</span>
+            <span class="chat-pct" id="chatPct1">56%</span>
+            <div class="chat-bar-bg"><div class="chat-bar-fill" id="chatBar1" style="width:56%"></div></div>
+            <span class="chat-count" id="chatCount1">(430)</span>
+          </div>
+          <div class="chat-row c-up">
+            <span class="chat-label">&#128077;</span>
+            <span class="chat-pct" id="chatPct2">30%</span>
+            <div class="chat-bar-bg"><div class="chat-bar-fill" id="chatBar2" style="width:30%"></div></div>
+            <span class="chat-count" id="chatCount2">(96)</span>
+          </div>
+          <div class="chat-row c-down">
+            <span class="chat-label">&#128078;</span>
+            <span class="chat-pct" id="chatPct3">14%</span>
+            <div class="chat-bar-bg"><div class="chat-bar-fill" id="chatBar3" style="width:14%"></div></div>
+            <span class="chat-count" id="chatCount3">(111)</span>
+          </div>
+        </div>
       </div>
 
       <!-- Vote bar: pouce rouge | FIRE | pouce vert -->
