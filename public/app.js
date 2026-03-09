@@ -564,14 +564,21 @@ function drawWaveform(currentTime) {
     // Bass bonus: 0-1, rewards sections with actual low-end
     const bassBonus = Math.min(1, (subRaw * 0.6 + bassRaw * 0.4) * 3);
 
+    // Kick/transient impact: kickDecay comes from 60-100Hz bandpass detection
+    // Accumulate kick hits into a sustained "drum activity" metric
+    // kickDecay spikes on each hit then fades — we smooth it to track ongoing drum presence
+    const kickImpact = Math.min(1, kickDecay * 2.5);
+
     // Feed hammerSmooth for other uses
     hammerSmooth += (wfLevel - hammerSmooth) * 0.12;
 
     // --- FINAL SCORE ---
-    // 35% waveform envelope + 65% bass presence (independent)
-    // Waveform ensures visual/score coherence
-    // Bass is independent so it can push the score beyond what waveform alone allows
-    const rawScore = wfLevel * 0.35 + bassBonus * 0.65;
+    // 30% waveform envelope + 45% bass presence + 25% kick impact
+    // Waveform = visual coherence (small bars = low score)
+    // Bass = sustained low-end presence (sub + bass)
+    // Kick = transient impacts in 60-100Hz (drums, kicks hitting)
+    // Bass alone without kicks scores lower than bass WITH kicks
+    const rawScore = wfLevel * 0.30 + bassBonus * 0.45 + kickImpact * 0.25;
 
     // Power curve — score^1.8 gives good dynamic range
     const shaped = Math.pow(Math.min(1, rawScore), 1.8) * 100;
