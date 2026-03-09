@@ -445,9 +445,9 @@ function drawWaveform(currentTime) {
   density = dCount > 0 ? dSum / dCount : 0;
   densitySmooth += (density - densitySmooth) * .05;
 
-  // Kick detection from audio analyser
+  // Kick detection from audio analyser (or synthetic for YouTube)
   let kickLevel = 0;
-  if (isPlaying && audioBuffer) {
+  if (isPlaying && audioBuffer && !ytIsCurrentSource) {
     analyser.getByteFrequencyData(frequencyData);
     kickAnalyser.getByteTimeDomainData(kickTimeData);
     let sum = 0;
@@ -456,6 +456,13 @@ function drawWaveform(currentTime) {
       sum += v * v;
     }
     kickLevel = Math.sqrt(sum / kickTimeData.length);
+  } else if (isPlaying && ytIsCurrentSource) {
+    // Simulate kick from waveform data changes
+    const wfVal = waveformData[Math.min(pIdx, waveformData.length - 1)] || 0;
+    const prevVal = waveformData[Math.max(0, pIdx - 2)] || 0;
+    kickLevel = wfVal * 0.4;
+    // Amplify on rises to create fake kick hits
+    if (wfVal - prevVal > 0.04) kickLevel += (wfVal - prevVal) * 2;
   } else {
     kickLevel = (waveformData[Math.min(pIdx, waveformData.length - 1)] || 0) * 0.3;
   }
@@ -568,7 +575,45 @@ function drawWaveform(currentTime) {
   // Uses the pre-computed waveform envelope (same data that drives the visual bars)
   // as the primary power source. What you SEE is what you GET.
   // Bass presence from FFT adds a bonus to reward actual low-end content.
-  if (isPlaying && audioBuffer) {
+  if (isPlaying && ytIsCurrentSource) {
+    // YouTube mode: simulate power from synthetic waveform (no raw audio access)
+    const wfIdx = Math.floor((currentTime / duration) * waveformData.length);
+    const wfWindow = 5;
+    let wfSum = 0, wfCount = 0;
+    for (let i = wfIdx - wfWindow; i <= wfIdx + wfWindow; i++) {
+      const ci = Math.max(0, Math.min(waveformData.length - 1, i));
+      wfSum += waveformData[ci];
+      wfCount++;
+    }
+    const wfLevel = wfSum / wfCount;
+
+    // Simulate bass/kick from waveform intensity (since we have no FFT)
+    const bassBonus = Math.min(1, wfLevel * 0.8);
+    // Simulate kick activity from waveform changes
+    const prevIdx = Math.max(0, wfIdx - 3);
+    const rise = Math.max(0, waveformData[wfIdx] - waveformData[prevIdx]);
+    if (rise > 0.05) {
+      kickDecay = Math.max(kickDecay, rise * 4);
+      kickActivity += (1 - kickActivity) * 0.25;
+    } else {
+      kickActivity *= 0.98;
+    }
+    kickDecay *= 0.82;
+    const kickImpact = Math.min(1, kickActivity);
+
+    hammerSmooth += (wfLevel - hammerSmooth) * 0.12;
+
+    const baseScore = wfLevel;
+    const bassAdd = bassBonus * 0.20;
+    const kickAdd = kickImpact * 0.20;
+    const rawScore = Math.min(1, baseScore + bassAdd + kickAdd);
+    const shaped = rawScore * rawScore * (3 - 2 * rawScore) * 100;
+
+    const diff = shaped - hammerCharge;
+    if (diff > 0) hammerCharge += diff * 0.35;
+    else hammerCharge += diff * 0.006;
+    hammerCharge = Math.max(0, Math.min(100, hammerCharge));
+  } else if (isPlaying && audioBuffer) {
     // --- PRIMARY: Waveform envelope (RMS) at current playback position ---
     // waveformData is already normalized 0-1 relative to track peak.
     // Intro = small bars = low value. Drop = big bars = high value.
@@ -1308,17 +1353,28 @@ async function loadTrack(index, autoPlay) {
     waveformData = [];
     waveformSigned = [];
 
+    // Update track info immediately (no waiting)
+    updateTrackInfo(track.queueItem);
+    updateQueueCounter();
+
     if (ytPlayer && ytReady) {
-      ytPlayer.loadVideoById(track.youtubeId);
-      ytPlayer.pauseVideo();
-      // Wait for duration to be available
-      let retries = 0;
-      while (retries < 20) {
-        ytDuration = ytPlayer.getDuration();
-        if (ytDuration > 0) break;
-        await new Promise(r => setTimeout(r, 200));
-        retries++;
-      }
+      // Use cueVideoById first (doesn't start loading audio immediately),
+      // then wait for CUED state to get duration, then play
+      await new Promise((resolve) => {
+        const onStateChange = (e) => {
+          // CUED (5) or PLAYING (1) = video is ready
+          if (e.data === YT.PlayerState.CUED || e.data === YT.PlayerState.PLAYING) {
+            ytPlayer.removeEventListener('onStateChange', onStateChange);
+            resolve();
+          }
+        };
+        ytPlayer.addEventListener('onStateChange', onStateChange);
+        ytPlayer.cueVideoById(track.youtubeId);
+        // Fallback timeout in case event never fires
+        setTimeout(resolve, 3000);
+      });
+
+      ytDuration = ytPlayer.getDuration();
       if (ytDuration <= 0) ytDuration = 180; // fallback 3min
 
       // Generate a synthetic waveform for visual display
@@ -1327,7 +1383,12 @@ async function loadTrack(index, autoPlay) {
       drawMiniWaveform();
       pauseOffset = 0;
       detectedBPM = 120; // default BPM for YouTube tracks
-      if (autoPlay) playAudio();
+      if (autoPlay) {
+        ytPlayer.playVideo();
+        isPlaying = true;
+        playImg.style.display = 'none'; pauseImg.style.display = 'block';
+        startBeatSync();
+      }
     }
     loadingOverlay.classList.remove('visible');
     return;
@@ -1373,17 +1434,54 @@ async function loadTrack(index, autoPlay) {
 
 // Generate synthetic waveform for YouTube tracks (no raw audio available)
 function generateSyntheticWaveform(duration) {
-  const totalSamples = Math.floor(duration * 30); // ~30 samples/sec
+  const sampleRate = 30; // ~30 samples/sec
+  const totalSamples = Math.floor(duration * sampleRate);
   waveformData = [];
   waveformSigned = [];
+
+  // Build a realistic multi-section waveform with intro → build → drop → break patterns
+  // Use multiple noise layers at different frequencies for natural look
+  const sections = Math.floor(duration / 30) + 1; // ~30s sections
+  const sectionTypes = [];
+  for (let s = 0; s < sections; s++) {
+    // Pattern: intro(0.3) → build(0.5) → drop(0.85) → break(0.4) → drop(0.9) ...
+    const cycle = s % 4;
+    if (cycle === 0) sectionTypes.push(0.3 + Math.random() * 0.15); // intro/break
+    else if (cycle === 1) sectionTypes.push(0.5 + Math.random() * 0.15); // build
+    else if (cycle === 2) sectionTypes.push(0.75 + Math.random() * 0.15); // drop
+    else sectionTypes.push(0.35 + Math.random() * 0.15); // break
+  }
+
+  // Seeded pseudo-random for consistent look per track
+  let seed = duration * 1000;
+  function seededRand() {
+    seed = (seed * 16807 + 0) % 2147483647;
+    return (seed - 1) / 2147483646;
+  }
+
   for (let i = 0; i < totalSamples; i++) {
     const t = i / totalSamples;
-    // Create a natural-looking waveform pattern
-    const base = 0.3 + 0.2 * Math.sin(t * Math.PI); // envelope
-    const detail = 0.15 * Math.sin(t * 47) + 0.1 * Math.sin(t * 123) + 0.08 * Math.sin(t * 271);
-    const val = Math.max(0.05, Math.min(1, base + detail));
+    const sectionIdx = Math.min(sections - 1, Math.floor(t * sections));
+    const nextIdx = Math.min(sections - 1, sectionIdx + 1);
+    const sectionProgress = (t * sections) - sectionIdx;
+    // Smooth transition between sections
+    const sectionLevel = sectionTypes[sectionIdx] * (1 - sectionProgress) + sectionTypes[nextIdx] * sectionProgress;
+
+    // Multiple noise octaves for natural variation
+    const noise1 = Math.sin(i * 0.37) * 0.15;
+    const noise2 = Math.sin(i * 1.23) * 0.08;
+    const noise3 = Math.sin(i * 3.71) * 0.04;
+    const noise4 = (seededRand() - 0.5) * 0.12; // random spikes
+
+    // Occasional "kick" spikes (louder bars at ~2-4Hz frequency)
+    const kickFreq = 2.5 + Math.sin(t * 7) * 1;
+    const kickPhase = (i / sampleRate) * kickFreq * Math.PI * 2;
+    const kickSpike = Math.max(0, Math.sin(kickPhase)) * 0.15 * sectionLevel;
+
+    const val = Math.max(0.05, Math.min(1, sectionLevel + noise1 + noise2 + noise3 + noise4 + kickSpike));
     waveformData.push(val);
-    waveformSigned.push((val - 0.5) * (Math.random() > 0.5 ? 1 : -1));
+    // Signed: alternate randomly for visual symmetry
+    waveformSigned.push(val * (seededRand() > 0.5 ? 1 : -1));
   }
 }
 
