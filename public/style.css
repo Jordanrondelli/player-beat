@@ -725,10 +725,10 @@ body {
   pointer-events: none; transition: width .1s linear;
 }
 
-/* ===== MUR DES LÉGENDES ===== */
+/* ===== MEILLEUR SON ===== */
 .legend-card {
-  position: absolute; bottom: -20px; left: 20px; z-index: 30;
-  width: 260px; padding: 16px 20px; border-radius: 16px;
+  position: absolute; bottom: -20px; right: 20px; z-index: 30;
+  width: 220px; padding: 14px 18px; border-radius: 16px;
   background: linear-gradient(135deg, rgba(30, 10, 0, .85) 0%, rgba(60, 20, 0, .8) 100%);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   border: 2px solid rgba(255, 180, 50, .4);
@@ -742,19 +742,20 @@ body {
   50% { transform: translateY(-6px) translateZ(10px); }
 }
 .legend-crown {
-  font-size: 36px; text-align: center;
+  font-size: 32px; text-align: center; line-height: 1;
   filter: drop-shadow(0 0 12px rgba(255, 200, 50, .6));
   animation: crownBounce 2s ease-in-out infinite;
+  margin-bottom: 2px;
 }
 @keyframes crownBounce {
   0%, 100% { transform: translateY(0) scale(1); }
   50% { transform: translateY(-4px) scale(1.08); }
 }
 .legend-title {
-  font-family: 'Bangers', cursive; font-size: 16px; letter-spacing: 4px;
+  font-family: 'Bangers', cursive; font-size: 15px; letter-spacing: 4px;
   text-align: center; color: rgba(255, 200, 80, .9);
   text-shadow: 0 0 10px rgba(255, 150, 0, .4);
-  margin: 2px 0 8px;
+  margin: 0 0 2px;
 }
 .legend-user {
   font-family: 'Bangers', cursive; font-size: 26px; text-align: center;
