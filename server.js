@@ -222,56 +222,102 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
     if (type === 'youtube') {
       if (!source_url) return res.status(400).json({ error: 'Lien YouTube requis' });
 
-      // Validate YouTube URL
-      if (!ytdl.validateURL(source_url)) {
+      // Validate YouTube URL format
+      const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/|music\.youtube\.com\/watch\?v=)/;
+      if (!ytRegex.test(source_url)) {
         return res.status(400).json({ error: 'Lien YouTube invalide.' });
       }
 
-      // Fetch video info for title/artist
+      // Fetch title/artist via oEmbed
       let ytTitle = title || '';
       let ytArtist = artist || '';
       try {
-        const info = await ytdl.getInfo(source_url);
-        if (!ytTitle) ytTitle = info.videoDetails.title || '';
-        if (!ytArtist) ytArtist = info.videoDetails.author?.name || info.videoDetails.ownerChannelName || '';
+        const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(source_url)}&format=json`;
+        const oembedRes = await fetch(oembedUrl);
+        if (oembedRes.ok) {
+          const oembedData = await oembedRes.json();
+          if (!ytTitle && oembedData.title) ytTitle = oembedData.title;
+          if (!ytArtist && oembedData.author_name) ytArtist = oembedData.author_name;
+        }
       } catch (e) {
-        console.error('YouTube info error (non-fatal):', e.message);
+        console.error('YouTube oEmbed error (non-fatal):', e.message);
       }
       if (!ytTitle) ytTitle = 'YouTube Track';
 
-      // Download audio stream via ytdl-core (pure Node.js, no yt-dlp binary needed)
       let fileBuffer = null;
+      let fileMime = 'audio/mpeg';
+
+      // Method 1: yt-dlp binary (most reliable, installed via pip on Render)
+      const tmpBase = path.join(uploadDir, `yt-${Date.now()}`);
       try {
-        const chunks = [];
+        console.log('yt-dlp: downloading audio for', source_url);
         await new Promise((resolve, reject) => {
-          const stream = ytdl(source_url, {
-            filter: 'audioonly',
-            quality: 'highestaudio',
+          execFile('yt-dlp', [
+            '-x', '--audio-format', 'mp3',
+            '--audio-quality', '5',
+            '--no-playlist',
+            '--max-filesize', '50m',
+            '--no-check-certificates',
+            '-o', tmpBase + '.%(ext)s',
+            source_url
+          ], { timeout: 120000 }, (err, stdout, stderr) => {
+            if (err) reject(new Error(stderr || err.message));
+            else resolve(stdout);
           });
-          const timeout = setTimeout(() => {
-            stream.destroy();
-            reject(new Error('Download timeout (2min)'));
-          }, 120000);
-          stream.on('data', chunk => chunks.push(chunk));
-          stream.on('end', () => { clearTimeout(timeout); resolve(); });
-          stream.on('error', err => { clearTimeout(timeout); reject(err); });
         });
-        fileBuffer = Buffer.concat(chunks);
-        if (fileBuffer.length < 1000) {
-          console.error('YouTube audio too small:', fileBuffer.length);
-          fileBuffer = null;
+        const candidates = fs.readdirSync(uploadDir)
+          .filter(f => f.startsWith(path.basename(tmpBase)))
+          .map(f => path.join(uploadDir, f));
+        if (candidates.length > 0) {
+          const mp3 = candidates.find(f => f.endsWith('.mp3'));
+          const actualFile = mp3 || candidates[0];
+          fileBuffer = fs.readFileSync(actualFile);
+          fileMime = 'audio/mpeg';
+          candidates.forEach(f => { try { fs.unlinkSync(f); } catch {} });
+          console.log('yt-dlp: downloaded', fileBuffer.length, 'bytes');
         }
       } catch (e) {
-        console.error('YouTube download error:', e.message);
+        console.error('yt-dlp error:', e.message);
+        try {
+          fs.readdirSync(uploadDir)
+            .filter(f => f.startsWith(path.basename(tmpBase)))
+            .forEach(f => fs.unlinkSync(path.join(uploadDir, f)));
+        } catch {}
       }
 
+      // Method 2: ytdl-core fallback (pure JS, no binary needed)
       if (!fileBuffer) {
-        return res.status(400).json({ error: 'Impossible de télécharger l\'audio YouTube. Vérifiez le lien.' });
+        console.log('yt-dlp failed, trying ytdl-core...');
+        try {
+          const chunks = [];
+          await new Promise((resolve, reject) => {
+            const stream = ytdl(source_url, {
+              filter: 'audioonly',
+              quality: 'highestaudio',
+            });
+            const timeout = setTimeout(() => {
+              stream.destroy();
+              reject(new Error('ytdl timeout (2min)'));
+            }, 120000);
+            stream.on('data', chunk => chunks.push(chunk));
+            stream.on('end', () => { clearTimeout(timeout); resolve(); });
+            stream.on('error', err => { clearTimeout(timeout); reject(err); });
+          });
+          fileBuffer = Buffer.concat(chunks);
+          fileMime = 'audio/webm';
+          console.log('ytdl-core: downloaded', fileBuffer.length, 'bytes');
+        } catch (e) {
+          console.error('ytdl-core error:', e.message);
+        }
+      }
+
+      if (!fileBuffer || fileBuffer.length < 1000) {
+        return res.status(400).json({ error: 'Impossible de télécharger l\'audio YouTube. Vérifiez le lien et réessayez.' });
       }
 
       const { rows } = await pool.query(
         'INSERT INTO queue (type, title, artist, source_url, file_data, file_mimetype, submitted_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, type, title, artist, source_url, submitted_by, status, created_at',
-        ['youtube', ytTitle, ytArtist, source_url, fileBuffer, 'audio/webm', submitted_by || 'Anonyme']
+        ['youtube', ytTitle, ytArtist, source_url, fileBuffer, fileMime, submitted_by || 'Anonyme']
       );
       await pool.query('INSERT INTO votes (queue_id) VALUES ($1)', [rows[0].id]);
       return res.json(rows[0]);
