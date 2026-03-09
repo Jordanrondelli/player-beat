@@ -241,8 +241,8 @@ let hammerCooldownStart = 0; // timestamp when we dropped below 75%
 // Multi-criteria power scoring state
 const loudnessFreqData = new Uint8Array(loudnessAnalyser.frequencyBinCount);
 let hammerKickSmooth = 0;     // smoothed kick impact for scoring
-let criteriaMax = { sub: 0.001, bass: 0.001, kick: 0.001, fullness: 0.001, loudness: 0.001 };
-let criteriaSmooth = { sub: 0, bass: 0, kick: 0, fullness: 0, loudness: 0 };
+let criteriaMax = { sub: 0.001, bass: 0.001, kick: 0.001, fullness: 0.001, loudness: 0.001, lowHighRatio: 0.001 };
+let criteriaSmooth = { sub: 0, bass: 0, kick: 0, fullness: 0, loudness: 0, lowHighRatio: 0 };
 let prescanDone = false; // true once offline pre-scan has set criteriaMax
 
 // A-weighting: attempt IEC 61672 standard curve
@@ -310,9 +310,10 @@ function prescanTrackCriteria(buffer) {
   const awTable = new Float32Array(fftSize / 2);
   for (let i = 0; i < awTable.length; i++) awTable[i] = aWeight(i * binHz);
 
-  let maxSub = 0, maxBass = 0, maxPunch = 0, maxFull = 0, maxLoud = 0;
+  let maxSub = 0, maxBass = 0, maxPunch = 0, maxFull = 0, maxLoud = 0, maxLowHigh = 0;
   const subS = Math.max(1, Math.round(20 / binHz)), subE = Math.round(80 / binHz);
   const bassS = subE, bassE = Math.round(300 / binHz);
+  const highS = Math.round(2000 / binHz), highE = Math.min(Math.round(16000 / binHz), fftSize / 2);
   const loudEnd = Math.min(750, fftSize / 2);
   const maxBin = Math.min(Math.round(16000 / binHz) + 1, fftSize / 2);
 
@@ -363,11 +364,19 @@ function prescanTrackCriteria(buffer) {
     }
     const aLoudRaw = wTotal > 0 ? wSum / wTotal : 0;
 
+    // Low/high ratio
+    let highSum = 0;
+    for (let i = highS; i < highE; i++) highSum += mag[i];
+    const highRaw = highSum / (highE - highS);
+    const lowRaw = (subRaw + bassRaw) / 2;
+    const lowHighRaw = highRaw > 0.0001 ? Math.min(1, lowRaw / (highRaw + 0.001)) : lowRaw > 0.0001 ? 1 : 0;
+
     if (subRaw > maxSub) maxSub = subRaw;
     if (bassRaw > maxBass) maxBass = bassRaw;
     if (punchRaw > maxPunch) maxPunch = punchRaw;
     if (fullRaw > maxFull) maxFull = fullRaw;
     if (aLoudRaw > maxLoud) maxLoud = aLoudRaw;
+    if (lowHighRaw > maxLowHigh) maxLowHigh = lowHighRaw;
   }
 
   criteriaMax.sub = Math.max(0.001, maxSub);
@@ -375,6 +384,7 @@ function prescanTrackCriteria(buffer) {
   criteriaMax.kick = Math.max(0.001, maxPunch);
   criteriaMax.fullness = Math.max(0.001, maxFull);
   criteriaMax.loudness = Math.max(0.001, maxLoud);
+  criteriaMax.lowHighRatio = Math.max(0.001, maxLowHigh);
   prescanDone = true;
 }
 
@@ -561,6 +571,17 @@ function drawWaveform(currentTime) {
     }
     const aLoudRaw = wSum / wTotal;
 
+    // --- CRITERION 6: LOW/HIGH RATIO ---
+    // Drop = massive low-end vs highs. Buildup = lots of highs (sweeps, snare rolls).
+    // Low energy: 20-300Hz, High energy: 2kHz-16kHz
+    const highS = Math.round(2000 / binHz), highE = Math.min(Math.round(16000 / binHz), hrBins);
+    let highSum = 0;
+    for (let i = highS; i < highE; i++) highSum += loudnessFreqData[i];
+    const highRaw = highSum / ((highE - highS) * 255);
+    const lowRaw = (subRaw + bassRaw) / 2;
+    // Ratio: how much louder is the low-end vs the highs (clamped 0-1)
+    const lowHighRaw = highRaw > 0.001 ? Math.min(1, lowRaw / (highRaw + 0.01)) : lowRaw > 0.01 ? 1 : 0;
+
     // Feed hammerSmooth for beat sync
     hammerSmooth += (aLoudRaw - hammerSmooth) * 0.12;
 
@@ -570,6 +591,7 @@ function drawWaveform(currentTime) {
     criteriaMax.kick = Math.max(criteriaMax.kick, punchRaw);
     criteriaMax.fullness = Math.max(criteriaMax.fullness, fullnessRaw);
     criteriaMax.loudness = Math.max(criteriaMax.loudness, aLoudRaw);
+    criteriaMax.lowHighRatio = Math.max(criteriaMax.lowHighRatio, lowHighRaw);
 
     const norm = (val, max) => max > 0.001 ? Math.min(1, val / max) : 0;
     const subN = norm(subRaw, criteriaMax.sub);
@@ -577,6 +599,7 @@ function drawWaveform(currentTime) {
     const punchN = norm(punchRaw, criteriaMax.kick);
     const fullN = norm(fullnessRaw, criteriaMax.fullness);
     const loudN = norm(aLoudRaw, criteriaMax.loudness);
+    const lowHighN = norm(lowHighRaw, criteriaMax.lowHighRatio);
 
     // Smoothing with separate rise/fall alphas — fast attack, slow release for momentum
     const smooth = (cur, target, up, down) => cur + (target - cur) * (target > cur ? up : down);
@@ -585,11 +608,12 @@ function drawWaveform(currentTime) {
     criteriaSmooth.kick = smooth(criteriaSmooth.kick, punchN, 0.30, 0.08);
     criteriaSmooth.fullness = smooth(criteriaSmooth.fullness, fullN, 0.15, 0.05);
     criteriaSmooth.loudness = smooth(criteriaSmooth.loudness, loudN, 0.25, 0.06);
+    criteriaSmooth.lowHighRatio = smooth(criteriaSmooth.lowHighRatio, lowHighN, 0.20, 0.06);
 
     const s = criteriaSmooth;
-    // Weighted sum — Sub+Bass heavy (40%) for 808/trap responsiveness
-    const base = s.sub * 0.20 + s.bass * 0.20 + s.kick * 0.15 +
-                 s.fullness * 0.20 + s.loudness * 0.25;
+    // Weighted sum — low/high ratio penalizes buildups, rewards drops
+    const base = s.sub * 0.18 + s.bass * 0.18 + s.kick * 0.14 +
+                 s.fullness * 0.15 + s.loudness * 0.20 + s.lowHighRatio * 0.15;
 
     // Convergence bonus reduced to 25% — prevents artificial inflation
     const minCore = Math.min(s.sub, s.bass, s.fullness, s.loudness);
