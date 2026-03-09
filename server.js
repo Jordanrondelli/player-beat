@@ -6,26 +6,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fs = require('fs');
 const crypto = require('crypto');
-const { execFile, execSync } = require('child_process');
 const { parseBuffer } = require('music-metadata');
-const ytdl = require('@distube/ytdl-core');
-
-// Auto-update yt-dlp at startup for reliability
-const ytdlpBinPath = path.join(__dirname, 'yt-dlp');
-async function ensureYtdlp() {
-  try {
-    console.log('yt-dlp: checking/downloading latest version...');
-    execSync(
-      'curl -L --retry 3 --max-time 30 https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o ' +
-      JSON.stringify(ytdlpBinPath) + ' && chmod +x ' + JSON.stringify(ytdlpBinPath),
-      { timeout: 60000, stdio: 'pipe' }
-    );
-    const ver = execSync(ytdlpBinPath + ' --version', { timeout: 10000, encoding: 'utf8' }).trim();
-    console.log('yt-dlp: ready, version', ver);
-  } catch (e) {
-    console.error('yt-dlp: failed to download/update:', e.message);
-  }
-}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -356,240 +337,24 @@ app.get('/api/settings', async (req, res) => {
   res.json(settings);
 });
 
-// ===== YOUTUBE AUDIO HELPER =====
-function extractVideoId(url) {
-  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|music\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/);
-  return m ? m[1] : null;
-}
-
-async function fetchYouTubeAudio(videoId) {
-  // Method 1: YouTube Innertube API (Android client — less blocked than web)
-  try {
-    console.log('Innertube: fetching audio for', videoId);
-    const innertubeRes = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 14) gzip',
-        'X-Goog-Api-Key': 'AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w',
-      },
-      body: JSON.stringify({
-        context: {
-          client: {
-            clientName: 'ANDROID',
-            clientVersion: '19.09.37',
-            androidSdkVersion: 30,
-            hl: 'fr',
-            gl: 'FR',
-          },
-        },
-        videoId,
-        contentCheckOk: true,
-        racyCheckOk: true,
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (innertubeRes.ok) {
-      const data = await innertubeRes.json();
-      const formats = (data.streamingData?.adaptiveFormats || [])
-        .filter(f => f.mimeType && f.mimeType.startsWith('audio/'))
-        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-      if (formats.length > 0) {
-        const best = formats[0];
-        const audioUrl = best.url;
-        if (audioUrl) {
-          console.log('Innertube: downloading', best.mimeType, best.bitrate, 'bps');
-          const audioRes = await fetch(audioUrl, {
-            signal: AbortSignal.timeout(120000),
-            headers: { 'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 14) gzip' },
-          });
-          if (audioRes.ok) {
-            const buf = Buffer.from(await audioRes.arrayBuffer());
-            if (buf.length > 1000) {
-              console.log('Innertube: downloaded', buf.length, 'bytes');
-              return { buffer: buf, mime: best.mimeType.split(';')[0] };
-            }
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Innertube error:', e.message);
-  }
-
-  // Method 2: Invidious instances
-  const invidiousInstances = [
-    'https://inv.nadeko.net',
-    'https://invidious.nerdvpn.de',
-    'https://iv.datura.network',
-    'https://invidious.private.coffee',
-    'https://vid.puffyan.us',
-  ];
-  for (const instance of invidiousInstances) {
-    try {
-      console.log(`Invidious (${instance}): trying ${videoId}`);
-      const infoRes = await fetch(`${instance}/api/v1/videos/${videoId}`, {
-        signal: AbortSignal.timeout(10000),
-        headers: { 'Accept': 'application/json' },
-      });
-      if (!infoRes.ok) continue;
-      const info = await infoRes.json();
-      const audioFormats = (info.adaptiveFormats || [])
-        .filter(f => f.type && f.type.startsWith('audio/'))
-        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-      if (audioFormats.length === 0 || !audioFormats[0].url) continue;
-      const audioRes = await fetch(audioFormats[0].url, { signal: AbortSignal.timeout(120000) });
-      if (!audioRes.ok) continue;
-      const buf = Buffer.from(await audioRes.arrayBuffer());
-      if (buf.length > 1000) {
-        console.log(`Invidious (${instance}): downloaded ${buf.length} bytes`);
-        return { buffer: buf, mime: audioFormats[0].type.split(';')[0] };
-      }
-    } catch (e) {
-      console.error(`Invidious ${instance} error:`, e.message);
-    }
-  }
-
-  // Method 3: Piped instances
-  const pipedInstances = [
-    'https://pipedapi.kavin.rocks',
-    'https://pipedapi.r4fo.com',
-    'https://pipedapi.adminforge.de',
-  ];
-  for (const instance of pipedInstances) {
-    try {
-      console.log(`Piped (${instance}): trying ${videoId}`);
-      const infoRes = await fetch(`${instance}/streams/${videoId}`, {
-        signal: AbortSignal.timeout(10000),
-        headers: { 'Accept': 'application/json' },
-      });
-      if (!infoRes.ok) continue;
-      const info = await infoRes.json();
-      const audioStreams = (info.audioStreams || [])
-        .filter(s => s.url)
-        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-      if (audioStreams.length === 0) continue;
-      const audioRes = await fetch(audioStreams[0].url, { signal: AbortSignal.timeout(120000) });
-      if (!audioRes.ok) continue;
-      const buf = Buffer.from(await audioRes.arrayBuffer());
-      if (buf.length > 1000) {
-        console.log(`Piped (${instance}): downloaded ${buf.length} bytes`);
-        return { buffer: buf, mime: (audioStreams[0].mimeType || 'audio/mp4').split(';')[0] };
-      }
-    } catch (e) {
-      console.error(`Piped ${instance} error:`, e.message);
-    }
-  }
-
-  // Method 4: yt-dlp binary
-  try {
-    const tmpBase = path.join(uploadDir, `yt-${Date.now()}`);
-    console.log('yt-dlp: downloading audio for', videoId);
-    await new Promise((resolve, reject) => {
-      execFile(ytdlpBinPath, [
-        '-f', 'bestaudio[ext=m4a]/bestaudio',
-        '--no-playlist', '--max-filesize', '50m', '--no-check-certificates',
-        '--extractor-args', 'youtube:player_client=web,default',
-        '-o', tmpBase + '.%(ext)s',
-        'https://www.youtube.com/watch?v=' + videoId
-      ], { timeout: 120000 }, (err, stdout, stderr) => {
-        if (err) reject(new Error(stderr || err.message));
-        else resolve(stdout);
-      });
-    });
-    const candidates = fs.readdirSync(uploadDir)
-      .filter(f => f.startsWith(path.basename(tmpBase)))
-      .map(f => path.join(uploadDir, f));
-    if (candidates.length > 0) {
-      const buf = fs.readFileSync(candidates[0]);
-      const mime = candidates[0].endsWith('.m4a') ? 'audio/mp4' : candidates[0].endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
-      candidates.forEach(f => { try { fs.unlinkSync(f); } catch {} });
-      if (buf.length > 1000) {
-        console.log('yt-dlp: downloaded', buf.length, 'bytes');
-        return { buffer: buf, mime };
-      }
-    }
-  } catch (e) {
-    console.error('yt-dlp error:', e.message);
-  }
-
-  // Method 5: ytdl-core
-  try {
-    console.log('ytdl-core: trying', videoId);
-    const chunks = [];
-    await new Promise((resolve, reject) => {
-      const stream = ytdl('https://www.youtube.com/watch?v=' + videoId, {
-        filter: 'audioonly', quality: 'highestaudio',
-      });
-      const timeout = setTimeout(() => { stream.destroy(); reject(new Error('timeout')); }, 120000);
-      stream.on('data', chunk => chunks.push(chunk));
-      stream.on('end', () => { clearTimeout(timeout); resolve(); });
-      stream.on('error', err => { clearTimeout(timeout); reject(err); });
-    });
-    const buf = Buffer.concat(chunks);
-    if (buf.length > 1000) {
-      console.log('ytdl-core: downloaded', buf.length, 'bytes');
-      return { buffer: buf, mime: 'audio/webm' };
-    }
-  } catch (e) {
-    console.error('ytdl-core error:', e.message);
-  }
-
-  return null;
-}
-
-// ===== SERVE AUDIO FROM DB =====
+// ===== SERVE AUDIO FROM DB (uploads only — YouTube is played client-side) =====
 app.get('/api/audio/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT file_data, file_mimetype, title, type, source_url FROM queue WHERE id = $1',
+      'SELECT file_data, file_mimetype, title FROM queue WHERE id = $1',
       [req.params.id]
     );
-    if (!rows.length) {
-      return res.status(404).json({ error: 'Track non trouvée' });
+    if (!rows.length || !rows[0].file_data) {
+      return res.status(404).json({ error: 'Audio non trouvé' });
     }
-
-    const track = rows[0];
-
-    // If audio is already cached in DB, serve it directly
-    if (track.file_data && track.file_data.length > 1000) {
-      res.set({
-        'Content-Type': track.file_mimetype || 'audio/mpeg',
-        'Content-Length': track.file_data.length,
-        'Accept-Ranges': 'bytes',
-        'Cache-Control': 'public, max-age=86400',
-      });
-      return res.send(track.file_data);
-    }
-
-    // For YouTube tracks without cached audio, fetch on-demand
-    if (track.type === 'youtube' && track.source_url) {
-      const videoId = extractVideoId(track.source_url);
-      if (!videoId) {
-        return res.status(400).json({ error: 'Video ID invalide' });
-      }
-
-      const result = await fetchYouTubeAudio(videoId);
-      if (!result) {
-        return res.status(502).json({ error: 'Impossible de récupérer l\'audio YouTube' });
-      }
-
-      // Cache in DB for next time
-      await pool.query(
-        'UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE id = $3',
-        [result.buffer, result.mime, req.params.id]
-      ).catch(e => console.error('Cache save error (non-fatal):', e.message));
-
-      res.set({
-        'Content-Type': result.mime,
-        'Content-Length': result.buffer.length,
-        'Accept-Ranges': 'bytes',
-        'Cache-Control': 'public, max-age=86400',
-      });
-      return res.send(result.buffer);
-    }
-
-    return res.status(404).json({ error: 'Audio non trouvé' });
+    const { file_data, file_mimetype } = rows[0];
+    res.set({
+      'Content-Type': file_mimetype || 'audio/mpeg',
+      'Content-Length': file_data.length,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=86400',
+    });
+    res.send(file_data);
   } catch (err) {
     console.error('Audio serve error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -761,8 +526,6 @@ app.get('/api/twitch-votes', async (req, res) => {
 // ===== START =====
 initDB().then(async () => {
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  // Download/update yt-dlp in background (non-blocking)
-  ensureYtdlp().catch(() => {});
   // Start Twitch bot
   await startTwitchBot();
 }).catch(err => {

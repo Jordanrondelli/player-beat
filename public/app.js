@@ -35,10 +35,39 @@ let sourceNode = null;
 let isPlaying = false;
 let startTime = 0;
 let pauseOffset = 0;
-let playlist = []; // array of { name, arrayBuffer }
+let playlist = []; // array of { name, arrayBuffer } or { name, youtubeId, queueItem }
 let currentTrackIndex = -1;
 let waveformData = [];
 let waveformSigned = []; // signed samples for neon line display
+
+// ===== YOUTUBE IFRAME PLAYER =====
+let ytPlayer = null;
+let ytReady = false;
+let ytIsCurrentSource = false; // true when current track is YouTube
+let ytDuration = 0;
+
+function onYouTubeIframeAPIReady() {
+  ytPlayer = new YT.Player('ytPlayer', {
+    width: 320, height: 180,
+    playerVars: { autoplay: 0, controls: 0, disablekb: 1, fs: 0, modestbranding: 1, rel: 0 },
+    events: {
+      onReady: () => { ytReady = true; console.log('YouTube IFrame Player ready'); },
+      onStateChange: (e) => {
+        if (e.data === YT.PlayerState.ENDED && ytIsCurrentSource) {
+          stopAudio();
+          // Auto-advance
+          if (playlist.length > 1) {
+            const next = currentTrackIndex + 1;
+            if (next < playlist.length) loadTrack(next);
+            else fetchAndLoadQueue(currentSource);
+          }
+        }
+      },
+    },
+  });
+}
+// Make it global for YouTube API callback
+window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 
 // Analyser for spectrum
 const analyser = audioCtx.createAnalyser();
@@ -402,7 +431,7 @@ function drawWaveform(currentTime) {
   const dpr = window.devicePixelRatio || 1;
   const w = waveformCanvas.width / dpr;
   const h = waveformCanvas.height / dpr;
-  const duration = audioBuffer ? audioBuffer.duration : 30;
+  const duration = ytIsCurrentSource ? (ytDuration || 180) : (audioBuffer ? audioBuffer.duration : 30);
   waveformCtx.clearRect(0, 0, w, h);
 
   // Density: average amplitude over ~2 seconds around playhead
@@ -803,9 +832,19 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
 // ===== ANIMATION LOOP =====
 function animationLoop() {
   let currentTime = 0;
-  if (isPlaying && audioBuffer) {
+  let duration = 30;
+
+  if (ytIsCurrentSource && ytPlayer && ytReady) {
+    duration = ytDuration || 180;
+    if (isPlaying) {
+      currentTime = ytPlayer.getCurrentTime() || 0;
+    } else {
+      currentTime = (ytPlayer.getCurrentTime && ytPlayer.getCurrentTime()) || 0;
+    }
+  } else if (isPlaying && audioBuffer) {
     currentTime = audioCtx.currentTime - startTime + pauseOffset;
-    if (currentTime >= audioBuffer.duration) {
+    duration = audioBuffer.duration;
+    if (currentTime >= duration) {
       stopAudio();
       currentTime = 0;
       pauseOffset = 0;
@@ -822,13 +861,13 @@ function animationLoop() {
     }
   } else if (audioBuffer) {
     currentTime = pauseOffset;
+    duration = audioBuffer.duration;
   } else {
     currentTime = (Date.now() / 1000) % 30;
   }
 
   drawWaveform(currentTime);
 
-  const duration = audioBuffer ? audioBuffer.duration : 30;
   currentTimeEl.textContent = formatTime(currentTime);
   totalTimeEl.textContent = formatTime(duration);
   requestAnimationFrame(animationLoop);
@@ -1150,6 +1189,15 @@ function stopBeatSync() {
 
 // ===== PLAYBACK CONTROLS =====
 function playAudio() {
+  if (ytIsCurrentSource) {
+    if (ytPlayer && ytReady) {
+      ytPlayer.playVideo();
+      isPlaying = true;
+      playImg.style.display = 'none'; pauseImg.style.display = 'block';
+      startBeatSync();
+    }
+    return;
+  }
   if (!audioBuffer) return;
   if (audioCtx.state === 'suspended') audioCtx.resume();
   sourceNode = audioCtx.createBufferSource();
@@ -1164,6 +1212,13 @@ function playAudio() {
 }
 
 function pauseAudio() {
+  if (ytIsCurrentSource) {
+    if (ytPlayer && ytReady) ytPlayer.pauseVideo();
+    isPlaying = false;
+    stopBeatSync();
+    playImg.style.display = 'block'; pauseImg.style.display = 'none';
+    return;
+  }
   if (sourceNode) {
     sourceNode.stop();
     sourceNode.disconnect();
@@ -1175,6 +1230,11 @@ function pauseAudio() {
 }
 
 function stopAudio() {
+  if (ytIsCurrentSource) {
+    if (ytPlayer && ytReady) { ytPlayer.stopVideo(); }
+    ytIsCurrentSource = false;
+    ytDuration = 0;
+  }
   if (sourceNode) {
     try { sourceNode.stop(); } catch (e) { /* already stopped */ }
     sourceNode.disconnect();
@@ -1188,14 +1248,22 @@ function stopAudio() {
 
 // ===== EVENT LISTENERS =====
 playBtn.addEventListener('click', () => {
+  if (ytIsCurrentSource) {
+    isPlaying ? pauseAudio() : playAudio();
+    return;
+  }
   isPlaying ? pauseAudio() : (audioBuffer && playAudio());
 });
 
 // Mini nav seek
 document.getElementById('miniNav').addEventListener('click', (e) => {
-  if (!audioBuffer) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const pct = (e.clientX - rect.left) / rect.width;
+  if (ytIsCurrentSource && ytPlayer && ytReady) {
+    ytPlayer.seekTo(pct * ytDuration, true);
+    return;
+  }
+  if (!audioBuffer) return;
   const wasPlaying = isPlaying;
   if (isPlaying) {
     sourceNode.stop();
@@ -1209,7 +1277,11 @@ document.getElementById('miniNav').addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space' && e.target === document.body) {
     e.preventDefault();
-    isPlaying ? pauseAudio() : (audioBuffer && playAudio());
+    if (ytIsCurrentSource) {
+      isPlaying ? pauseAudio() : playAudio();
+    } else {
+      isPlaying ? pauseAudio() : (audioBuffer && playAudio());
+    }
   }
 });
 
@@ -1227,9 +1299,44 @@ async function loadTrack(index, autoPlay) {
   prescanDone = false; // reset before loading new track
   stopAudio();
 
+  const track = playlist[index];
+
+  // YouTube track: use IFrame player
+  if (track.youtubeId) {
+    ytIsCurrentSource = true;
+    audioBuffer = null;
+    waveformData = [];
+    waveformSigned = [];
+
+    if (ytPlayer && ytReady) {
+      ytPlayer.loadVideoById(track.youtubeId);
+      ytPlayer.pauseVideo();
+      // Wait for duration to be available
+      let retries = 0;
+      while (retries < 20) {
+        ytDuration = ytPlayer.getDuration();
+        if (ytDuration > 0) break;
+        await new Promise(r => setTimeout(r, 200));
+        retries++;
+      }
+      if (ytDuration <= 0) ytDuration = 180; // fallback 3min
+
+      // Generate a synthetic waveform for visual display
+      generateSyntheticWaveform(ytDuration);
+      resizeCanvases();
+      drawMiniWaveform();
+      pauseOffset = 0;
+      detectedBPM = 120; // default BPM for YouTube tracks
+      if (autoPlay) playAudio();
+    }
+    loadingOverlay.classList.remove('visible');
+    return;
+  }
+
+  // Regular audio track
+  ytIsCurrentSource = false;
   try {
-    // decodeAudioData consumes the buffer, so we need a copy each time
-    const bufferCopy = playlist[index].arrayBuffer.slice(0);
+    const bufferCopy = track.arrayBuffer.slice(0);
     audioBuffer = await audioCtx.decodeAudioData(bufferCopy);
     extractWaveformData(audioBuffer);
     prescanTrackCriteria(audioBuffer);
@@ -1240,8 +1347,7 @@ async function loadTrack(index, autoPlay) {
     pauseOffset = 0;
     if (autoPlay) playAudio();
   } catch (err) {
-    console.error('Audio decode error:', err, 'Track:', playlist[index]?.name);
-    // Skip to next track instead of blocking with alert
+    console.error('Audio decode error:', err, 'Track:', track?.name);
     if (playlist.length > 1 && index + 1 < playlist.length) {
       loadingOverlay.classList.remove('visible');
       const next = index + 1;
@@ -1262,6 +1368,22 @@ async function loadTrack(index, autoPlay) {
     }
   } finally {
     loadingOverlay.classList.remove('visible');
+  }
+}
+
+// Generate synthetic waveform for YouTube tracks (no raw audio available)
+function generateSyntheticWaveform(duration) {
+  const totalSamples = Math.floor(duration * 30); // ~30 samples/sec
+  waveformData = [];
+  waveformSigned = [];
+  for (let i = 0; i < totalSamples; i++) {
+    const t = i / totalSamples;
+    // Create a natural-looking waveform pattern
+    const base = 0.3 + 0.2 * Math.sin(t * Math.PI); // envelope
+    const detail = 0.15 * Math.sin(t * 47) + 0.1 * Math.sin(t * 123) + 0.08 * Math.sin(t * 271);
+    const val = Math.max(0.05, Math.min(1, base + detail));
+    waveformData.push(val);
+    waveformSigned.push((val - 0.5) * (Math.random() > 0.5 ? 1 : -1));
   }
 }
 
@@ -1527,6 +1649,16 @@ async function fetchAndLoadQueue(type) {
     loadingOverlay.classList.add('visible');
 
     const fetchPromises = serverQueue.map(async (item) => {
+      // YouTube tracks: extract video ID, no audio download needed
+      if (item.type === 'youtube' && item.source_url) {
+        const m = item.source_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|music\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/);
+        if (m) {
+          return { name: item.title, youtubeId: m[1], queueItem: item };
+        }
+        return null;
+      }
+
+      // Regular upload tracks: fetch audio from server
       try {
         const response = await fetch(`/api/audio/${item.id}`);
         if (!response.ok) {
