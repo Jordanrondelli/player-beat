@@ -930,6 +930,18 @@ body {
   display: flex; align-items: center; justify-content: center; gap: 16px;
   position: relative; z-index: 950; margin-bottom: 8px;
 }
+.wipe-btn {
+  font-family: 'Bangers', cursive; font-size: 11px;
+  color: rgba(255, 80, 80, .7); padding: 5px 14px;
+  border: 1px solid rgba(255, 80, 80, .25); border-radius: 50px;
+  cursor: pointer; background: rgba(255, 40, 40, .08);
+  letter-spacing: 1.5px; text-transform: uppercase;
+  transition: all .25s;
+}
+.wipe-btn:hover {
+  background: rgba(255, 40, 40, .2); color: #ff5050;
+  border-color: rgba(255, 80, 80, .5);
+}
 .source-toggle {
   display: flex; gap: 4px;
   background: rgba(0, 0, 0, .3); border-radius: 50px;

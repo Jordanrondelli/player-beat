@@ -1369,16 +1369,24 @@ function showEmojiSplash(emoji, x, y) {
 }
 
 // Vote button listeners
+function skipToNext() {
+  if (playlist.length <= 1) return;
+  const next = (currentTrackIndex + 1) % playlist.length;
+  loadTrack(next);
+}
+
 document.getElementById('btnDown').addEventListener('click', function () {
   sendVote('down');
   const r = this.getBoundingClientRect();
   showEmojiSplash('\uD83D\uDC4E', r.left + r.width / 2 - 30, r.top - 20);
+  skipToNext();
 });
 
 document.getElementById('btnUp').addEventListener('click', function () {
   sendVote('up');
   const r = this.getBoundingClientRect();
   showEmojiSplash('\uD83D\uDC4D', r.left + r.width / 2 - 30, r.top - 20);
+  skipToNext();
 });
 
 // ===== FIRE BUTTON =====
@@ -1466,6 +1474,9 @@ document.getElementById('btnFire').addEventListener('click', function () {
       );
     }, i * 60);
   }
+
+  // Skip to next track after fire animation
+  skipToNext();
 });
 
 // ===== COMMUNITY QUEUE =====
@@ -1517,39 +1528,33 @@ async function fetchAndLoadQueue(type) {
     }
 
     if (type === 'upload') {
-      // Load uploads one at a time — start playing the first one immediately
+      // Preload all tracks in parallel for smooth transitions
       loadingOverlay.classList.add('visible');
-      let firstLoaded = false;
-      for (const item of serverQueue) {
+
+      const fetchPromises = serverQueue.map(async (item) => {
         try {
-          // Fetch audio from DB via API
           const response = await fetch(`/api/audio/${item.id}`);
           if (!response.ok) {
             console.error('HTTP error loading:', item.title, response.status);
-            continue;
+            return null;
           }
           const arrayBuffer = await response.arrayBuffer();
           if (arrayBuffer.byteLength < 1000) {
             console.error('File too small, skipping:', item.title, arrayBuffer.byteLength);
-            continue;
+            return null;
           }
-          playlist.push({ name: item.title, arrayBuffer, queueItem: item });
-
-          // Start playing as soon as the first track is ready
-          if (!firstLoaded) {
-            firstLoaded = true;
-            loadingOverlay.classList.remove('visible');
-            updateTransportButtons();
-            updateQueueCounter();
-            await loadTrack(0);
-          }
+          return { name: item.title, arrayBuffer, queueItem: item };
         } catch (err) {
           console.error('Failed to load:', item.title, err);
+          return null;
         }
-      }
+      });
+
+      const results = await Promise.all(fetchPromises);
+      playlist = results.filter(r => r !== null);
       loadingOverlay.classList.remove('visible');
 
-      if (playlist.length > 0 && !firstLoaded) {
+      if (playlist.length > 0) {
         updateTransportButtons();
         updateQueueCounter();
         await loadTrack(0);
@@ -1587,6 +1592,26 @@ loadTrack = async function(index) {
   updateQueueCounter();
   loadVotesForCurrentTrack();
 };
+
+// ===== WIPE ALL =====
+document.getElementById('wipeBtn').addEventListener('click', async () => {
+  if (!confirm('Supprimer TOUS les uploads ? Cette action est irréversible.')) return;
+  try {
+    const res = await fetch('/api/queue/wipe-all', { method: 'DELETE' });
+    if (res.ok) {
+      stopAudio();
+      serverQueue = [];
+      playlist = [];
+      currentTrackIndex = -1;
+      updateQueueCounter();
+      updateTrackInfo(null);
+      trackTitleEl.textContent = 'Tous les sons ont été supprimés';
+      updateTransportButtons();
+    }
+  } catch (e) {
+    console.error('Wipe error:', e);
+  }
+});
 
 // ===== INIT =====
 resizeCanvases();

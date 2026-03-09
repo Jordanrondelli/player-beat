@@ -199,20 +199,17 @@
     <!-- Upload tab -->
     <div class="submit-card" id="tab-upload">
       <form id="uploadForm">
+        <div style="text-align:center;margin-bottom:14px;padding:10px 16px;border-radius:12px;background:rgba(255,180,40,.08);border:1px solid rgba(255,180,40,.2);color:rgba(255,200,80,.8);font-size:13px;font-weight:600;">
+          &#9888;&#65039; Seul le format MP3 est accept&eacute;
+        </div>
         <div class="drop-zone" id="dropZone">
           <div class="drop-zone-icon">&#128190;</div>
           <div class="drop-zone-text">
-            Glisse ton fichier ici ou <strong>clique pour choisir</strong>
+            Glisse ton fichier MP3 ici ou <strong>clique pour choisir</strong>
           </div>
           <div class="drop-zone-file" id="dropFileName"></div>
-          <input type="file" id="fileInput" accept=".mp3,.wav" style="display:none">
+          <input type="file" id="fileInput" accept=".mp3,audio/mpeg" style="display:none">
         </div>
-
-        <div class="field-label">Titre du son</div>
-        <input type="text" class="field-input" id="uploadTitle" placeholder="Ex: Mon beat fire...">
-
-        <div class="field-label">Artiste / Pseudo</div>
-        <input type="text" class="field-input" id="uploadArtist" placeholder="Ex: DJ Sauce">
 
         <div class="field-label">Ton pseudo (visible en live)</div>
         <input type="text" class="field-input" id="uploadSubmitter" placeholder="Ex: SAUCEBOY19">
@@ -227,12 +224,6 @@
         <div class="field-label">Lien YouTube</div>
         <input type="url" class="field-input" id="ytUrl"
                placeholder="https://youtube.com/watch?v=...">
-
-        <div class="field-label">Titre (optionnel)</div>
-        <input type="text" class="field-input" id="ytTitle" placeholder="Ex: Mon morceau pr&eacute;f&eacute;r&eacute;">
-
-        <div class="field-label">Artiste (optionnel)</div>
-        <input type="text" class="field-input" id="ytArtist" placeholder="Ex: Artiste inconnu">
 
         <div class="field-label">Ton pseudo (visible en live)</div>
         <input type="text" class="field-input" id="ytSubmitter" placeholder="Ex: SAUCEBOY19">
@@ -276,8 +267,8 @@
     });
 
     function handleFile(file) {
-      if (!file.name.match(/\.(mp3|wav)$/i)) {
-        showToast('Seuls les fichiers MP3 et WAV sont accept\u00e9s', 'error');
+      if (!file.name.match(/\.mp3$/i)) {
+        showToast('Seul le format MP3 est accept\u00e9', 'error');
         return;
       }
       selectedFile = file;
@@ -297,8 +288,6 @@
       const fd = new FormData();
       fd.append('type', 'upload');
       fd.append('audio', selectedFile);
-      fd.append('title', document.getElementById('uploadTitle').value || selectedFile.name);
-      fd.append('artist', document.getElementById('uploadArtist').value);
       fd.append('submitted_by', document.getElementById('uploadSubmitter').value || 'Anonyme');
 
       try {
@@ -337,8 +326,6 @@
           body: JSON.stringify({
             type: 'youtube',
             source_url: url,
-            title: document.getElementById('ytTitle').value || 'YouTube Track',
-            artist: document.getElementById('ytArtist').value,
             submitted_by: document.getElementById('ytSubmitter').value || 'Anonyme',
           }),
         });

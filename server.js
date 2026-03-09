@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fs = require('fs');
 const crypto = require('crypto');
+const { parseBuffer } = require('music-metadata');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -102,10 +103,10 @@ const upload = multer({
   dest: uploadDir,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'audio/mpeg' || file.mimetype === 'audio/mp3' || file.mimetype === 'audio/wav' || file.mimetype === 'audio/x-wav') {
+    if (file.mimetype === 'audio/mpeg' || file.mimetype === 'audio/mp3') {
       cb(null, true);
     } else {
-      cb(new Error('Seuls les fichiers MP3 et WAV sont acceptés'));
+      cb(new Error('Seuls les fichiers MP3 sont acceptés'));
     }
   },
 });
@@ -182,9 +183,21 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
       const fileBuffer = fs.readFileSync(req.file.path);
       const mimetype = req.file.mimetype || 'audio/mpeg';
 
+      // Extract ID3 metadata from MP3
+      let metaTitle = title || '';
+      let metaArtist = artist || '';
+      try {
+        const metadata = await parseBuffer(fileBuffer, { mimeType: mimetype });
+        if (!metaTitle && metadata.common.title) metaTitle = metadata.common.title;
+        if (!metaArtist && metadata.common.artist) metaArtist = metadata.common.artist;
+      } catch (e) {
+        console.error('ID3 parse error (non-fatal):', e.message);
+      }
+      if (!metaTitle) metaTitle = req.file.originalname.replace(/\.mp3$/i, '');
+
       const { rows } = await pool.query(
         'INSERT INTO queue (type, title, artist, file_data, file_mimetype, submitted_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, type, title, artist, submitted_by, status, created_at',
-        ['upload', title || req.file.originalname, artist || '', fileBuffer, mimetype, submitted_by || 'Anonyme']
+        ['upload', metaTitle, metaArtist, fileBuffer, mimetype, submitted_by || 'Anonyme']
       );
       // Clean up temp file
       fs.unlinkSync(req.file.path);
@@ -194,9 +207,26 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
 
     if (type === 'youtube') {
       if (!source_url) return res.status(400).json({ error: 'Lien YouTube requis' });
+
+      // Auto-fetch title/artist from YouTube via oEmbed
+      let ytTitle = title || '';
+      let ytArtist = artist || '';
+      try {
+        const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(source_url)}&format=json`;
+        const oembedRes = await fetch(oembedUrl);
+        if (oembedRes.ok) {
+          const oembedData = await oembedRes.json();
+          if (!ytTitle && oembedData.title) ytTitle = oembedData.title;
+          if (!ytArtist && oembedData.author_name) ytArtist = oembedData.author_name;
+        }
+      } catch (e) {
+        console.error('YouTube oEmbed error (non-fatal):', e.message);
+      }
+      if (!ytTitle) ytTitle = 'YouTube Track';
+
       const { rows } = await pool.query(
         'INSERT INTO queue (type, title, artist, source_url, submitted_by) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        ['youtube', title || 'YouTube Track', artist || '', source_url, submitted_by || 'Anonyme']
+        ['youtube', ytTitle, ytArtist, source_url, submitted_by || 'Anonyme']
       );
       await pool.query('INSERT INTO votes (queue_id) VALUES ($1)', [rows[0].id]);
       return res.json(rows[0]);
@@ -232,6 +262,12 @@ app.patch('/api/queue/:id', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Status invalide' });
   }
   await pool.query('UPDATE queue SET status = $1 WHERE id = $2', [status, req.params.id]);
+  res.json({ success: true });
+});
+
+// Wipe all uploads (admin)
+app.delete('/api/queue/wipe-all', requireAdmin, async (req, res) => {
+  await pool.query("DELETE FROM queue WHERE type = 'upload'");
   res.json({ success: true });
 });
 
