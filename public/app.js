@@ -585,14 +585,22 @@ function drawWaveform(currentTime) {
     const shaped = Math.pow(Math.min(1, rawScore), 1.3) * 100;
 
     // Debug: log factors every 30 frames to see what's limiting
-    if (typeof window._hDbg === 'undefined') window._hDbg = 0;
-    if (++window._hDbg % 30 === 0) {
-      console.log(`[SCORE] wf=${wfLevel.toFixed(2)} bass=${bassBonus.toFixed(2)} kick=${kickImpact.toFixed(2)} | factors=${wfFactor.toFixed(2)}×${bassFactor.toFixed(2)}×${kickFactor.toFixed(2)} | geoMean=${rawScore.toFixed(3)} shaped=${shaped.toFixed(1)}% charge=${hammerCharge.toFixed(1)}%`);
+    // Debug: aggregate stats over ~2s then log summary
+    if (typeof window._hDbg === 'undefined') {
+      window._hDbg = { n: 0, sum: 0, min: 999, max: 0, wfSum: 0, bassSum: 0, kickSum: 0 };
+    }
+    const _d = window._hDbg;
+    _d.n++; _d.sum += shaped; _d.wfSum += wfLevel; _d.bassSum += bassBonus; _d.kickSum += kickImpact;
+    _d.min = Math.min(_d.min, shaped); _d.max = Math.max(_d.max, shaped);
+    if (_d.n >= 120) { // ~2s at 60fps
+      console.log(`[SCORE 2s] avg=${(_d.sum/_d.n).toFixed(1)}% min=${_d.min.toFixed(1)}% max=${_d.max.toFixed(1)}% | wf=${(_d.wfSum/_d.n).toFixed(2)} bass=${(_d.bassSum/_d.n).toFixed(2)} kick=${(_d.kickSum/_d.n).toFixed(2)}`);
+      window._hDbg = { n: 0, sum: 0, min: 999, max: 0, wfSum: 0, bassSum: 0, kickSum: 0 };
     }
 
-    // Charge dynamics: fast rise, slow release for momentum
+    // Charge dynamics: fast rise, VERY slow release for stability
+    // Release at 0.008 means it takes ~5-6s to drop significantly
     const diff = shaped - hammerCharge;
-    hammerCharge += diff * (diff > 0 ? 0.45 : 0.035);
+    hammerCharge += diff * (diff > 0 ? 0.45 : 0.008);
     hammerCharge = Math.max(0, Math.min(100, hammerCharge));
   }
 
@@ -600,10 +608,11 @@ function drawWaveform(currentTime) {
   const targetPct = hammerCharge;
   const pctDiff = targetPct - displayedHammerPct;
   const isRising = pctDiff > 0;
-  // Rise: near-instant for big jumps, smooth for small ones. Fall: always gentle.
+  // Rise: near-instant for big jumps, smooth for small ones.
+  // Fall: very gentle — score holds steady during sustained sections.
   const pctAlpha = isRising
     ? (pctDiff > 10 ? 0.5 : 0.2)
-    : (Math.abs(pctDiff) > 8 ? 0.1 : 0.05);
+    : 0.02;
   displayedHammerPct += pctDiff * pctAlpha;
   const hammerPct = Math.round(displayedHammerPct);
   updateHammerVisuals(hammerPct, kickDecay);
