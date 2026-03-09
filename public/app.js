@@ -572,21 +572,23 @@ function drawWaveform(currentTime) {
     // Feed hammerSmooth for other uses
     hammerSmooth += (wfLevel - hammerSmooth) * 0.12;
 
-    // --- FINAL SCORE: MULTIPLICATIVE ---
-    // Each criterion lifts the others. Missing one = score stays low.
-    // All three high = score explodes. This matches perception:
-    // kick alone = weak, bass alone = weak, all together = POWER.
-    //
-    // Each factor has a floor (0.1-0.15) so silence = near-zero, not exactly zero.
-    // Without floors, a single missing criterion would kill the score entirely,
-    // making bass-only sections score 0% which feels wrong.
-    const wfFactor = 0.15 + wfLevel * 0.85;         // 0.15 → 1.0
-    const bassFactor = 0.1 + bassBonus * 0.9;        // 0.1  → 1.0
-    const kickFactor = 0.1 + kickImpact * 0.9;       // 0.1  → 1.0
-    const rawScore = wfFactor * bassFactor * kickFactor;
+    // --- FINAL SCORE: GEOMETRIC MEAN ---
+    // Geometric mean = cube root of product. Rewards convergence of all 3
+    // without the harsh penalty of pure multiplication.
+    // Three factors at 0.85 → pure product = 0.61, geometric mean = 0.85.
+    const wfFactor = 0.05 + wfLevel * 0.95;          // 0.05 → 1.0
+    const bassFactor = 0.05 + bassBonus * 0.95;       // 0.05 → 1.0
+    const kickFactor = 0.05 + kickImpact * 0.95;      // 0.05 → 1.0
+    const rawScore = Math.pow(wfFactor * bassFactor * kickFactor, 1 / 3);
 
-    // Power curve — score^1.2 (lighter curve since multiplication already compresses)
-    const shaped = Math.pow(Math.min(1, rawScore), 1.2) * 100;
+    // Light power curve to add punch at the top
+    const shaped = Math.pow(Math.min(1, rawScore), 1.3) * 100;
+
+    // Debug: log factors every 30 frames to see what's limiting
+    if (typeof window._hDbg === 'undefined') window._hDbg = 0;
+    if (++window._hDbg % 30 === 0) {
+      console.log(`[SCORE] wf=${wfLevel.toFixed(2)} bass=${bassBonus.toFixed(2)} kick=${kickImpact.toFixed(2)} | factors=${wfFactor.toFixed(2)}×${bassFactor.toFixed(2)}×${kickFactor.toFixed(2)} | geoMean=${rawScore.toFixed(3)} shaped=${shaped.toFixed(1)}% charge=${hammerCharge.toFixed(1)}%`);
+    }
 
     // Charge dynamics: fast rise, slow release for momentum
     const diff = shaped - hammerCharge;
