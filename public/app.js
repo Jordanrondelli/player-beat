@@ -555,20 +555,22 @@ function drawWaveform(currentTime) {
   const timeStart = currentTime - scrollBack;
   const centerY = h * 0.5;
 
-  // === KICK SHAKE — fast, punchy canvas tremble ===
-  if (kickDecay > .03) {
-    const shakeAmt = kickDecay * 4;
+  // === KICK SHAKE — fast, punchy canvas tremble (boosted in fire mode) ===
+  const fireShakeBoost = fireModeIntensity > 0 ? 1 + fireModeIntensity * 1.5 : 1;
+  if (kickDecay > .03 || fireModeIntensity > 0.1) {
+    const shakeAmt = Math.max(kickDecay * 4, fireModeIntensity * 2) * fireShakeBoost;
     const sx = (Math.random() - 0.5) * shakeAmt;
     const sy = (Math.random() - 0.5) * shakeAmt * 0.6;
     waveformCtx.save();
     waveformCtx.translate(sx, sy);
   }
 
-  // Bass bloom pass — extra wide aura on kicks (screen blend)
-  if (kickDecay > .02) {
+  // Bass bloom pass — extra wide aura on kicks (screen blend, boosted in fire mode)
+  if (kickDecay > .02 || fireModeIntensity > 0.1) {
+    const bloomKick = Math.max(kickDecay, fireModeIntensity * 0.6);
     waveformCtx.save();
-    waveformCtx.filter = `blur(${18 + kickDecay * 25}px)`;
-    waveformCtx.globalAlpha = kickDecay * .45;
+    waveformCtx.filter = `blur(${18 + bloomKick * 25}px)`;
+    waveformCtx.globalAlpha = bloomKick * .45;
     waveformCtx.globalCompositeOperation = 'screen';
     drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, true);
     waveformCtx.restore();
@@ -580,7 +582,7 @@ function drawWaveform(currentTime) {
   drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, false);
 
   // End kick shake
-  if (kickDecay > .03) {
+  if (kickDecay > .03 || fireModeIntensity > 0.1) {
     waveformCtx.restore();
   }
 
@@ -613,8 +615,9 @@ function drawWaveform(currentTime) {
 
   // Glow elements — intensify blur + opacity on kicks, clip to played side only
   const glowClip = `inset(0 ${100 - (playheadX / w) * 100}% 0 0)`;
-  if (glow1El) { glow1El.style.opacity = .3 + kickDecay * 1.4; glow1El.style.filter = `blur(${35 + kickDecay * 25}px)`; glow1El.style.clipPath = glowClip; }
-  if (glow2El) { glow2El.style.opacity = .15 + kickDecay * 1.1; glow2El.style.filter = `blur(${20 + kickDecay * 15}px)`; glow2El.style.clipPath = glowClip; }
+  const glowFire = fireModeIntensity * 0.5;
+  if (glow1El) { glow1El.style.opacity = .3 + kickDecay * 1.4 + glowFire; glow1El.style.filter = `blur(${35 + kickDecay * 25}px)`; glow1El.style.clipPath = glowClip; }
+  if (glow2El) { glow2El.style.opacity = .15 + kickDecay * 1.1 + glowFire; glow2El.style.filter = `blur(${20 + kickDecay * 15}px)`; glow2El.style.clipPath = glowClip; }
 
   // Background — no kick reaction, just CSS animation
 
@@ -821,7 +824,14 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
       const rms = sampleWaveform(fIdx);
       val = peak * 0.65 + rms * 0.35;
     }
-    raw.push({ x, val: Math.max(minH, val * maxAmp) });
+    // Fire mode: boost amplitude + add agitation
+    let fireBoost = 1;
+    if (fireModeIntensity > 0) {
+      fireBoost = 1 + fireModeIntensity * 0.5; // 50% taller bars
+      // Add slight random agitation for "survolté" effect
+      val += fireModeIntensity * (Math.random() * 0.08 - 0.02);
+    }
+    raw.push({ x, val: Math.max(minH, val * maxAmp * fireBoost) });
   }
 
   // Light smooth — 3-wide kernel, preserves kick spikes
@@ -917,14 +927,24 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     ctx.restore();
   }
 
+  // Fire mode color interpolation
+  const fm = fireModeIntensity; // 0-1
+
   const redColors = {
-    outer: 'rgba(255,40,10,0.9)',
-    mid:   'rgba(255,70,30,0.9)',
-    fill:  'rgba(220,30,10,0.25)',
-    core:  'rgba(255,140,100,1)',
-    hot:   'rgba(255,220,200,0.8)'
+    outer: fm > 0 ? `rgba(${255},${Math.round(40 - fm * 20)},${Math.round(10)},${0.9 + fm * 0.1})` : 'rgba(255,40,10,0.9)',
+    mid:   fm > 0 ? `rgba(${255},${Math.round(70 + fm * 60)},${Math.round(30)},${0.9 + fm * 0.1})` : 'rgba(255,70,30,0.9)',
+    fill:  fm > 0 ? `rgba(${255},${Math.round(30 + fm * 40)},${Math.round(10)},${0.25 + fm * 0.2})` : 'rgba(220,30,10,0.25)',
+    core:  fm > 0 ? `rgba(255,${Math.round(140 + fm * 60)},${Math.round(100 - fm * 30)},1)` : 'rgba(255,140,100,1)',
+    hot:   fm > 0 ? `rgba(255,${Math.round(220 + fm * 35)},${Math.round(200 - fm * 50)},${0.8 + fm * 0.2})` : 'rgba(255,220,200,0.8)'
   };
-  const blueColors = {
+  // In fire mode, unplayed side also turns fiery orange/red
+  const blueColors = fm > 0 ? {
+    outer: `rgba(${Math.round(30 + fm * 225)},${Math.round(140 - fm * 60)},${Math.round(255 - fm * 220)},${0.7 + fm * 0.2})`,
+    mid:   `rgba(${Math.round(60 + fm * 195)},${Math.round(170 - fm * 80)},${Math.round(255 - fm * 210)},${0.8 + fm * 0.1})`,
+    fill:  `rgba(${Math.round(40 + fm * 200)},${Math.round(120 - fm * 60)},${Math.round(220 - fm * 190)},${0.12 + fm * 0.15})`,
+    core:  `rgba(${Math.round(130 + fm * 125)},${Math.round(210 - fm * 60)},${Math.round(255 - fm * 130)},${0.9 + fm * 0.1})`,
+    hot:   `rgba(${Math.round(210 + fm * 45)},${Math.round(240 - fm * 20)},${Math.round(255 - fm * 80)},${0.6 + fm * 0.3})`
+  } : {
     outer: 'rgba(30,140,255,0.7)',
     mid:   'rgba(60,170,255,0.8)',
     fill:  'rgba(40,120,220,0.12)',
@@ -936,21 +956,30 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
   if (glowOnly) {
     if (splitIdx > 0) {
       buildEnvelope(0, splitIdx);
-      ctx.fillStyle = 'rgba(255,50,20,1)';
+      ctx.fillStyle = fm > 0 ? `rgba(255,${Math.round(50 + fm * 80)},${Math.round(20 + fm * 30)},1)` : 'rgba(255,50,20,1)';
+      ctx.fill();
+    }
+    // In fire mode, also bloom the unplayed side
+    if (fm > 0 && splitIdx < pts.length - 1) {
+      buildEnvelope(splitIdx, pts.length - 1);
+      ctx.fillStyle = `rgba(255,${Math.round(80 + fm * 50)},${Math.round(20)},${fm * 0.8})`;
       ctx.fill();
     }
     return;
   }
 
-  // Played side — red neon
+  // Played side — red neon (boosted in fire mode)
   if (splitIdx > 0) drawNeonEnvelope(0, splitIdx, redColors, true);
 
-  // Unplayed side — blue neon
-  if (splitIdx < pts.length - 1) drawNeonEnvelope(splitIdx, pts.length - 1, blueColors, false);
+  // Unplayed side — blue neon (turns fiery in fire mode)
+  if (splitIdx < pts.length - 1) drawNeonEnvelope(splitIdx, pts.length - 1, blueColors, fm > 0);
 }
 
 // ===== ANIMATION LOOP =====
 function animationLoop() {
+  // Update fire mode intensity for waveform effects
+  updateFireModeIntensity();
+
   let currentTime = 0;
   let duration = 30;
 
@@ -1832,17 +1861,17 @@ document.getElementById('btnUp').addEventListener('click', function () {
   skipToNext();
 });
 
-// ===== FIRE BUTTON (COMBO SYSTEM + PARTICLES + SOUND) =====
+// ===== FIRE BUTTON (FIRE MODE 10s + PARTICLES + SOUND) =====
 let fireTimeout = null;
 let fireFadeTimeout = null;
 
-// --- Combo state ---
-let fireCombo = 0;
-let fireComboTimer = null;
-let fireComboDecayTimer = null;
-const COMBO_WINDOW = 1200; // ms to keep combo alive
-const fireComboEl = document.getElementById('fireCombo');
-const fireComboNumEl = document.getElementById('fireComboNum');
+// --- Fire mode state ---
+let fireMode = false;
+let fireModeStart = 0;
+const FIRE_MODE_DURATION = 10000; // 10 seconds
+let fireModeTimer = null;
+let fireModeIntensity = 0; // 0-1, used by waveform rendering
+let waveformFireRAF = null;
 
 // --- Canvas particle system ---
 const fireParticleCanvas = document.getElementById('fireParticleCanvas');
@@ -1939,10 +1968,10 @@ function tickFireParticles() {
 }
 
 // --- Procedural fire sound via Web Audio API ---
-function playFireSound(combo) {
+function playFireSound(level) {
   const ctx = audioCtx;
   const now = ctx.currentTime;
-  const intensity = Math.min(1, combo / 10);
+  const intensity = Math.min(1, level / 10);
 
   // Noise burst (whoosh)
   const bufSize = ctx.sampleRate * 0.15;
@@ -1979,12 +2008,12 @@ function playFireSound(combo) {
   osc.start(now);
   osc.stop(now + 0.25);
 
-  // High-combo: add rising tone
-  if (combo >= 5) {
+  // High intensity: add rising tone
+  if (level >= 5) {
     const riseOsc = ctx.createOscillator();
     riseOsc.type = 'sawtooth';
     riseOsc.frequency.setValueAtTime(200, now);
-    riseOsc.frequency.exponentialRampToValueAtTime(600 + combo * 50, now + 0.1);
+    riseOsc.frequency.exponentialRampToValueAtTime(600 + level * 50, now + 0.1);
     const riseGain = ctx.createGain();
     riseGain.gain.setValueAtTime(0.06, now);
     riseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
@@ -2046,27 +2075,75 @@ function squishButton(btn) {
   }, 50);
 }
 
-// --- Combo display ---
-function updateComboDisplay() {
-  fireComboNumEl.textContent = fireCombo;
-
-  // Tier classes
-  fireComboEl.classList.remove('tier-2', 'tier-3');
-  if (fireCombo >= 10) fireComboEl.classList.add('tier-3');
-  else if (fireCombo >= 5) fireComboEl.classList.add('tier-2');
-
-  // Show with pop (centered on screen via CSS)
-  fireComboEl.classList.add('visible');
-  fireComboEl.classList.add('fire-combo-pop');
-  setTimeout(() => fireComboEl.classList.remove('fire-combo-pop'), 80);
+// --- Fire mode activation/deactivation ---
+function activateFireMode() {
+  fireMode = true;
+  fireModeStart = performance.now();
+  clearTimeout(fireModeTimer);
+  fireModeTimer = setTimeout(deactivateFireMode, FIRE_MODE_DURATION);
+  // Start waveform fire particle spawner
+  if (!waveformFireRAF) tickWaveformFireParticles();
 }
 
-function hideCombo() {
-  fireComboEl.classList.remove('visible', 'tier-2', 'tier-3');
-  fireCombo = 0;
+function deactivateFireMode() {
+  fireMode = false;
+  fireModeIntensity = 0;
+  clearTimeout(fireModeTimer);
+  fireBtnEl.classList.remove('fire-forge');
+  fireHaloEl.classList.remove('visible');
 }
 
-// --- Screen flash (combo-aware) — reuse single DOM element ---
+// Update fire mode intensity each frame (called from animation loop)
+function updateFireModeIntensity() {
+  if (!fireMode) { fireModeIntensity = 0; return; }
+  const elapsed = performance.now() - fireModeStart;
+  const remaining = FIRE_MODE_DURATION - elapsed;
+  if (remaining <= 0) { fireModeIntensity = 0; return; }
+  // Full intensity for first 7s, then fade out over last 3s
+  const fadeStart = FIRE_MODE_DURATION - 3000;
+  if (elapsed < fadeStart) {
+    fireModeIntensity = 1;
+  } else {
+    fireModeIntensity = remaining / 3000;
+  }
+}
+
+// Spawn particles rising upward from the waveform area during fire mode
+function tickWaveformFireParticles() {
+  if (!fireMode) { waveformFireRAF = null; return; }
+  updateFireModeIntensity();
+  // Spawn embers rising from the waveform canvas area
+  const wfCanvas = document.getElementById('waveformCanvas');
+  if (wfCanvas && fireModeIntensity > 0.05) {
+    const rect = wfCanvas.getBoundingClientRect();
+    const count = Math.floor(2 + fireModeIntensity * 3);
+    for (let i = 0; i < count; i++) {
+      const cx = rect.left + Math.random() * rect.width;
+      const cy = rect.top + rect.height * (0.2 + Math.random() * 0.6);
+      const maxAlive = 60;
+      if (fireParticles.length >= maxAlive) break;
+      const hue = 10 + Math.random() * 40;
+      const speed = (1.5 + Math.random() * 3) * fireModeIntensity;
+      fireParticles.push({
+        x: cx, y: cy,
+        prevX: cx, prevY: cy,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: -speed, // upward
+        size: 1.5 + Math.random() * 2.5 * fireModeIntensity,
+        life: 0.8 + Math.random() * 0.8,
+        maxLife: 0.8 + Math.random() * 0.8,
+        hue, sat: 80 + Math.random() * 20, lum: 55 + Math.random() * 25,
+        gravity: -0.02, // slight upward drift
+        friction: 0.99,
+        type: Math.random() < 0.3 ? 'spark' : 'ember',
+      });
+    }
+    if (!fireParticleRAF) tickFireParticles();
+  }
+  waveformFireRAF = requestAnimationFrame(tickWaveformFireParticles);
+}
+
+// --- Screen flash — reuse single DOM element ---
 const flashEl = document.createElement('div');
 flashEl.className = 'fire-flash';
 flashEl.style.display = 'none';
@@ -2076,9 +2153,9 @@ flashEl.appendChild(flashInner);
 document.body.appendChild(flashEl);
 let flashTimeout = 0;
 
-function triggerFlash(combo) {
+function triggerFlash(intensity) {
   clearTimeout(flashTimeout);
-  const intensity = Math.min(1, combo / 8);
+  intensity = Math.min(1, intensity);
   flashInner.style.background = `radial-gradient(ellipse at center,
     rgba(255, ${200 - intensity * 100 | 0}, ${150 - intensity * 100 | 0}, ${0.4 + intensity * 0.3}) 0%,
     rgba(255, 60, 0, ${0.2 + intensity * 0.2}) 40%,
@@ -2105,68 +2182,56 @@ let shakeTimeout = 0;
 let chromaticTimeout = 0;
 
 fireBtnEl.addEventListener('click', function () {
-  // Combo tracking
-  fireCombo++;
-  clearTimeout(fireComboTimer);
-  clearTimeout(fireComboDecayTimer);
-  fireComboTimer = setTimeout(() => {
-    fireComboDecayTimer = setTimeout(hideCombo, 400);
-  }, COMBO_WINDOW);
-
   const r = this.getBoundingClientRect();
   const cx = r.left + r.width / 2;
   const cy = r.top + r.height / 2;
 
-  // 1. Button squish
+  // 1. Button tremble (200ms intense vibration)
+  this.classList.remove('fire-tremble', 'fire-forge');
+  void this.offsetWidth;
+  this.classList.add('fire-tremble');
+  setTimeout(() => {
+    this.classList.remove('fire-tremble');
+    // 2. Forge effect — pulsing red-orange like heated metal (lasts for fire mode duration)
+    this.classList.add('fire-forge');
+  }, 200);
+
+  // 3. Button squish
   squishButton(this);
 
-  // 2. Procedural sound
-  playFireSound(fireCombo);
+  // 4. Procedural sound (max intensity)
+  playFireSound(8);
 
-  // 3. Shockwave (2 reused DOM elements)
+  // 5. Shockwave
   triggerShockwave(cx, cy);
 
-  // 4. Flash (reused DOM element)
-  triggerFlash(fireCombo);
+  // 6. Flash (strong)
+  triggerFlash(0.9);
 
-  // 5. Particles (capped at 60 total, fewer per click)
-  const particleCount = Math.min(25, 8 + fireCombo * 3);
-  const intensity = Math.min(1.2, 0.7 + fireCombo * 0.05);
-  spawnFireParticles(cx, cy, particleCount, intensity);
+  // 7. Initial burst of particles from button
+  spawnFireParticles(cx, cy, 20, 1.1);
 
-  // 6. Combo display
-  if (fireCombo >= 2) {
-    updateComboDisplay();
-  }
+  // 8. Screen shake
+  clearTimeout(shakeTimeout);
+  wrapperEl.classList.remove('shaking');
+  void wrapperEl.offsetWidth;
+  wrapperEl.classList.add('shaking');
+  shakeTimeout = setTimeout(() => wrapperEl.classList.remove('shaking'), 600);
 
-  // 7. Screen shake — use classList (no reflow forcing)
-  if (fireCombo >= 3) {
-    clearTimeout(shakeTimeout);
-    wrapperEl.classList.remove('shaking');
-    void wrapperEl.offsetWidth;
-    wrapperEl.classList.add('shaking');
-    shakeTimeout = setTimeout(() => wrapperEl.classList.remove('shaking'), 600);
-  }
-
-  // 8. Fire halo — cached reference, no DOM query
-  const haloScale = 1 + Math.min(fireCombo, 15) * 0.12;
-  fireHaloEl.style.setProperty('--halo-scale', haloScale);
+  // 9. Fire halo
+  fireHaloEl.style.setProperty('--halo-scale', 2.2);
   fireHaloEl.classList.add('visible');
 
-  // 9. Chromatic aberration on high combo
-  if (fireCombo >= 7) {
-    clearTimeout(chromaticTimeout);
-    document.body.classList.add('chromatic-active');
-    chromaticTimeout = setTimeout(() => document.body.classList.remove('chromatic-active'), 300);
-  }
+  // 10. Chromatic aberration
+  clearTimeout(chromaticTimeout);
+  document.body.classList.add('chromatic-active');
+  chromaticTimeout = setTimeout(() => document.body.classList.remove('chromatic-active'), 300);
+
+  // 11. ACTIVATE FIRE MODE — 10 seconds of chaos
+  activateFireMode();
 });
 
-// Hide halo when combo ends
-const _origHideCombo = hideCombo;
-hideCombo = function() {
-  _origHideCombo();
-  fireHaloEl.classList.remove('visible');
-};
+// (fire mode cleanup handled in deactivateFireMode)
 
 // ===== COMMUNITY QUEUE =====
 let currentSource = 'upload'; // 'upload' or 'youtube'
