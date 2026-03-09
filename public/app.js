@@ -220,6 +220,7 @@ gainNode.connect(loudnessAnalyser);
 // ===== KICK DETECTION STATE =====
 let prevKickLevel = 0;
 let kickDecay = 0;
+let kickActivity = 0; // smoothed kick presence: stays high while kicks keep hitting
 let density = 0;
 let densitySmooth = 0;
 let lastKickTime = 0;
@@ -444,6 +445,14 @@ function drawWaveform(currentTime) {
   }
   kickDecay *= .82; // faster decay for snappy kick response
 
+  // Smoothed kick activity: rises fast on kicks, decays slowly (~3s to fade)
+  // This keeps score stable between individual kick hits during a drop
+  if (kickDecay > 0.15) {
+    kickActivity += (1 - kickActivity) * 0.3; // fast rise
+  } else {
+    kickActivity *= 0.993; // very slow decay (~3s half-life at 60fps)
+  }
+
   const windowSec = 8;
   const playheadX = w * 0.35;
   const scrollBack = 0.35 * windowSec;
@@ -564,10 +573,9 @@ function drawWaveform(currentTime) {
     // Bass bonus: 0-1, rewards sections with actual low-end
     const bassBonus = Math.min(1, (subRaw * 0.6 + bassRaw * 0.4) * 3);
 
-    // Kick/transient impact: kickDecay comes from 60-100Hz bandpass detection
-    // Accumulate kick hits into a sustained "drum activity" metric
-    // kickDecay spikes on each hit then fades — we smooth it to track ongoing drum presence
-    const kickImpact = Math.min(1, kickDecay * 2.5);
+    // Kick activity: smoothed envelope that stays high while kicks keep hitting
+    // Unlike raw kickDecay (spiky), kickActivity holds steady during drops
+    const kickImpact = Math.min(1, kickActivity);
 
     // Feed hammerSmooth for other uses
     hammerSmooth += (wfLevel - hammerSmooth) * 0.12;
