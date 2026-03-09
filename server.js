@@ -391,13 +391,23 @@ app.get('/api/yt-audio/:videoId', async (req, res) => {
     }
   } catch (e) { /* ignore cache errors */ }
 
-  // Try Piped instances
+  // Try Piped instances (full list from TeamPiped documentation)
   const pipedInstances = [
     'https://pipedapi.kavin.rocks',
+    'https://pipedapi.leptons.xyz',
+    'https://pipedapi.nosebs.ru',
+    'https://pipedapi-libre.kavin.rocks',
+    'https://piped-api.privacy.com.de',
     'https://pipedapi.adminforge.de',
-    'https://pipedapi.r4fo.com',
-    'https://pipedapi.darkness.services',
     'https://api.piped.yt',
+    'https://pipedapi.drgns.space',
+    'https://pipedapi.owo.si',
+    'https://pipedapi.ducks.party',
+    'https://piped-api.codespace.cz',
+    'https://pipedapi.reallyaweso.me',
+    'https://api.piped.private.coffee',
+    'https://pipedapi.darkness.services',
+    'https://pipedapi.orangenet.cc',
   ];
 
   for (const instance of pipedInstances) {
@@ -460,6 +470,7 @@ app.get('/api/yt-audio/:videoId', async (req, res) => {
   // Try Invidious instances as fallback
   const invidiousInstances = [
     'https://inv.nadeko.net',
+    'https://yewtu.be',
     'https://invidious.nerdvpn.de',
     'https://iv.datura.network',
     'https://invidious.private.coffee',
