@@ -415,7 +415,7 @@ app.get('/api/yt-audio/:videoId', async (req, res) => {
     try {
       console.log(`YT proxy (${instance}): fetching streams for ${videoId}`);
       const infoRes = await fetch(`${instance}/streams/${videoId}`, {
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(5000),
         headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
       });
       if (!infoRes.ok) {
@@ -481,7 +481,7 @@ app.get('/api/yt-audio/:videoId', async (req, res) => {
     try {
       console.log(`YT proxy Invidious (${instance}): trying ${videoId}`);
       const infoRes = await fetch(`${instance}/api/v1/videos/${videoId}`, {
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(5000),
         headers: { 'Accept': 'application/json' },
       });
       if (!infoRes.ok) continue;
@@ -511,42 +511,98 @@ app.get('/api/yt-audio/:videoId', async (req, res) => {
     }
   }
 
-  // Try ytdl-core as last resort (direct extraction)
-  try {
-    console.log(`YT proxy ytdl-core: trying ${videoId}`);
-    const url = `https://www.youtube.com/watch?v=${videoId}`;
-    const info = await ytdl.getInfo(url);
-    const format = ytdl.chooseFormat(info.formats, {
-      quality: 'highestaudio',
-      filter: 'audioonly',
-    });
-    if (format && format.url) {
-      console.log(`YT proxy ytdl-core: found format ${format.mimeType} ${format.bitrate}bps`);
-      const audioRes = await fetch(format.url, {
-        signal: AbortSignal.timeout(60000),
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
+  // Try Cobalt API instances as fallback
+  // v10 instances (POST /)
+  const cobaltV10 = [
+    'https://api.cobalt.tools',
+    'https://cobalt-api.ayo.tf',
+  ];
+  // v7 instances (POST /api/json)
+  const cobaltV7 = [
+    'https://cobaltapi.clebootin.com',
+    'https://ytapi.edd1e.xyz',
+    'https://api.cobalt.tacohitbox.com',
+    'https://cobalt-api.luver.pw',
+    'https://cobapi.elrant.team',
+    'https://coapi.kelig.me',
+    'https://ca.haloz.at',
+    'https://nyc1.coapi.ggtyler.dev',
+  ];
+
+  // Try v10 instances
+  for (const cobaltBase of cobaltV10) {
+    try {
+      console.log(`YT proxy Cobalt v10 (${cobaltBase}): trying ${videoId}`);
+      const cobaltRes = await fetch(`${cobaltBase}/`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(15000),
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+          downloadMode: 'audio',
+          audioFormat: 'mp3',
+          audioBitrate: '128',
+        }),
       });
-      if (audioRes.ok) {
-        const buf = Buffer.from(await audioRes.arrayBuffer());
-        if (buf.length > 1000) {
-          const mime = (format.mimeType || 'audio/mp4').split(';')[0];
-          console.log(`YT proxy ytdl-core: success! ${buf.length} bytes (${mime})`);
-
-          pool.query(
-            "UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL",
-            [buf, mime, `%${videoId}%`]
-          ).catch(() => {});
-
-          res.set({ 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400' });
-          return res.send(buf);
-        }
+      if (!cobaltRes.ok) {
+        console.log(`YT proxy Cobalt v10 ${cobaltBase}: HTTP ${cobaltRes.status}`);
+        continue;
       }
-    }
-    console.log('YT proxy ytdl-core: no suitable format found');
-  } catch (e) {
-    console.error(`YT proxy ytdl-core error:`, e.message);
+      const cobaltData = await cobaltRes.json();
+      const downloadUrl = cobaltData.url || cobaltData.audio;
+      if (!downloadUrl) {
+        console.log(`YT proxy Cobalt v10 ${cobaltBase}: no URL`, JSON.stringify(cobaltData).slice(0, 200));
+        continue;
+      }
+      console.log(`YT proxy Cobalt v10: downloading from ${cobaltBase}`);
+      const audioRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(60000) });
+      if (!audioRes.ok) { console.log(`YT proxy Cobalt v10: download failed HTTP ${audioRes.status}`); continue; }
+      const buf = Buffer.from(await audioRes.arrayBuffer());
+      if (buf.length < 1000) { console.log(`YT proxy Cobalt v10: too small`); continue; }
+      const mime = audioRes.headers.get('content-type')?.split(';')[0] || 'audio/mpeg';
+      console.log(`YT proxy Cobalt v10 (${cobaltBase}): success! ${buf.length} bytes (${mime})`);
+      pool.query("UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL", [buf, mime, `%${videoId}%`]).catch(() => {});
+      res.set({ 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400' });
+      return res.send(buf);
+    } catch (e) { console.error(`YT proxy Cobalt v10 ${cobaltBase} error:`, e.message); }
+  }
+
+  // Try v7 instances
+  for (const cobaltBase of cobaltV7) {
+    try {
+      console.log(`YT proxy Cobalt v7 (${cobaltBase}): trying ${videoId}`);
+      const cobaltRes = await fetch(`${cobaltBase}/api/json`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(15000),
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+          isAudioOnly: true,
+          aFormat: 'mp3',
+        }),
+      });
+      if (!cobaltRes.ok) {
+        console.log(`YT proxy Cobalt v7 ${cobaltBase}: HTTP ${cobaltRes.status}`);
+        continue;
+      }
+      const cobaltData = await cobaltRes.json();
+      if (cobaltData.status !== 'stream' && cobaltData.status !== 'redirect') {
+        console.log(`YT proxy Cobalt v7 ${cobaltBase}: status=${cobaltData.status}`, cobaltData.text || '');
+        continue;
+      }
+      const downloadUrl = cobaltData.url;
+      if (!downloadUrl) { console.log(`YT proxy Cobalt v7 ${cobaltBase}: no URL`); continue; }
+      console.log(`YT proxy Cobalt v7: downloading from ${cobaltBase}`);
+      const audioRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(60000) });
+      if (!audioRes.ok) { console.log(`YT proxy Cobalt v7: download failed HTTP ${audioRes.status}`); continue; }
+      const buf = Buffer.from(await audioRes.arrayBuffer());
+      if (buf.length < 1000) { console.log(`YT proxy Cobalt v7: too small`); continue; }
+      const mime = audioRes.headers.get('content-type')?.split(';')[0] || 'audio/mpeg';
+      console.log(`YT proxy Cobalt v7 (${cobaltBase}): success! ${buf.length} bytes (${mime})`);
+      pool.query("UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL", [buf, mime, `%${videoId}%`]).catch(() => {});
+      res.set({ 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400' });
+      return res.send(buf);
+    } catch (e) { console.error(`YT proxy Cobalt v7 ${cobaltBase} error:`, e.message); }
   }
 
   res.status(502).json({ error: 'Audio YouTube indisponible' });
