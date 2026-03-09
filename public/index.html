@@ -30,15 +30,6 @@
 
   <!-- Main wrapper -->
   <div class="wrapper" id="wrapper">
-    <!-- Source toggle + queue counter -->
-    <div class="source-bar">
-      <div class="source-toggle">
-        <button class="source-btn active" id="srcUpload" data-type="upload">UPLOADS</button>
-        <button class="source-btn" id="srcYoutube" data-type="youtube">YOUTUBE</button>
-      </div>
-      <div class="queue-counter" id="queueCounter">0/0</div>
-      <button class="wipe-btn" id="wipeBtn" title="Supprimer tous les uploads">WIPE ALL</button>
-    </div>
 
     <!-- Hidden file input (fallback) -->
     <input type="file" id="audioFileInput" accept="audio/*" multiple aria-label="Charger un fichier audio" style="display:none;">
@@ -90,25 +81,28 @@
 
           <!-- Transport controls (inside waveform panel) -->
           <div class="transport-controls">
-            <button class="transport-btn" id="prevBtn" aria-label="Son précédent">
-              <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" transform="scale(-1,1) translate(-24,0)"/></svg>
-            </button>
-            <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
-              <img src="play.png" alt="Play" class="play-img" id="playImg">
-              <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
-            </button>
-            <button class="transport-btn" id="nextBtn" aria-label="Son suivant">
-              <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-            </button>
+            <div class="transport-left">
+              <div class="source-toggle">
+                <button class="source-btn active" id="srcUpload" data-type="upload">UPLOADS</button>
+                <button class="source-btn" id="srcYoutube" data-type="youtube">YOUTUBE</button>
+              </div>
+              <div class="queue-counter" id="queueCounter">0/0</div>
+              <button class="wipe-btn" id="wipeBtn" title="Supprimer tous les uploads">WIPE ALL</button>
+            </div>
+            <div class="transport-center">
+              <button class="transport-btn" id="prevBtn" aria-label="Son précédent">
+                <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" transform="scale(-1,1) translate(-24,0)"/></svg>
+              </button>
+              <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
+                <img src="play.png" alt="Play" class="play-img" id="playImg">
+                <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
+              </button>
+              <button class="transport-btn" id="nextBtn" aria-label="Son suivant">
+                <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-
-      <!-- Track info -->
-      <div class="track-info" id="trackInfo">
-        <span class="track-title" id="trackTitle">En attente...</span>
-        <span class="track-artist" id="trackArtist"></span>
-        <span class="track-submitter" id="trackSubmitter"></span>
       </div>
 
       <!-- Mini waveform navigation -->
@@ -117,15 +111,16 @@
         <div class="mini-progress" id="miniProgress"></div>
       </div>
 
-      <!-- User card (top-left) -->
-      <div class="user-card">
+      <!-- Track info card (top-left, replaces user card) -->
+      <div class="user-card" id="trackInfoCard">
         <div class="user-avatar">&#127925;</div>
-        <div>
-          <div class="user-name">SAUCEBOY19</div>
-          <div class="user-elo">ELO 1250</div>
+        <div class="track-info-text">
+          <div class="user-name" id="trackTitle">En attente...</div>
+          <div class="user-elo" id="trackArtist"></div>
         </div>
-        <span class="user-crown">&#128081;</span>
-        <div><div class="user-rank">GOLD</div></div>
+        <div class="track-submitter-wrap">
+          <div class="user-rank" id="trackSubmitter"></div>
+        </div>
       </div>
 
       <!-- L'avis du chat (top-right) -->

@@ -1220,7 +1220,7 @@ function updateTransportButtons() {
 }
 updateTransportButtons();
 
-async function loadTrack(index) {
+async function loadTrack(index, autoPlay) {
   if (index < 0 || index >= playlist.length) return;
   currentTrackIndex = index;
   loadingOverlay.classList.add('visible');
@@ -1238,7 +1238,7 @@ async function loadTrack(index) {
     resizeCanvases();
     drawMiniWaveform();
     pauseOffset = 0;
-    playAudio();
+    if (autoPlay) playAudio();
   } catch (err) {
     console.error('Audio decode error:', err, 'Track:', playlist[index]?.name);
     // Skip to next track instead of blocking with alert
@@ -1255,7 +1255,7 @@ async function loadTrack(index) {
         resizeCanvases();
         drawMiniWaveform();
         pauseOffset = 0;
-        playAudio();
+        if (autoPlay) playAudio();
       } catch (e2) {
         console.error('Next track also failed:', e2);
       }
@@ -1475,8 +1475,6 @@ document.getElementById('btnFire').addEventListener('click', function () {
     }, i * 60);
   }
 
-  // Skip to next track after fire animation
-  skipToNext();
 });
 
 // ===== COMMUNITY QUEUE =====
@@ -1503,7 +1501,7 @@ function updateTrackInfo(item) {
     return;
   }
   trackTitleEl.textContent = item.title || 'Sans titre';
-  trackArtistEl.textContent = item.artist ? `- ${item.artist}` : '';
+  trackArtistEl.textContent = item.artist || '';
   trackSubmitterEl.textContent = item.submitted_by ? `par ${item.submitted_by}` : '';
 }
 
@@ -1584,8 +1582,8 @@ document.querySelectorAll('.source-btn').forEach(btn => {
 
 // Override loadTrack to update queue info
 const _originalLoadTrack = loadTrack;
-loadTrack = async function(index) {
-  await _originalLoadTrack(index);
+loadTrack = async function(index, autoPlay) {
+  await _originalLoadTrack(index, autoPlay);
   if (serverQueue.length > 0 && playlist[index] && playlist[index].queueItem) {
     updateTrackInfo(playlist[index].queueItem);
   }
@@ -1603,10 +1601,16 @@ document.getElementById('wipeBtn').addEventListener('click', async () => {
       serverQueue = [];
       playlist = [];
       currentTrackIndex = -1;
+      audioBuffer = null;
+      waveformData = [];
+      waveformSigned = [];
       updateQueueCounter();
       updateTrackInfo(null);
       trackTitleEl.textContent = 'Tous les sons ont été supprimés';
       updateTransportButtons();
+      // Reset waveform to flat
+      resizeCanvases();
+      drawMiniWaveform();
     }
   } catch (e) {
     console.error('Wipe error:', e);

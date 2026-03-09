@@ -308,16 +308,22 @@ body {
 .time-overlay.left { left: 14px; }
 .time-overlay.right { right: 14px; }
 
-/* Transport controls (inside waveform panel, bottom center) */
+/* Transport controls (inside waveform panel, bottom) */
 .transport-controls {
-  position: absolute; bottom: 10px; left: 50%; z-index: 36;
-  transform: translateX(-50%);
-  display: flex; align-items: center; justify-content: center; gap: 10px;
+  position: absolute; bottom: 10px; left: 10px; right: 10px; z-index: 36;
+  display: flex; align-items: center; justify-content: space-between;
   background: rgba(8, 16, 48, .35);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(190, 215, 255, .15);
   border-radius: 50px; padding: 6px 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
+}
+.transport-left {
+  display: flex; align-items: center; gap: 8px;
+}
+.transport-center {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  position: absolute; left: 50%; transform: translateX(-50%);
 }
 .play-btn {
   border: none; cursor: pointer; background: transparent; padding: 0;
@@ -825,17 +831,22 @@ body {
   box-shadow: 0 4px 16px rgba(0, 0, 0, .3), 0 0 10px rgba(255, 200, 50, .12);
 }
 .user-name {
-  font-family: 'Bangers', cursive; font-size: 22px; letter-spacing: 2px;
+  font-family: 'Bangers', cursive; font-size: 20px; letter-spacing: 2px;
   text-shadow: 0 2px 6px rgba(0, 0, 0, .4);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px;
 }
 .user-elo {
-  font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 11px;
-  color: rgba(255, 255, 255, .35); letter-spacing: 1px; margin-top: 2px;
+  font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 13px;
+  color: rgba(255, 180, 60, .7); letter-spacing: 1px; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
 }
-.user-crown { font-size: 34px; margin-left: 8px; filter: drop-shadow(0 3px 8px rgba(255, 200, 0, .35)); }
+.track-submitter-wrap {
+  margin-left: 8px;
+}
 .user-rank {
-  font-family: 'Bangers', cursive; font-size: 15px; letter-spacing: 3px;
-  color: rgba(255, 200, 50, .85);
+  font-family: 'Quicksand', sans-serif; font-size: 11px; font-weight: 600;
+  letter-spacing: 1px; color: rgba(255, 255, 255, .35);
+  white-space: nowrap;
 }
 
 /* ===== CHAT CARD (top-right) ===== */
@@ -925,18 +936,14 @@ body {
   animation: none !important; transition: transform .03s;
 }
 
-/* ===== SOURCE BAR ===== */
-.source-bar {
-  display: flex; align-items: center; justify-content: center; gap: 16px;
-  position: relative; z-index: 950; margin-bottom: 8px;
-}
+/* ===== SOURCE TOGGLE & WIPE (inside transport) ===== */
 .wipe-btn {
-  font-family: 'Bangers', cursive; font-size: 11px;
-  color: rgba(255, 80, 80, .7); padding: 5px 14px;
+  font-family: 'Bangers', cursive; font-size: 10px;
+  color: rgba(255, 80, 80, .7); padding: 4px 10px;
   border: 1px solid rgba(255, 80, 80, .25); border-radius: 50px;
   cursor: pointer; background: rgba(255, 40, 40, .08);
-  letter-spacing: 1.5px; text-transform: uppercase;
-  transition: all .25s;
+  letter-spacing: 1px; text-transform: uppercase;
+  transition: all .25s; white-space: nowrap;
 }
 .wipe-btn:hover {
   background: rgba(255, 40, 40, .2); color: #ff5050;
@@ -962,29 +969,16 @@ body {
   color: rgba(255, 255, 255, .7); background: rgba(255, 255, 255, .05);
 }
 .queue-counter {
-  font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
   color: rgba(255, 255, 255, .5); letter-spacing: 1px;
-  background: rgba(0, 0, 0, .25); padding: 5px 14px;
+  background: rgba(0, 0, 0, .25); padding: 3px 10px;
   border-radius: 50px; border: 1px solid rgba(255, 255, 255, .06);
+  white-space: nowrap;
 }
 
-/* ===== TRACK INFO ===== */
-.track-info {
-  display: flex; align-items: center; gap: 12px;
-  padding: 6px 16px; margin-top: 4px;
-  font-family: 'Quicksand', sans-serif;
-}
-.track-title {
-  font-weight: 700; font-size: 14px; color: rgba(255, 255, 255, .85);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px;
-}
-.track-artist {
-  font-size: 12px; color: rgba(255, 180, 60, .7);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;
-}
-.track-submitter {
-  font-size: 11px; color: rgba(255, 255, 255, .3);
-  margin-left: auto; white-space: nowrap;
+/* ===== TRACK INFO (inside user-card) ===== */
+.track-info-text {
+  flex: 1; min-width: 0;
 }
 
 /* ===== LOADING OVERLAY ===== */
@@ -1062,6 +1056,10 @@ body {
   .hammer-label { font-size: 11px; letter-spacing: 3px; }
   .hammer-card { top: -95px; gap: 6px; padding: 10px 14px 10px 10px; border-radius: 16px; }
   .play-btn img { height: 40px; }
-  .transport-controls { padding: 4px 12px; gap: 8px; }
+  .transport-controls { padding: 4px 8px; }
   .transport-btn { width: 32px; height: 32px; }
+  .transport-left { gap: 4px; }
+  .source-btn { font-size: 10px; padding: 3px 10px; letter-spacing: 1px; }
+  .queue-counter { font-size: 9px; padding: 2px 6px; }
+  .wipe-btn { font-size: 8px; padding: 3px 6px; }
 }
