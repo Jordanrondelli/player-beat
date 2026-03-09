@@ -1861,8 +1861,8 @@ resizeFireCanvas();
 window.addEventListener('resize', resizeFireCanvas);
 
 function spawnFireParticles(cx, cy, count, intensity) {
-  // Hard cap: never exceed 80 total particles alive
-  const maxAlive = 80;
+  // Hard cap: 60 total particles alive (was 80)
+  const maxAlive = 60;
   if (fireParticles.length >= maxAlive) return;
   count = Math.min(count, maxAlive - fireParticles.length);
   for (let i = 0; i < count; i++) {
@@ -1911,36 +1911,23 @@ function tickFireParticles() {
     const color = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha})`;
 
     if (p.type === 'spark') {
-      // Spark: draw a line trail from previous to current position
+      // Spark: line trail (single stroke, no extra fill)
       const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-      const trailLen = Math.min(speed * 3, 20);
-      const dx = p.vx / (speed || 1);
-      const dy = p.vy / (speed || 1);
+      const trailLen = Math.min(speed * 2.5, 16);
+      const invSpeed = 1 / (speed || 1);
       fpCtx.beginPath();
       fpCtx.moveTo(p.x, p.y);
-      fpCtx.lineTo(p.x - dx * trailLen, p.y - dy * trailLen);
+      fpCtx.lineTo(p.x - p.vx * invSpeed * trailLen, p.y - p.vy * invSpeed * trailLen);
       fpCtx.strokeStyle = color;
-      fpCtx.lineWidth = sizeNow * 0.8;
+      fpCtx.lineWidth = sizeNow * 0.7;
       fpCtx.lineCap = 'round';
       fpCtx.stroke();
-      // Bright head
-      fpCtx.beginPath();
-      fpCtx.arc(p.x, p.y, sizeNow * 0.6, 0, Math.PI * 2);
-      fpCtx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${Math.min(95, p.lum + 20)}%, ${alpha})`;
-      fpCtx.fill();
     } else {
-      // Ember: soft glowing circle
+      // Ember: single circle (no glow pass — saves 1 draw call per particle)
       fpCtx.beginPath();
       fpCtx.arc(p.x, p.y, sizeNow, 0, Math.PI * 2);
       fpCtx.fillStyle = color;
       fpCtx.fill();
-      // Subtle glow
-      if (sizeNow > 2) {
-        fpCtx.beginPath();
-        fpCtx.arc(p.x, p.y, sizeNow * 2, 0, Math.PI * 2);
-        fpCtx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha * 0.15})`;
-        fpCtx.fill();
-      }
     }
   }
 
@@ -2007,41 +1994,41 @@ function playFireSound(combo) {
   }
 }
 
-// --- Shockwave effect — double ring with heat distortion ---
-function triggerShockwave(cx, cy, combo) {
-  // Primary ring — gradient + backdrop blur
-  const el = document.getElementById('fireShockwave');
-  el.classList.remove('active');
-  el.style.left = (cx - 30) + 'px';
-  el.style.top = (cy - 30) + 'px';
-  void el.offsetWidth;
-  el.classList.add('active');
-  setTimeout(() => el.classList.remove('active'), 600);
+// --- Shockwave effect — reuse 2 pre-existing DOM elements ---
+const fireShockwaveEl = document.getElementById('fireShockwave');
+// Create one secondary ring and keep it in the DOM
+const fireShockwaveRing = document.createElement('div');
+fireShockwaveRing.className = 'fire-shockwave-ring';
+fireShockwaveRing.style.display = 'none';
+document.body.appendChild(fireShockwaveRing);
 
-  // Secondary ring — thin border, delayed, wider spread
-  const ring = document.createElement('div');
-  ring.className = 'fire-shockwave-ring';
-  ring.style.left = (cx - 30) + 'px';
-  ring.style.top = (cy - 30) + 'px';
-  document.body.appendChild(ring);
-  setTimeout(() => {
-    ring.classList.add('active');
-    setTimeout(() => ring.remove(), 750);
-  }, 60);
+let swTimeout1 = 0, swTimeout2 = 0;
 
-  // Third ring on high combos
-  if (combo >= 5) {
-    const ring2 = document.createElement('div');
-    ring2.className = 'fire-shockwave-ring';
-    ring2.style.left = (cx - 30) + 'px';
-    ring2.style.top = (cy - 30) + 'px';
-    ring2.style.borderColor = 'rgba(255, 220, 100, .4)';
-    document.body.appendChild(ring2);
-    setTimeout(() => {
-      ring2.classList.add('active');
-      setTimeout(() => ring2.remove(), 750);
-    }, 140);
-  }
+function triggerShockwave(cx, cy) {
+  const x = (cx - 30) + 'px';
+  const y = (cy - 30) + 'px';
+
+  // Primary ring
+  clearTimeout(swTimeout1);
+  fireShockwaveEl.classList.remove('active');
+  fireShockwaveEl.style.left = x;
+  fireShockwaveEl.style.top = y;
+  void fireShockwaveEl.offsetWidth;
+  fireShockwaveEl.classList.add('active');
+  swTimeout1 = setTimeout(() => fireShockwaveEl.classList.remove('active'), 600);
+
+  // Secondary ring — reused, no DOM creation
+  clearTimeout(swTimeout2);
+  fireShockwaveRing.classList.remove('active');
+  fireShockwaveRing.style.display = '';
+  fireShockwaveRing.style.left = x;
+  fireShockwaveRing.style.top = y;
+  void fireShockwaveRing.offsetWidth;
+  fireShockwaveRing.classList.add('active');
+  swTimeout2 = setTimeout(() => {
+    fireShockwaveRing.classList.remove('active');
+    fireShockwaveRing.style.display = 'none';
+  }, 750);
 }
 
 // --- Button squish animation ---
@@ -2079,28 +2066,45 @@ function hideCombo() {
   fireCombo = 0;
 }
 
-// --- Screen flash (combo-aware) ---
+// --- Screen flash (combo-aware) — reuse single DOM element ---
+const flashEl = document.createElement('div');
+flashEl.className = 'fire-flash';
+flashEl.style.display = 'none';
+const flashInner = document.createElement('div');
+flashInner.className = 'fire-flash-inner';
+flashEl.appendChild(flashInner);
+document.body.appendChild(flashEl);
+let flashTimeout = 0;
+
 function triggerFlash(combo) {
-  const flash = document.createElement('div');
-  flash.className = 'fire-flash';
+  clearTimeout(flashTimeout);
   const intensity = Math.min(1, combo / 8);
-  const inner = document.createElement('div');
-  inner.className = 'fire-flash-inner';
-  inner.style.background = `radial-gradient(ellipse at center,
-    rgba(255, ${200 - intensity * 100}, ${150 - intensity * 100}, ${0.4 + intensity * 0.3}) 0%,
+  flashInner.style.background = `radial-gradient(ellipse at center,
+    rgba(255, ${200 - intensity * 100 | 0}, ${150 - intensity * 100 | 0}, ${0.4 + intensity * 0.3}) 0%,
     rgba(255, 60, 0, ${0.2 + intensity * 0.2}) 40%,
     transparent 70%)`;
-  flash.appendChild(inner);
-  document.body.appendChild(flash);
-  inner.addEventListener('animationend', () => flash.remove());
+  flashEl.style.display = '';
+  flashInner.style.animation = 'none';
+  void flashInner.offsetWidth;
+  flashInner.style.animation = '';
+  flashTimeout = setTimeout(() => { flashEl.style.display = 'none'; }, 400);
 }
 
 // --- Fire overlay disabled (removed for performance) ---
 
 // --- Main fire click handler ---
-document.getElementById('btnFire').addEventListener('click', function () {
-  // Don't send vote to server — only Twitch chat counts in "avis du chat"
+// Pre-cache all DOM references
+const fireBtnEl = document.getElementById('btnFire');
+const wrapperEl = document.getElementById('wrapper');
+// Create halo once
+const fireHaloEl = document.createElement('div');
+fireHaloEl.className = 'fire-halo';
+fireBtnEl.parentElement.appendChild(fireHaloEl);
 
+let shakeTimeout = 0;
+let chromaticTimeout = 0;
+
+fireBtnEl.addEventListener('click', function () {
   // Combo tracking
   fireCombo++;
   clearTimeout(fireComboTimer);
@@ -2113,53 +2117,47 @@ document.getElementById('btnFire').addEventListener('click', function () {
   const cx = r.left + r.width / 2;
   const cy = r.top + r.height / 2;
 
-  // 1. Button squish (satisfying tactile feel)
+  // 1. Button squish
   squishButton(this);
 
   // 2. Procedural sound
   playFireSound(fireCombo);
 
-  // 3. Shockwave (single reused DOM element — zero cost)
-  triggerShockwave(cx, cy, fireCombo);
+  // 3. Shockwave (2 reused DOM elements)
+  triggerShockwave(cx, cy);
 
-  // 4. Small flash (single DOM element, removed on animationend)
+  // 4. Flash (reused DOM element)
   triggerFlash(fireCombo);
 
-  // 5. Light particle burst (capped, no trails)
-  const particleCount = Math.min(40, 12 + fireCombo * 4);
-  const intensity = Math.min(1.3, 0.7 + fireCombo * 0.06);
+  // 5. Particles (capped at 60 total, fewer per click)
+  const particleCount = Math.min(25, 8 + fireCombo * 3);
+  const intensity = Math.min(1.2, 0.7 + fireCombo * 0.05);
   spawnFireParticles(cx, cy, particleCount, intensity);
 
-  // 6. Combo number — THE star of the show
+  // 6. Combo display
   if (fireCombo >= 2) {
     updateComboDisplay();
   }
 
-  // 7. Screen shake — intensity scales with combo
-  if (fireCombo >= 2) {
-    const wrapper = document.getElementById('wrapper');
-    const shakeIntensity = Math.min(1, fireCombo / 12);
-    wrapper.style.animation = 'none';
-    void wrapper.offsetWidth;
-    wrapper.style.animation = `fireShake ${0.4 + shakeIntensity * 0.3}s ease-out`;
-    setTimeout(() => { wrapper.style.animation = ''; }, 400 + shakeIntensity * 300);
+  // 7. Screen shake — use classList (no reflow forcing)
+  if (fireCombo >= 3) {
+    clearTimeout(shakeTimeout);
+    wrapperEl.classList.remove('shaking');
+    void wrapperEl.offsetWidth;
+    wrapperEl.classList.add('shaking');
+    shakeTimeout = setTimeout(() => wrapperEl.classList.remove('shaking'), 600);
   }
 
-  // 8. Persistent fire halo — grows with combo
-  let halo = document.querySelector('.fire-halo');
-  if (!halo) {
-    halo = document.createElement('div');
-    halo.className = 'fire-halo';
-    this.parentElement.appendChild(halo);
-  }
+  // 8. Fire halo — cached reference, no DOM query
   const haloScale = 1 + Math.min(fireCombo, 15) * 0.12;
-  halo.style.setProperty('--halo-scale', haloScale);
-  halo.classList.add('visible');
+  fireHaloEl.style.setProperty('--halo-scale', haloScale);
+  fireHaloEl.classList.add('visible');
 
   // 9. Chromatic aberration on high combo
   if (fireCombo >= 7) {
+    clearTimeout(chromaticTimeout);
     document.body.classList.add('chromatic-active');
-    setTimeout(() => document.body.classList.remove('chromatic-active'), 300);
+    chromaticTimeout = setTimeout(() => document.body.classList.remove('chromatic-active'), 300);
   }
 });
 
@@ -2167,8 +2165,7 @@ document.getElementById('btnFire').addEventListener('click', function () {
 const _origHideCombo = hideCombo;
 hideCombo = function() {
   _origHideCombo();
-  const halo = document.querySelector('.fire-halo');
-  if (halo) halo.classList.remove('visible');
+  fireHaloEl.classList.remove('visible');
 };
 
 // ===== COMMUNITY QUEUE =====
