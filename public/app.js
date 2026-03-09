@@ -526,118 +526,58 @@ function drawWaveform(currentTime) {
   }
   loudnessSmooth += (loudnessRaw - loudnessSmooth) * 0.12;
 
-  // ===== HAMMER: MULTI-CRITERIA POWER SCORING =====
-  // Weighted sum + convergence bonus. Reactive to 808s, drops, builds.
+  // ===== HAMMER: WAVEFORM-DRIVEN POWER SCORING =====
+  // Uses the pre-computed waveform envelope (same data that drives the visual bars)
+  // as the primary power source. What you SEE is what you GET.
+  // Bass presence from FFT adds a bonus to reward actual low-end content.
   if (isPlaying && audioBuffer) {
-    // High-resolution spectrum (1024 bins, ~21Hz/bin at 44100Hz)
+    // --- PRIMARY: Waveform envelope (RMS) at current playback position ---
+    // waveformData is already normalized 0-1 relative to track peak.
+    // Intro = small bars = low value. Drop = big bars = high value.
+    const wfIdx = Math.floor((currentTime / duration) * waveformData.length);
+    // Average a small window around current position for stability
+    const wfWindow = 5;
+    let wfSum = 0, wfCount = 0;
+    for (let i = wfIdx - wfWindow; i <= wfIdx + wfWindow; i++) {
+      const ci = Math.max(0, Math.min(waveformData.length - 1, i));
+      wfSum += waveformData[ci];
+      wfCount++;
+    }
+    const wfLevel = wfSum / wfCount; // 0-1, directly from waveform visual
+
+    // --- SECONDARY: Bass presence bonus from FFT (rewards drops with actual bass) ---
     loudnessAnalyser.getByteFrequencyData(loudnessFreqData);
     const hrBins = loudnessAnalyser.frequencyBinCount;
     const binHz = audioCtx.sampleRate / loudnessAnalyser.fftSize;
 
-    // --- CRITERION 1: SUB PRESENCE (20-80Hz) ---
-    // 808s live here. Wider range to catch tuned 808 slides.
+    // Sub (20-80Hz) + Bass (80-300Hz)
     const subS = Math.max(1, Math.round(20 / binHz)), subE = Math.round(80 / binHz);
     let subSum = 0;
     for (let i = subS; i < subE; i++) subSum += loudnessFreqData[i];
     const subRaw = subSum / ((subE - subS) * 255);
 
-    // --- CRITERION 2: BASS POWER (80-300Hz) ---
-    // Sustained low-end, kick body, 808 harmonics
     const bassS = subE, bassE = Math.round(300 / binHz);
     let bassSum = 0;
     for (let i = bassS; i < bassE; i++) bassSum += loudnessFreqData[i];
     const bassRaw = bassSum / ((bassE - bassS) * 255);
 
-    // --- CRITERION 3: LOW-END PUNCH ---
-    // Combines kick transients AND sustained sub energy.
-    // 808s score high here even without sharp transients.
-    // Only uses kickDecay which comes from the 60-100Hz bandpass filter
-    const punchRaw = Math.max(kickDecay, subRaw * 0.8, bassRaw * 0.6);
+    // Bass bonus: 0-1, rewards sections with actual low-end
+    const bassBonus = Math.min(1, (subRaw * 0.6 + bassRaw * 0.4) * 3);
 
-    // --- CRITERION 4: SPECTRAL FULLNESS ---
-    // How many frequency bands are active simultaneously
-    // Threshold raised to 0.18 — only bands with real energy count
-    // ONLY counts low-mid bands (80-3200Hz) — high sweeps/FX don't inflate fullness
-    const bandEdges = [80, 200, 400, 800, 1600, 3200];
-    let activeBands = 0;
-    for (let b = 0; b < bandEdges.length - 1; b++) {
-      const bS = Math.round(bandEdges[b] / binHz);
-      const bE = Math.min(Math.round(bandEdges[b + 1] / binHz), hrBins);
-      let bSum = 0;
-      for (let i = bS; i < bE; i++) bSum += loudnessFreqData[i];
-      if (bSum / ((bE - bS) * 255) > 0.18) activeBands++;
-    }
-    const fullnessRaw = activeBands / (bandEdges.length - 1);
+    // Feed hammerSmooth for other uses
+    hammerSmooth += (wfLevel - hammerSmooth) * 0.12;
 
-    // --- CRITERION 5: A-WEIGHTED LOUDNESS ---
-    let wSum = 0, wTotal = 0;
-    for (let i = 1; i < Math.min(750, hrBins); i++) {
-      wSum += (loudnessFreqData[i] / 255) * aWeightTable[i];
-      wTotal += aWeightTable[i];
-    }
-    const aLoudRaw = wSum / wTotal;
+    // --- FINAL SCORE ---
+    // 70% waveform envelope + 30% bass bonus
+    // Waveform ensures visual/score coherence
+    // Bass bonus differentiates drops (with bass) from buildups (loud but no bass)
+    const rawScore = wfLevel * 0.70 + wfLevel * bassBonus * 0.30;
 
-    // --- CRITERION 6: LOW/HIGH RATIO ---
-    // Drop = massive low-end vs highs. Buildup = lots of highs (sweeps, snare rolls).
-    // Low energy: 20-300Hz, High energy: 2kHz-16kHz
-    const highS = Math.round(2000 / binHz), highE = Math.min(Math.round(16000 / binHz), hrBins);
-    let highSum = 0;
-    for (let i = highS; i < highE; i++) highSum += loudnessFreqData[i];
-    const highRaw = highSum / ((highE - highS) * 255);
-    const lowRaw = (subRaw + bassRaw) / 2;
-    // Ratio: how much louder is the low-end vs the highs (clamped 0-1)
-    const lowHighRaw = highRaw > 0.001 ? Math.min(1, lowRaw / (highRaw + 0.01)) : lowRaw > 0.01 ? 1 : 0;
+    // Power curve — score^1.8 gives good dynamic range
+    // wfLevel 0.15 (intro) → ~3%.  wfLevel 0.5 (buildup) → ~28%.  wfLevel 0.9 (drop) → ~82%.
+    const shaped = Math.pow(Math.min(1, rawScore), 1.8) * 100;
 
-    // Feed hammerSmooth for beat sync
-    hammerSmooth += (aLoudRaw - hammerSmooth) * 0.12;
-
-    // Update running max (always, even after prescan — real-time data may exceed offline estimates)
-    criteriaMax.sub = Math.max(criteriaMax.sub, subRaw);
-    criteriaMax.bass = Math.max(criteriaMax.bass, bassRaw);
-    criteriaMax.kick = Math.max(criteriaMax.kick, punchRaw);
-    criteriaMax.fullness = Math.max(criteriaMax.fullness, fullnessRaw);
-    criteriaMax.loudness = Math.max(criteriaMax.loudness, aLoudRaw);
-    criteriaMax.lowHighRatio = Math.max(criteriaMax.lowHighRatio, lowHighRaw);
-
-    const norm = (val, max) => max > 0.001 ? Math.min(1, val / max) : 0;
-    const subN = norm(subRaw, criteriaMax.sub);
-    const bassN = norm(bassRaw, criteriaMax.bass);
-    const punchN = norm(punchRaw, criteriaMax.kick);
-    const fullN = norm(fullnessRaw, criteriaMax.fullness);
-    const loudN = norm(aLoudRaw, criteriaMax.loudness);
-    const lowHighN = norm(lowHighRaw, criteriaMax.lowHighRatio);
-
-    // Smoothing — very fast attack (near-instant), slow release for momentum
-    const smooth = (cur, target, up, down) => cur + (target - cur) * (target > cur ? up : down);
-    criteriaSmooth.sub = smooth(criteriaSmooth.sub, subN, 0.55, 0.06);
-    criteriaSmooth.bass = smooth(criteriaSmooth.bass, bassN, 0.55, 0.06);
-    criteriaSmooth.kick = smooth(criteriaSmooth.kick, punchN, 0.65, 0.08);
-    criteriaSmooth.fullness = smooth(criteriaSmooth.fullness, fullN, 0.40, 0.05);
-    criteriaSmooth.loudness = smooth(criteriaSmooth.loudness, loudN, 0.55, 0.06);
-    criteriaSmooth.lowHighRatio = smooth(criteriaSmooth.lowHighRatio, lowHighN, 0.45, 0.06);
-
-    const s = criteriaSmooth;
-    // Weighted sum — heavily bass/sub/kick dominant to separate drops from buildups
-    const base = s.sub * 0.28 + s.bass * 0.24 + s.kick * 0.23 +
-                 s.fullness * 0.05 + s.loudness * 0.05 + s.lowHighRatio * 0.15;
-
-    // Convergence bonus — only sub+bass+kick core (ignores fullness/loudness)
-    const minCore = Math.min(s.sub, s.bass, s.kick);
-    const score = base * 0.85 + minCore * 0.15;
-
-    // Absolute energy gate — prevents quiet intros/breakdowns from scoring high
-    // Uses raw sub+bass energy (NOT normalized) as absolute floor check
-    const absEnergy = (subRaw + bassRaw) * 0.5;
-    const gateThreshold = 0.08; // below this absolute level = definitely not a drop
-    const gate = absEnergy < gateThreshold
-      ? Math.pow(absEnergy / gateThreshold, 2) // quadratic ramp: 0→1 as energy approaches threshold
-      : 1;
-
-    // Power curve — score^2.5 compresses mid-range aggressively
-    // Then gated by absolute energy to suppress quiet sections
-    const shaped = Math.pow(Math.min(1, score), 2.5) * gate * 100;
-
-    // Charge dynamics: instant rise, slow release (~2s) for momentum retention
+    // Charge dynamics: fast rise, slow release for momentum
     const diff = shaped - hammerCharge;
     hammerCharge += diff * (diff > 0 ? 0.45 : 0.035);
     hammerCharge = Math.max(0, Math.min(100, hammerCharge));
