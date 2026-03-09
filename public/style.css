@@ -925,16 +925,55 @@ body {
   animation: none !important; transition: transform .03s;
 }
 
-/* ===== FILE INPUT ===== */
-.file-input-wrap { position: fixed; top: 12px; right: 12px; z-index: 950; }
-.file-input-wrap label {
-  font-family: 'Bangers', cursive; font-size: 12px;
-  color: rgba(255, 255, 255, .3); padding: 5px 12px;
-  border: 1px solid rgba(255, 255, 255, .08); border-radius: 50px;
-  cursor: pointer; background: rgba(0, 0, 0, .15);
-  letter-spacing: 2px; text-transform: uppercase;
+/* ===== SOURCE BAR ===== */
+.source-bar {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  position: relative; z-index: 950; margin-bottom: 8px;
 }
-.file-input-wrap input { display: none; }
+.source-toggle {
+  display: flex; gap: 4px;
+  background: rgba(0, 0, 0, .3); border-radius: 50px;
+  padding: 3px; border: 1px solid rgba(255, 255, 255, .08);
+}
+.source-btn {
+  font-family: 'Bangers', cursive; font-size: 13px;
+  color: rgba(255, 255, 255, .4); padding: 5px 18px;
+  border: none; border-radius: 50px; cursor: pointer;
+  background: transparent; letter-spacing: 2px;
+  text-transform: uppercase; transition: all .25s;
+}
+.source-btn.active {
+  color: #fff; background: rgba(255, 68, 0, .5);
+  box-shadow: 0 0 12px rgba(255, 68, 0, .3);
+}
+.source-btn:hover:not(.active) {
+  color: rgba(255, 255, 255, .7); background: rgba(255, 255, 255, .05);
+}
+.queue-counter {
+  font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  color: rgba(255, 255, 255, .5); letter-spacing: 1px;
+  background: rgba(0, 0, 0, .25); padding: 5px 14px;
+  border-radius: 50px; border: 1px solid rgba(255, 255, 255, .06);
+}
+
+/* ===== TRACK INFO ===== */
+.track-info {
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 16px; margin-top: 4px;
+  font-family: 'Quicksand', sans-serif;
+}
+.track-title {
+  font-weight: 700; font-size: 14px; color: rgba(255, 255, 255, .85);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px;
+}
+.track-artist {
+  font-size: 12px; color: rgba(255, 180, 60, .7);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;
+}
+.track-submitter {
+  font-size: 11px; color: rgba(255, 255, 255, .3);
+  margin-left: auto; white-space: nowrap;
+}
 
 /* ===== LOADING OVERLAY ===== */
 .loading-overlay {

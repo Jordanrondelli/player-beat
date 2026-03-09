@@ -30,11 +30,17 @@
 
   <!-- Main wrapper -->
   <div class="wrapper" id="wrapper">
-    <!-- File input -->
-    <div class="file-input-wrap">
-      <label for="audioFileInput">Charger un son</label>
-      <input type="file" id="audioFileInput" accept="audio/*" multiple aria-label="Charger un fichier audio">
+    <!-- Source toggle + queue counter -->
+    <div class="source-bar">
+      <div class="source-toggle">
+        <button class="source-btn active" id="srcUpload" data-type="upload">UPLOADS</button>
+        <button class="source-btn" id="srcYoutube" data-type="youtube">YOUTUBE</button>
+      </div>
+      <div class="queue-counter" id="queueCounter">0/0</div>
     </div>
+
+    <!-- Hidden file input (fallback) -->
+    <input type="file" id="audioFileInput" accept="audio/*" multiple aria-label="Charger un fichier audio" style="display:none;">
 
     <div class="scene" id="scene">
       <!-- Hammer meter (above waveform) -->
@@ -95,6 +101,13 @@
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- Track info -->
+      <div class="track-info" id="trackInfo">
+        <span class="track-title" id="trackTitle">En attente...</span>
+        <span class="track-artist" id="trackArtist"></span>
+        <span class="track-submitter" id="trackSubmitter"></span>
       </div>
 
       <!-- Mini waveform navigation -->

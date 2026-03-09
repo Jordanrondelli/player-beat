@@ -123,8 +123,8 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'login.html'));
 });
 
-// Player page (admin only)
-app.get('/player', requireAdmin, (req, res) => {
+// Player page (public)
+app.get('/player', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
@@ -282,6 +282,41 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     );
   }
   res.json({ success: true });
+});
+
+// ===== PLAYER PLAYLIST (public) =====
+
+// Returns shuffled tracks for the player, filtered by type
+app.get('/api/player/playlist', async (req, res) => {
+  try {
+    const type = req.query.type; // 'upload' or 'youtube'
+    let query = "SELECT q.*, v.fire, v.up, v.down FROM queue q LEFT JOIN votes v ON v.queue_id = q.id WHERE q.status IN ('pending', 'playing')";
+    const params = [];
+    if (type && ['upload', 'youtube'].includes(type)) {
+      query += ' AND q.type = $1';
+      params.push(type);
+    }
+    query += ' ORDER BY RANDOM()';
+    const { rows } = await pool.query(query, params);
+    res.json(rows);
+  } catch (err) {
+    console.error('Player playlist error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Count by type for the player
+app.get('/api/player/count', async (req, res) => {
+  try {
+    const uploadRes = await pool.query("SELECT COUNT(*) as count FROM queue WHERE status IN ('pending', 'playing') AND type = 'upload'");
+    const ytRes = await pool.query("SELECT COUNT(*) as count FROM queue WHERE status IN ('pending', 'playing') AND type = 'youtube'");
+    res.json({
+      upload: parseInt(uploadRes.rows[0].count),
+      youtube: parseInt(ytRes.rows[0].count),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
 });
 
 // ===== CURRENT TRACK (for player) =====

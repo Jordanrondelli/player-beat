@@ -811,8 +811,13 @@ function animationLoop() {
       pauseOffset = 0;
       // Auto-advance to next track
       if (playlist.length > 1) {
-        const next = (currentTrackIndex + 1) % playlist.length;
-        loadTrack(next);
+        const next = currentTrackIndex + 1;
+        if (next < playlist.length) {
+          loadTrack(next);
+        } else {
+          // Queue finished — reload fresh queue
+          fetchAndLoadQueue(currentSource);
+        }
       }
     }
   } else if (audioBuffer) {
@@ -1296,10 +1301,12 @@ function updateVoteDisplay() {
 
 async function sendVote(type) {
   try {
+    const queueId = (playlist[currentTrackIndex] && playlist[currentTrackIndex].queueItem)
+      ? playlist[currentTrackIndex].queueItem.id : undefined;
     const res = await fetch('/api/votes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type })
+      body: JSON.stringify({ type, queue_id: queueId })
     });
     if (res.ok) {
       votes = await res.json();
@@ -1314,10 +1321,16 @@ async function sendVote(type) {
 }
 
 // Load initial votes from server
-fetch('/api/votes')
-  .then(r => r.json())
-  .then(data => { votes = data; updateVoteDisplay(); })
-  .catch(() => updateVoteDisplay());
+function loadVotesForCurrentTrack() {
+  const queueId = (playlist[currentTrackIndex] && playlist[currentTrackIndex].queueItem)
+    ? playlist[currentTrackIndex].queueItem.id : undefined;
+  const url = queueId ? `/api/votes?queue_id=${queueId}` : '/api/votes';
+  fetch(url)
+    .then(r => r.json())
+    .then(data => { votes = { fire: data.fire || 0, up: data.up || 0, down: data.down || 0 }; updateVoteDisplay(); })
+    .catch(() => updateVoteDisplay());
+}
+loadVotesForCurrentTrack();
 
 // Simulated chat votes (local only for ambiance)
 setInterval(() => {
@@ -1437,7 +1450,111 @@ document.getElementById('btnFire').addEventListener('click', function () {
   }
 });
 
+// ===== COMMUNITY QUEUE =====
+let currentSource = 'upload'; // 'upload' or 'youtube'
+let serverQueue = []; // array of queue items from server
+const queueCounterEl = document.getElementById('queueCounter');
+const trackTitleEl = document.getElementById('trackTitle');
+const trackArtistEl = document.getElementById('trackArtist');
+const trackSubmitterEl = document.getElementById('trackSubmitter');
+
+function updateQueueCounter() {
+  if (serverQueue.length === 0) {
+    queueCounterEl.textContent = '0/0';
+  } else {
+    queueCounterEl.textContent = `${currentTrackIndex + 1}/${serverQueue.length}`;
+  }
+}
+
+function updateTrackInfo(item) {
+  if (!item) {
+    trackTitleEl.textContent = 'En attente...';
+    trackArtistEl.textContent = '';
+    trackSubmitterEl.textContent = '';
+    return;
+  }
+  trackTitleEl.textContent = item.title || 'Sans titre';
+  trackArtistEl.textContent = item.artist ? `- ${item.artist}` : '';
+  trackSubmitterEl.textContent = item.submitted_by ? `par ${item.submitted_by}` : '';
+}
+
+async function fetchAndLoadQueue(type) {
+  currentSource = type;
+  serverQueue = [];
+  playlist = [];
+  currentTrackIndex = -1;
+  updateQueueCounter();
+  updateTrackInfo(null);
+
+  try {
+    const res = await fetch(`/api/player/playlist?type=${type}`);
+    if (!res.ok) throw new Error('Erreur serveur');
+    serverQueue = await res.json();
+
+    if (serverQueue.length === 0) {
+      updateTrackInfo(null);
+      trackTitleEl.textContent = type === 'upload' ? 'Aucun upload en attente' : 'Aucun lien YouTube en attente';
+      updateTransportButtons();
+      return;
+    }
+
+    if (type === 'upload') {
+      // Load all uploads into playlist
+      loadingOverlay.classList.add('visible');
+      for (const item of serverQueue) {
+        try {
+          const response = await fetch(item.file_path);
+          const arrayBuffer = await response.arrayBuffer();
+          playlist.push({ name: item.title, arrayBuffer, queueItem: item });
+        } catch (err) {
+          console.error('Failed to load:', item.title, err);
+        }
+      }
+      loadingOverlay.classList.remove('visible');
+
+      if (playlist.length > 0) {
+        updateTransportButtons();
+        updateQueueCounter();
+        await loadTrack(0);
+      }
+    } else {
+      // YouTube: just show the list, can't play via Web Audio
+      updateTrackInfo(serverQueue[0]);
+      currentTrackIndex = 0;
+      updateQueueCounter();
+      updateTransportButtons();
+    }
+  } catch (err) {
+    console.error('Queue fetch error:', err);
+    trackTitleEl.textContent = 'Erreur de chargement';
+  }
+}
+
+// Source toggle buttons
+document.querySelectorAll('.source-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    stopAudio();
+    fetchAndLoadQueue(btn.dataset.type);
+  });
+});
+
+// Override loadTrack to update queue info
+const _originalLoadTrack = loadTrack;
+loadTrack = async function(index) {
+  await _originalLoadTrack(index);
+  if (serverQueue.length > 0 && playlist[index] && playlist[index].queueItem) {
+    updateTrackInfo(playlist[index].queueItem);
+  }
+  updateQueueCounter();
+  loadVotesForCurrentTrack();
+};
+
 // ===== INIT =====
 resizeCanvases();
 generateDemoData();
 animationLoop();
+
+// Auto-load community uploads on start
+fetchAndLoadQueue('upload');
