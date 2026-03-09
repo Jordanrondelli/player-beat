@@ -392,23 +392,11 @@ app.get('/api/yt-audio/:videoId', async (req, res) => {
     }
   } catch (e) { /* ignore cache errors */ }
 
-  // Try Piped instances (full list from TeamPiped documentation)
+  // Try only 3 Piped instances (fast fail, most are dead anyway)
   const pipedInstances = [
     'https://pipedapi.kavin.rocks',
-    'https://pipedapi.leptons.xyz',
-    'https://pipedapi.nosebs.ru',
-    'https://pipedapi-libre.kavin.rocks',
-    'https://piped-api.privacy.com.de',
     'https://pipedapi.adminforge.de',
-    'https://api.piped.yt',
-    'https://pipedapi.drgns.space',
-    'https://pipedapi.owo.si',
-    'https://pipedapi.ducks.party',
     'https://piped-api.codespace.cz',
-    'https://pipedapi.reallyaweso.me',
-    'https://api.piped.private.coffee',
-    'https://pipedapi.darkness.services',
-    'https://pipedapi.orangenet.cc',
   ];
 
   for (const instance of pipedInstances) {
@@ -469,12 +457,10 @@ app.get('/api/yt-audio/:videoId', async (req, res) => {
   }
 
   // Try Invidious instances as fallback
+  // Try only 2 Invidious instances
   const invidiousInstances = [
     'https://inv.nadeko.net',
     'https://yewtu.be',
-    'https://invidious.nerdvpn.de',
-    'https://iv.datura.network',
-    'https://invidious.private.coffee',
   ];
 
   for (const instance of invidiousInstances) {
@@ -520,11 +506,6 @@ app.get('/api/yt-audio/:videoId', async (req, res) => {
   // v7 instances (POST /api/json)
   const cobaltV7 = [
     'https://cobaltapi.clebootin.com',
-    'https://ytapi.edd1e.xyz',
-    'https://api.cobalt.tacohitbox.com',
-    'https://cobalt-api.luver.pw',
-    'https://cobapi.elrant.team',
-    'https://coapi.kelig.me',
     'https://ca.haloz.at',
     'https://nyc1.coapi.ggtyler.dev',
   ];

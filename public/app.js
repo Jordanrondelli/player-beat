@@ -457,12 +457,19 @@ function drawWaveform(currentTime) {
     }
     kickLevel = Math.sqrt(sum / kickTimeData.length);
   } else if (isPlaying && ytIsCurrentSource) {
-    // Simulate kick from waveform data changes
+    // Enhanced kick simulation from synthetic waveform
     const wfVal = waveformData[Math.min(pIdx, waveformData.length - 1)] || 0;
     const prevVal = waveformData[Math.max(0, pIdx - 2)] || 0;
-    kickLevel = wfVal * 0.4;
-    // Amplify on rises to create fake kick hits
-    if (wfVal - prevVal > 0.04) kickLevel += (wfVal - prevVal) * 2;
+    const prevVal2 = waveformData[Math.max(0, pIdx - 4)] || 0;
+    // Base energy proportional to waveform level
+    kickLevel = wfVal * 0.35;
+    // Detect rises (simulated transients) — sharper rises = stronger kick
+    const rise1 = Math.max(0, wfVal - prevVal);
+    const rise2 = Math.max(0, wfVal - prevVal2);
+    if (rise1 > 0.02) kickLevel += rise1 * 3;
+    if (rise2 > 0.04) kickLevel += rise2 * 1.5;
+    // High-energy sections get stronger baseline kick presence
+    if (wfVal > 0.65) kickLevel += (wfVal - 0.65) * 0.8;
   } else {
     kickLevel = (waveformData[Math.min(pIdx, waveformData.length - 1)] || 0) * 0.3;
   }
@@ -576,9 +583,10 @@ function drawWaveform(currentTime) {
   // as the primary power source. What you SEE is what you GET.
   // Bass presence from FFT adds a bonus to reward actual low-end content.
   if (isPlaying && ytIsCurrentSource) {
-    // YouTube mode: simulate power from synthetic waveform (no raw audio access)
+    // YouTube mode: power from synthetic waveform (beat-aligned, section-aware)
     const wfIdx = Math.floor((currentTime / duration) * waveformData.length);
-    const wfWindow = 5;
+    // Wider window for smoother section-level energy
+    const wfWindow = 8;
     let wfSum = 0, wfCount = 0;
     for (let i = wfIdx - wfWindow; i <= wfIdx + wfWindow; i++) {
       const ci = Math.max(0, Math.min(waveformData.length - 1, i));
@@ -587,16 +595,28 @@ function drawWaveform(currentTime) {
     }
     const wfLevel = wfSum / wfCount;
 
-    // Simulate bass/kick from waveform intensity (since we have no FFT)
-    const bassBonus = Math.min(1, wfLevel * 0.8);
-    // Simulate kick activity from waveform changes
-    const prevIdx = Math.max(0, wfIdx - 3);
-    const rise = Math.max(0, waveformData[wfIdx] - waveformData[prevIdx]);
-    if (rise > 0.05) {
-      kickDecay = Math.max(kickDecay, rise * 4);
-      kickActivity += (1 - kickActivity) * 0.25;
+    // Simulate bass presence — scales with section energy
+    const bassBonus = Math.min(1, wfLevel * wfLevel * 1.2);
+    // Detect transients from the beat-aligned pulses in the synthetic waveform
+    const curVal = waveformData[Math.min(wfIdx, waveformData.length - 1)] || 0;
+    const prev3 = waveformData[Math.max(0, wfIdx - 3)] || 0;
+    const prev6 = waveformData[Math.max(0, wfIdx - 6)] || 0;
+    const riseShort = Math.max(0, curVal - prev3);
+    const riseLong = Math.max(0, curVal - prev6);
+    // Kick simulation — responds to beat pulses baked into the waveform
+    if (riseShort > 0.03) {
+      const intensity = Math.min(1, riseShort * 5 * Math.max(wfLevel, 0.3));
+      kickDecay = Math.max(kickDecay, intensity);
+      kickActivity += (1 - kickActivity) * 0.30;
+    } else if (riseLong > 0.05) {
+      kickDecay = Math.max(kickDecay, riseLong * 3);
+      kickActivity += (1 - kickActivity) * 0.15;
+    }
+    // High-energy sections sustain kick activity
+    if (wfLevel > 0.6) {
+      kickActivity = Math.max(kickActivity, (wfLevel - 0.6) * 1.5);
     } else {
-      kickActivity *= 0.98;
+      kickActivity *= 0.97;
     }
     kickDecay *= 0.82;
     const kickImpact = Math.min(1, kickActivity);
@@ -604,14 +624,14 @@ function drawWaveform(currentTime) {
     hammerSmooth += (wfLevel - hammerSmooth) * 0.12;
 
     const baseScore = wfLevel;
-    const bassAdd = bassBonus * 0.20;
-    const kickAdd = kickImpact * 0.20;
+    const bassAdd = bassBonus * 0.25;
+    const kickAdd = kickImpact * 0.25;
     const rawScore = Math.min(1, baseScore + bassAdd + kickAdd);
     const shaped = rawScore * rawScore * (3 - 2 * rawScore) * 100;
 
     const diff = shaped - hammerCharge;
     if (diff > 0) hammerCharge += diff * 0.35;
-    else hammerCharge += diff * 0.006;
+    else hammerCharge += diff * 0.008;
     hammerCharge = Math.max(0, Math.min(100, hammerCharge));
   } else if (isPlaying && audioBuffer) {
     // --- PRIMARY: Waveform envelope (RMS) at current playback position ---
@@ -1362,7 +1382,7 @@ async function loadTrack(index, autoPlay) {
     try {
       console.log(`Fetching YouTube audio via server proxy for ${track.youtubeId}`);
       const audioRes = await fetch(`/api/yt-audio/${track.youtubeId}`, {
-        signal: AbortSignal.timeout(45000),
+        signal: AbortSignal.timeout(12000),
       });
       if (audioRes.ok) {
         const arrayBuffer = await audioRes.arrayBuffer();
@@ -1411,7 +1431,7 @@ async function loadTrack(index, autoPlay) {
       ytDuration = ytPlayer.getDuration();
       if (ytDuration <= 0) ytDuration = 180;
 
-      generateSyntheticWaveform(ytDuration);
+      generateSyntheticWaveform(ytDuration, track.youtubeId);
       resizeCanvases();
       drawMiniWaveform();
       pauseOffset = 0;
@@ -1466,55 +1486,95 @@ async function loadTrack(index, autoPlay) {
 }
 
 // Generate synthetic waveform for YouTube tracks (no raw audio available)
-function generateSyntheticWaveform(duration) {
-  const sampleRate = 30; // ~30 samples/sec
+function generateSyntheticWaveform(duration, videoId) {
+  const sampleRate = 30;
   const totalSamples = Math.floor(duration * sampleRate);
   waveformData = [];
   waveformSigned = [];
 
-  // Build a realistic multi-section waveform with intro → build → drop → break patterns
-  // Use multiple noise layers at different frequencies for natural look
-  const sections = Math.floor(duration / 30) + 1; // ~30s sections
-  const sectionTypes = [];
-  for (let s = 0; s < sections; s++) {
-    // Pattern: intro(0.3) → build(0.5) → drop(0.85) → break(0.4) → drop(0.9) ...
-    const cycle = s % 4;
-    if (cycle === 0) sectionTypes.push(0.3 + Math.random() * 0.15); // intro/break
-    else if (cycle === 1) sectionTypes.push(0.5 + Math.random() * 0.15); // build
-    else if (cycle === 2) sectionTypes.push(0.75 + Math.random() * 0.15); // drop
-    else sectionTypes.push(0.35 + Math.random() * 0.15); // break
+  // Deterministic seed from videoId — same video always gets same waveform
+  let seed = 12345;
+  if (videoId) {
+    for (let i = 0; i < videoId.length; i++) {
+      seed = ((seed << 5) - seed + videoId.charCodeAt(i)) | 0;
+    }
+  }
+  seed = Math.abs(seed) || 1;
+  function rand() {
+    seed = (seed * 16807 + 12345) % 2147483647;
+    return (seed & 0x7fffffff) / 2147483647;
   }
 
-  // Seeded pseudo-random for consistent look per track
-  let seed = duration * 1000;
-  function seededRand() {
-    seed = (seed * 16807 + 0) % 2147483647;
-    return (seed - 1) / 2147483646;
+  // Generate section structure from seed (each song has unique structure)
+  const secLen = 12 + rand() * 20; // 12-32s per section
+  const numSections = Math.max(3, Math.floor(duration / secLen));
+
+  // Musical energy templates
+  const templates = [
+    [0.25, 0.45, 0.85, 0.35, 0.50, 0.90, 0.30, 0.85], // EDM: intro→build→drop→break→build→drop→outro→drop
+    [0.30, 0.55, 0.70, 0.45, 0.75, 0.55, 0.80, 0.40], // Pop: verse→prechorus→chorus→verse→chorus→bridge→chorus→outro
+    [0.35, 0.60, 0.80, 0.40, 0.65, 0.85, 0.35, 0.75], // Rock: intro→verse→chorus→break→verse→chorus→bridge→chorus
+    [0.20, 0.40, 0.65, 0.30, 0.50, 0.70, 0.80, 0.25], // Hip-hop: intro→verse→hook→break→verse→hook→drop→outro
+  ];
+  const template = templates[Math.floor(rand() * templates.length)];
+
+  const sectionEnergies = [];
+  for (let s = 0; s < numSections; s++) {
+    const tIdx = s % template.length;
+    const base = template[tIdx];
+    // Add seed-based variation per section
+    sectionEnergies.push(Math.max(0.15, Math.min(0.95, base + (rand() - 0.5) * 0.15)));
   }
+
+  // Derive BPM-like pulse from seed (100-160 BPM range)
+  const fakeBPM = 100 + rand() * 60;
+  const beatSamples = (60 / fakeBPM) * sampleRate; // samples per beat
+
+  // Energy variation curve (low-frequency modulation unique to this track)
+  const modFreq1 = 0.003 + rand() * 0.008;
+  const modFreq2 = 0.01 + rand() * 0.02;
+  const modPhase1 = rand() * Math.PI * 2;
+  const modPhase2 = rand() * Math.PI * 2;
 
   for (let i = 0; i < totalSamples; i++) {
     const t = i / totalSamples;
-    const sectionIdx = Math.min(sections - 1, Math.floor(t * sections));
-    const nextIdx = Math.min(sections - 1, sectionIdx + 1);
-    const sectionProgress = (t * sections) - sectionIdx;
-    // Smooth transition between sections
-    const sectionLevel = sectionTypes[sectionIdx] * (1 - sectionProgress) + sectionTypes[nextIdx] * sectionProgress;
 
-    // Multiple noise octaves for natural variation
-    const noise1 = Math.sin(i * 0.37) * 0.15;
-    const noise2 = Math.sin(i * 1.23) * 0.08;
-    const noise3 = Math.sin(i * 3.71) * 0.04;
-    const noise4 = (seededRand() - 0.5) * 0.12; // random spikes
+    // Section interpolation (smooth crossfade between sections)
+    const rawIdx = t * numSections;
+    const sIdx = Math.min(numSections - 1, Math.floor(rawIdx));
+    const nIdx = Math.min(numSections - 1, sIdx + 1);
+    const blend = rawIdx - sIdx;
+    const smooth = blend * blend * (3 - 2 * blend); // smoothstep
+    const sectionLevel = sectionEnergies[sIdx] * (1 - smooth) + sectionEnergies[nIdx] * smooth;
 
-    // Occasional "kick" spikes (louder bars at ~2-4Hz frequency)
-    const kickFreq = 2.5 + Math.sin(t * 7) * 1;
-    const kickPhase = (i / sampleRate) * kickFreq * Math.PI * 2;
-    const kickSpike = Math.max(0, Math.sin(kickPhase)) * 0.15 * sectionLevel;
+    // Beat-aligned energy pulses (simulates real kick/snare pattern)
+    const beatPos = (i % beatSamples) / beatSamples;
+    const kick = Math.exp(-beatPos * 8) * 0.20 * sectionLevel; // kick on downbeat
+    const halfBeat = ((i + beatSamples / 2) % beatSamples) / beatSamples;
+    const snare = Math.exp(-halfBeat * 6) * 0.10 * sectionLevel; // snare on upbeat
 
-    const val = Math.max(0.05, Math.min(1, sectionLevel + noise1 + noise2 + noise3 + noise4 + kickSpike));
+    // Musical texture noise (multiple seeded layers)
+    const n1 = Math.sin(i * modFreq1 * 6.28 + modPhase1) * 0.08;
+    const n2 = Math.sin(i * modFreq2 * 6.28 + modPhase2) * 0.05;
+    const n3 = (rand() - 0.5) * 0.08 * sectionLevel; // micro-variation
+
+    // Occasional accent hits (every 4-8 beats, randomized)
+    const accentPeriod = beatSamples * (4 + Math.floor(rand() * 2) * 2);
+    const accentPos = (i % accentPeriod) / accentPeriod;
+    const accent = accentPos < 0.02 ? 0.15 * sectionLevel : 0;
+
+    const val = Math.max(0.04, Math.min(1, sectionLevel + kick + snare + n1 + n2 + n3 + accent));
     waveformData.push(val);
-    // Signed: alternate randomly for visual symmetry
-    waveformSigned.push(val * (seededRand() > 0.5 ? 1 : -1));
+    waveformSigned.push(val);
+  }
+
+  // Normalize to 0-1
+  const maxVal = Math.max(...waveformData);
+  if (maxVal > 0) {
+    for (let i = 0; i < waveformData.length; i++) {
+      waveformData[i] /= maxVal;
+      waveformSigned[i] /= maxVal;
+    }
   }
 }
 
