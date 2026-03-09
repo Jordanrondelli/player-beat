@@ -46,15 +46,15 @@ analyser.fftSize = 512;
 analyser.smoothingTimeConstant = 0.4;
 const frequencyData = new Uint8Array(analyser.frequencyBinCount);
 
-// Low-pass filter to isolate kick drum (~20-150Hz)
+// Bandpass filter to isolate kick thump (60-100Hz body)
 const kickFilter = audioCtx.createBiquadFilter();
-kickFilter.type = 'lowpass';
-kickFilter.frequency.value = 150;
-kickFilter.Q.value = 1;
+kickFilter.type = 'bandpass';
+kickFilter.frequency.value = 80;  // center of 60-100Hz
+kickFilter.Q.value = 1.8;         // Q ~1.8 → bandwidth ~44Hz (≈60-104Hz)
 
 const kickAnalyser = audioCtx.createAnalyser();
 kickAnalyser.fftSize = 256;
-kickAnalyser.smoothingTimeConstant = 0.2;
+kickAnalyser.smoothingTimeConstant = 0.08; // faster response for transient detection
 const kickTimeData = new Uint8Array(kickAnalyser.fftSize);
 
 kickFilter.connect(kickAnalyser);
@@ -431,8 +431,9 @@ function drawWaveform(currentTime) {
 
   const rise = kickLevel - prevKickLevel;
   const now = performance.now();
-  const isKick = rise > .04 && kickLevel > .15 && (now - lastKickTime) > 120;
-  prevKickLevel += (kickLevel - prevKickLevel) * .4;
+  // Tighter thresholds — bandpass 60-100Hz gives cleaner signal, less false positives
+  const isKick = rise > .025 && kickLevel > .10 && (now - lastKickTime) > 100;
+  prevKickLevel += (kickLevel - prevKickLevel) * .5; // faster tracking
 
   // Kick impact
   if (isKick) {
