@@ -27,6 +27,29 @@ function createFlames(container, count, hMin, hMax, wMin, wMax) {
   }
 }
 
+// ===== SETTINGS =====
+let playerSettings = {};
+async function loadPlayerSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (res.ok) playerSettings = await res.json();
+  } catch (e) { /* use defaults */ }
+  applyPlayerSettings();
+}
+function applyPlayerSettings() {
+  // Power block visibility
+  const powerEnabled = playerSettings.power_block_enabled !== 'false';
+  const hammerEl = document.getElementById('hammerMeter');
+  if (hammerEl) hammerEl.style.display = powerEnabled ? '' : 'none';
+  // Fire button visibility
+  const fireEnabled = playerSettings.fire_button_enabled !== 'false';
+  const fireWrap = document.querySelector('.fire-wrap');
+  if (fireWrap) fireWrap.style.display = fireEnabled ? '' : 'none';
+}
+loadPlayerSettings();
+// Reload settings periodically (admin can change them live)
+setInterval(loadPlayerSettings, 10000);
+
 // ===== AUDIO CONTEXT =====
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const gainNode = audioCtx.createGain();
@@ -1105,9 +1128,12 @@ function triggerHammerActivation(stage) {
   if (stage === 'lourd') {
     const flash = document.createElement('div');
     flash.className = 'fire-flash';
-    flash.style.background = 'radial-gradient(ellipse at center, rgba(255, 200, 50, .4) 0%, rgba(255, 100, 0, .2) 40%, transparent 70%)';
+    const inner = document.createElement('div');
+    inner.className = 'fire-flash-inner';
+    inner.style.background = 'radial-gradient(ellipse at center, rgba(255, 200, 50, .4) 0%, rgba(255, 100, 0, .2) 40%, transparent 70%)';
+    flash.appendChild(inner);
     document.body.appendChild(flash);
-    flash.addEventListener('animationend', () => flash.remove());
+    inner.addEventListener('animationend', () => flash.remove());
   }
 
   // OVERLOAD — massive visual explosion
@@ -1250,6 +1276,15 @@ function stopBeatSync() {
   if (gaugeGlow) gaugeGlow.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   const hammerIconWrap = document.getElementById('hammerIconWrap');
   if (hammerIconWrap) { hammerIconWrap.style.width = '42px'; hammerIconWrap.style.height = '42px'; }
+
+  // Clean up overload visual effects
+  const wp = document.querySelector('.waveform-panel');
+  const cc = document.querySelector('.chat-card');
+  const uc = document.querySelector('.user-card');
+  if (wp) { wp.classList.remove('overload-shake', 'overload-border'); }
+  if (cc) cc.classList.remove('overload-shake');
+  if (uc) uc.classList.remove('overload-shake');
+  document.querySelectorAll('.overload-chroma').forEach(el => el.remove());
 }
 
 // ===== PLAYBACK CONTROLS =====
@@ -1382,7 +1417,7 @@ async function loadTrack(index, autoPlay) {
     try {
       console.log(`Fetching YouTube audio via server proxy for ${track.youtubeId}`);
       const audioRes = await fetch(`/api/yt-audio/${track.youtubeId}`, {
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(8000),
       });
       if (audioRes.ok) {
         const arrayBuffer = await audioRes.arrayBuffer();
@@ -1686,14 +1721,14 @@ function skipToNext() {
 }
 
 document.getElementById('btnDown').addEventListener('click', function () {
-  sendVote('down');
+  // Don't send vote to server — only Twitch chat counts in "avis du chat"
   const r = this.getBoundingClientRect();
   showEmojiSplash('\uD83D\uDC4E', r.left + r.width / 2 - 30, r.top - 20);
   skipToNext();
 });
 
 document.getElementById('btnUp').addEventListener('click', function () {
-  sendVote('up');
+  // Don't send vote to server — only Twitch chat counts in "avis du chat"
   const r = this.getBoundingClientRect();
   showEmojiSplash('\uD83D\uDC4D', r.left + r.width / 2 - 30, r.top - 20);
   skipToNext();
@@ -1909,21 +1944,18 @@ function squishButton(btn) {
 }
 
 // --- Combo display ---
-function updateComboDisplay(cx, cy) {
+function updateComboDisplay() {
   fireComboNumEl.textContent = fireCombo;
-  // Position near button
-  fireComboEl.style.left = (cx + 60) + 'px';
-  fireComboEl.style.top = (cy - 60) + 'px';
 
   // Tier classes
   fireComboEl.classList.remove('tier-2', 'tier-3');
   if (fireCombo >= 10) fireComboEl.classList.add('tier-3');
   else if (fireCombo >= 5) fireComboEl.classList.add('tier-2');
 
-  // Show with pop
+  // Show with pop (centered on screen via CSS)
   fireComboEl.classList.add('visible');
   fireComboEl.classList.add('fire-combo-pop');
-  setTimeout(() => fireComboEl.classList.remove('fire-combo-pop'), 100);
+  setTimeout(() => fireComboEl.classList.remove('fire-combo-pop'), 80);
 }
 
 function hideCombo() {
@@ -1947,60 +1979,34 @@ function triggerFlash(combo) {
   inner.addEventListener('animationend', () => flash.remove());
 }
 
-// --- Fire overlay (flames + embers) ---
+// --- Fire overlay (lightweight glow only, no DOM flames) ---
 function triggerFire() {
   const overlay = document.getElementById('fireOverlay');
-  const flameBottom = document.getElementById('flameBottom');
-  const flameTop = document.getElementById('flameTop');
-  const emberContainer = document.getElementById('emberContainer');
   const wrapper = document.getElementById('wrapper');
 
   if (fireTimeout) clearTimeout(fireTimeout);
   if (fireFadeTimeout) clearTimeout(fireFadeTimeout);
 
-  flameBottom.innerHTML = '';
-  flameTop.innerHTML = '';
-  emberContainer.innerHTML = '';
+  // Clear old DOM flame elements
+  document.getElementById('flameBottom').innerHTML = '';
+  document.getElementById('flameTop').innerHTML = '';
+  document.getElementById('emberContainer').innerHTML = '';
 
-  const bpm = detectedBPM || 120;
-  overlay.style.setProperty('--beat-dur', (60 / bpm) + 's');
-
-  // Scale flame count with combo
-  const comboMult = Math.min(2, 1 + fireCombo * 0.08);
-  createFlames(flameBottom, Math.floor(45 * comboMult), 90, 300, 45, 170);
-  createFlames(flameTop, Math.floor(20 * comboMult), 55, 170, 35, 110);
-
-  const types = ['ember-orange', 'ember-red', 'ember-yellow'];
-  const emberCount = Math.floor(100 * comboMult);
-  for (let i = 0; i < emberCount; i++) {
-    const ember = document.createElement('div');
-    ember.className = 'ember ' + types[Math.floor(Math.random() * 3)];
-    ember.style.left = Math.random() * 100 + '%';
-    ember.style.animationDelay = Math.random() * 6 + 's';
-    ember.style.animationDuration = (3 + Math.random() * 6) + 's';
-    ember.style.setProperty('--drift', (Math.random() - .5) * 80 + 'px');
-    const size = 1.5 + Math.random() * 5;
-    ember.style.width = size + 'px';
-    ember.style.height = size + 'px';
-    emberContainer.appendChild(ember);
-  }
-
-  overlay.style.transition = 'opacity .3s';
+  // Only show the glow overlay (lightweight, no DOM spam)
+  overlay.style.transition = 'opacity .2s';
   overlay.style.opacity = '';
   overlay.classList.remove('on');
   void overlay.offsetWidth;
   overlay.classList.add('on');
 
-  // Screen shake (intensity scales with combo)
-  const shakeIntensity = Math.min(2, 1 + fireCombo * 0.1);
-  wrapper.style.setProperty('--shake-i', shakeIntensity);
+  // Screen shake
   wrapper.classList.add('shaking');
-  setTimeout(() => wrapper.classList.remove('shaking'), 600);
+  setTimeout(() => wrapper.classList.remove('shaking'), 500);
 
-  // Duration scales with combo
-  const fireDuration = 5000 + Math.min(fireCombo * 500, 5000);
+  // Quick fade-out
+  const fireDuration = 2000 + Math.min(fireCombo * 300, 3000);
   fireFadeTimeout = setTimeout(() => {
-    overlay.style.transition = 'opacity 3s ease-out';
+    overlay.style.transition = 'opacity 1.5s ease-out';
     overlay.style.opacity = '0';
   }, fireDuration);
 
@@ -2008,12 +2014,12 @@ function triggerFire() {
     overlay.classList.remove('on');
     overlay.style.opacity = '';
     overlay.style.transition = '';
-  }, fireDuration + 3000);
+  }, fireDuration + 1500);
 }
 
 // --- Main fire click handler ---
 document.getElementById('btnFire').addEventListener('click', function () {
-  sendVote('fire');
+  // Don't send vote to server — only Twitch chat counts in "avis du chat"
 
   // Combo tracking
   fireCombo++;
@@ -2055,7 +2061,7 @@ document.getElementById('btnFire').addEventListener('click', function () {
 
   // 8. Combo display
   if (fireCombo >= 2) {
-    updateComboDisplay(cx, cy);
+    updateComboDisplay();
   }
 
   // 9. Chromatic aberration on high combo

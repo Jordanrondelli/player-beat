@@ -85,6 +85,7 @@ async function initDB() {
     primary_color: '#ff4400',
     player_source: 'community',
     twitch_channel: '',
+    power_block_enabled: 'true',
   };
   for (const [key, value] of Object.entries(defaults)) {
     await pool.query(
@@ -403,7 +404,7 @@ app.get('/api/yt-audio/:videoId', async (req, res) => {
     try {
       console.log(`YT proxy (${instance}): fetching streams for ${videoId}`);
       const infoRes = await fetch(`${instance}/streams/${videoId}`, {
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(3000),
         headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
       });
       if (!infoRes.ok) {
@@ -467,7 +468,7 @@ app.get('/api/yt-audio/:videoId', async (req, res) => {
     try {
       console.log(`YT proxy Invidious (${instance}): trying ${videoId}`);
       const infoRes = await fetch(`${instance}/api/v1/videos/${videoId}`, {
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(3000),
         headers: { 'Accept': 'application/json' },
       });
       if (!infoRes.ok) continue;

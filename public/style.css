@@ -841,12 +841,12 @@ body {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
 }
 .track-proposed {
-  font-family: 'Bangers', cursive; font-size: 14px;
-  letter-spacing: 1.5px;
-  color: rgba(255, 200, 80, .85);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, .4), 0 0 10px rgba(255, 180, 50, .15);
-  margin-top: 3px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;
+  font-family: 'Bangers', cursive; font-size: 22px;
+  letter-spacing: 2px;
+  color: rgba(255, 200, 80, .95);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .5), 0 0 15px rgba(255, 180, 50, .25);
+  margin-top: 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px;
 }
 
 /* ===== CHAT CARD (top-right) ===== */
@@ -956,41 +956,49 @@ body {
 /* ===== FIRE COMBO DISPLAY ===== */
 .fire-combo {
   position: fixed; z-index: 920; pointer-events: none;
-  display: flex; align-items: baseline; gap: 2px;
-  opacity: 0; transform: scale(.5); transition: opacity .15s, transform .15s;
-  text-shadow: 0 0 20px rgba(255, 60, 0, .8), 0 0 40px rgba(255, 30, 0, .5),
-               0 2px 4px rgba(0, 0, 0, .6);
+  display: flex; flex-direction: column; align-items: center;
+  opacity: 0; transform: scale(.3) translateY(20px);
+  transition: opacity .12s, transform .12s;
+  text-shadow: 0 0 30px rgba(255, 60, 0, .9), 0 0 60px rgba(255, 30, 0, .6),
+               0 4px 8px rgba(0, 0, 0, .7);
   font-family: 'Bangers', cursive;
-  /* Positioned by JS near button */
-  top: 50%; left: 50%;
+  /* Centered on screen */
+  top: 50%; left: 50%; transform-origin: center center;
 }
 .fire-combo.visible {
-  opacity: 1; transform: scale(1);
-  transition: opacity .1s, transform .2s cubic-bezier(.175,.885,.32,1.275);
+  opacity: 1; transform: scale(1) translateX(-50%) translateY(-50%);
+  transition: opacity .08s, transform .18s cubic-bezier(.175,.885,.32,1.4);
 }
 .fire-combo.fire-combo-pop {
-  transform: scale(1.4) !important;
-  transition: transform .08s !important;
+  transform: scale(1.5) translateX(-50%) translateY(-50%) !important;
+  transition: transform .06s !important;
 }
 .fire-combo-x {
-  font-size: 28px; color: #ff8800; letter-spacing: -2px;
+  font-size: 48px; color: #ff8800; letter-spacing: -2px;
+  display: none; /* hidden, number is big enough */
 }
 .fire-combo-num {
-  font-size: 72px; color: #fff;
-  background: linear-gradient(180deg, #fff 30%, #ff8800 100%);
+  font-size: 140px; line-height: 1; color: #fff;
+  background: linear-gradient(180deg, #fff 20%, #ff6600 80%);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 .fire-combo-label {
-  font-size: 18px; color: #ff6600; letter-spacing: 4px; margin-left: 6px;
+  font-size: 28px; color: #ff6600; letter-spacing: 8px;
+  margin-top: -10px;
 }
 /* Combo tiers */
-.fire-combo.tier-2 .fire-combo-num { font-size: 84px; }
-.fire-combo.tier-2 { text-shadow: 0 0 30px rgba(255, 60, 0, 1), 0 0 60px rgba(255, 30, 0, .7); }
-.fire-combo.tier-3 .fire-combo-num { font-size: 100px; }
-.fire-combo.tier-3 {
+.fire-combo.tier-2 .fire-combo-num { font-size: 180px; }
+.fire-combo.tier-2 .fire-combo-label { font-size: 32px; letter-spacing: 10px; }
+.fire-combo.tier-2 {
   text-shadow: 0 0 40px rgba(255, 60, 0, 1), 0 0 80px rgba(255, 30, 0, .8),
-               0 0 120px rgba(255, 0, 0, .4);
+               0 0 120px rgba(255, 0, 0, .3);
+}
+.fire-combo.tier-3 .fire-combo-num { font-size: 220px; }
+.fire-combo.tier-3 .fire-combo-label { font-size: 36px; letter-spacing: 12px; color: #ff4400; }
+.fire-combo.tier-3 {
+  text-shadow: 0 0 60px rgba(255, 60, 0, 1), 0 0 100px rgba(255, 30, 0, .9),
+               0 0 160px rgba(255, 0, 0, .5), 0 0 200px rgba(255, 0, 0, .2);
 }
 
 /* ===== FIRE SHOCKWAVE ===== */
