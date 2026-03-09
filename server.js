@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fs = require('fs');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 const { parseBuffer } = require('music-metadata');
 
 const app = express();
@@ -224,9 +225,42 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
       }
       if (!ytTitle) ytTitle = 'YouTube Track';
 
+      // Download audio from YouTube via yt-dlp
+      let fileBuffer = null;
+      const tmpFile = path.join(uploadDir, `yt-${Date.now()}.mp3`);
+      try {
+        await new Promise((resolve, reject) => {
+          execFile('yt-dlp', [
+            '-x', '--audio-format', 'mp3',
+            '--audio-quality', '0',
+            '--no-playlist',
+            '--max-filesize', '50m',
+            '-o', tmpFile.replace('.mp3', '.%(ext)s'),
+            source_url
+          ], { timeout: 120000 }, (err, stdout, stderr) => {
+            if (err) reject(new Error(stderr || err.message));
+            else resolve(stdout);
+          });
+        });
+        // yt-dlp may output with different extension during conversion
+        const actualFile = fs.existsSync(tmpFile) ? tmpFile : tmpFile.replace('.mp3', '.mp3');
+        if (fs.existsSync(actualFile)) {
+          fileBuffer = fs.readFileSync(actualFile);
+          fs.unlinkSync(actualFile);
+        }
+      } catch (e) {
+        console.error('yt-dlp error:', e.message);
+        // Clean up any temp files
+        try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch {}
+      }
+
+      if (!fileBuffer) {
+        return res.status(400).json({ error: 'Impossible de télécharger l\'audio YouTube. Vérifiez le lien.' });
+      }
+
       const { rows } = await pool.query(
-        'INSERT INTO queue (type, title, artist, source_url, submitted_by) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        ['youtube', ytTitle, ytArtist, source_url, submitted_by || 'Anonyme']
+        'INSERT INTO queue (type, title, artist, source_url, file_data, file_mimetype, submitted_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, type, title, artist, source_url, submitted_by, status, created_at',
+        ['youtube', ytTitle, ytArtist, source_url, fileBuffer, 'audio/mpeg', submitted_by || 'Anonyme']
       );
       await pool.query('INSERT INTO votes (queue_id) VALUES ($1)', [rows[0].id]);
       return res.json(rows[0]);
@@ -328,8 +362,8 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
 app.get('/api/audio/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT file_data, file_mimetype, title FROM queue WHERE id = $1 AND type = $2',
-      [req.params.id, 'upload']
+      'SELECT file_data, file_mimetype, title FROM queue WHERE id = $1',
+      [req.params.id]
     );
     if (!rows.length || !rows[0].file_data) {
       return res.status(404).json({ error: 'Audio non trouvé' });

@@ -1525,44 +1525,36 @@ async function fetchAndLoadQueue(type) {
       return;
     }
 
-    if (type === 'upload') {
-      // Preload all tracks in parallel for smooth transitions
-      loadingOverlay.classList.add('visible');
+    // Preload all tracks in parallel for smooth transitions
+    loadingOverlay.classList.add('visible');
 
-      const fetchPromises = serverQueue.map(async (item) => {
-        try {
-          const response = await fetch(`/api/audio/${item.id}`);
-          if (!response.ok) {
-            console.error('HTTP error loading:', item.title, response.status);
-            return null;
-          }
-          const arrayBuffer = await response.arrayBuffer();
-          if (arrayBuffer.byteLength < 1000) {
-            console.error('File too small, skipping:', item.title, arrayBuffer.byteLength);
-            return null;
-          }
-          return { name: item.title, arrayBuffer, queueItem: item };
-        } catch (err) {
-          console.error('Failed to load:', item.title, err);
+    const fetchPromises = serverQueue.map(async (item) => {
+      try {
+        const response = await fetch(`/api/audio/${item.id}`);
+        if (!response.ok) {
+          console.error('HTTP error loading:', item.title, response.status);
           return null;
         }
-      });
-
-      const results = await Promise.all(fetchPromises);
-      playlist = results.filter(r => r !== null);
-      loadingOverlay.classList.remove('visible');
-
-      if (playlist.length > 0) {
-        updateTransportButtons();
-        updateQueueCounter();
-        await loadTrack(0);
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength < 1000) {
+          console.error('File too small, skipping:', item.title, arrayBuffer.byteLength);
+          return null;
+        }
+        return { name: item.title, arrayBuffer, queueItem: item };
+      } catch (err) {
+        console.error('Failed to load:', item.title, err);
+        return null;
       }
-    } else {
-      // YouTube: just show the list, can't play via Web Audio
-      updateTrackInfo(serverQueue[0]);
-      currentTrackIndex = 0;
-      updateQueueCounter();
+    });
+
+    const results = await Promise.all(fetchPromises);
+    playlist = results.filter(r => r !== null);
+    loadingOverlay.classList.remove('visible');
+
+    if (playlist.length > 0) {
       updateTransportButtons();
+      updateQueueCounter();
+      await loadTrack(0);
     }
   } catch (err) {
     console.error('Queue fetch error:', err);
