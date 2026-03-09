@@ -450,7 +450,7 @@ function drawWaveform(currentTime) {
   if (kickDecay > 0.15) {
     kickActivity += (1 - kickActivity) * 0.3; // fast rise
   } else {
-    kickActivity *= 0.993; // very slow decay (~3s half-life at 60fps)
+    kickActivity *= 0.98; // faster decay (~0.6s half-life) so couplets drop properly
   }
 
   const windowSec = 8;
@@ -570,8 +570,9 @@ function drawWaveform(currentTime) {
     for (let i = bassS; i < bassE; i++) bassSum += loudnessFreqData[i];
     const bassRaw = bassSum / ((bassE - bassS) * 255);
 
-    // Bass bonus: 0-1, rewards sections with actual low-end
-    const bassBonus = Math.min(1, (subRaw * 0.6 + bassRaw * 0.4) * 3);
+    // Bass bonus: 0-1, rewards sections with actual heavy low-end
+    // *1.2 instead of *3 so voice/melody doesn't saturate it
+    const bassBonus = Math.min(1, (subRaw * 0.6 + bassRaw * 0.4) * 1.2);
 
     // Kick activity: smoothed envelope that stays high while kicks keep hitting
     const kickImpact = Math.min(1, kickActivity);
