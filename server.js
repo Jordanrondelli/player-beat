@@ -8,6 +8,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { parseBuffer } = require('music-metadata');
+const ytdl = require('@distube/ytdl-core');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -221,60 +222,47 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
     if (type === 'youtube') {
       if (!source_url) return res.status(400).json({ error: 'Lien YouTube requis' });
 
-      // Auto-fetch title/artist from YouTube via oEmbed
+      // Validate YouTube URL
+      if (!ytdl.validateURL(source_url)) {
+        return res.status(400).json({ error: 'Lien YouTube invalide.' });
+      }
+
+      // Fetch video info for title/artist
       let ytTitle = title || '';
       let ytArtist = artist || '';
       try {
-        const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(source_url)}&format=json`;
-        const oembedRes = await fetch(oembedUrl);
-        if (oembedRes.ok) {
-          const oembedData = await oembedRes.json();
-          if (!ytTitle && oembedData.title) ytTitle = oembedData.title;
-          if (!ytArtist && oembedData.author_name) ytArtist = oembedData.author_name;
-        }
+        const info = await ytdl.getInfo(source_url);
+        if (!ytTitle) ytTitle = info.videoDetails.title || '';
+        if (!ytArtist) ytArtist = info.videoDetails.author?.name || info.videoDetails.ownerChannelName || '';
       } catch (e) {
-        console.error('YouTube oEmbed error (non-fatal):', e.message);
+        console.error('YouTube info error (non-fatal):', e.message);
       }
       if (!ytTitle) ytTitle = 'YouTube Track';
 
-      // Download audio from YouTube via yt-dlp
+      // Download audio stream via ytdl-core (pure Node.js, no yt-dlp binary needed)
       let fileBuffer = null;
-      const tmpBase = path.join(uploadDir, `yt-${Date.now()}`);
-      const tmpOutput = tmpBase + '.%(ext)s';
       try {
+        const chunks = [];
         await new Promise((resolve, reject) => {
-          execFile('yt-dlp', [
-            '-x', '--audio-format', 'mp3',
-            '--audio-quality', '0',
-            '--no-playlist',
-            '--max-filesize', '50m',
-            '-o', tmpOutput,
-            source_url
-          ], { timeout: 120000 }, (err, stdout, stderr) => {
-            if (err) reject(new Error(stderr || err.message));
-            else resolve(stdout);
+          const stream = ytdl(source_url, {
+            filter: 'audioonly',
+            quality: 'highestaudio',
           });
+          const timeout = setTimeout(() => {
+            stream.destroy();
+            reject(new Error('Download timeout (2min)'));
+          }, 120000);
+          stream.on('data', chunk => chunks.push(chunk));
+          stream.on('end', () => { clearTimeout(timeout); resolve(); });
+          stream.on('error', err => { clearTimeout(timeout); reject(err); });
         });
-        // yt-dlp may output .mp3, .webm, .opus etc — find the actual file
-        const candidates = fs.readdirSync(uploadDir)
-          .filter(f => f.startsWith(path.basename(tmpBase)))
-          .map(f => path.join(uploadDir, f));
-        if (candidates.length > 0) {
-          // Prefer .mp3, otherwise take whatever exists
-          const mp3 = candidates.find(f => f.endsWith('.mp3'));
-          const actualFile = mp3 || candidates[0];
-          fileBuffer = fs.readFileSync(actualFile);
-          // Clean up all temp files for this download
-          candidates.forEach(f => { try { fs.unlinkSync(f); } catch {} });
+        fileBuffer = Buffer.concat(chunks);
+        if (fileBuffer.length < 1000) {
+          console.error('YouTube audio too small:', fileBuffer.length);
+          fileBuffer = null;
         }
       } catch (e) {
-        console.error('yt-dlp error:', e.message);
-        // Clean up any temp files
-        try {
-          fs.readdirSync(uploadDir)
-            .filter(f => f.startsWith(path.basename(tmpBase)))
-            .forEach(f => fs.unlinkSync(path.join(uploadDir, f)));
-        } catch {}
+        console.error('YouTube download error:', e.message);
       }
 
       if (!fileBuffer) {
@@ -283,7 +271,7 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
 
       const { rows } = await pool.query(
         'INSERT INTO queue (type, title, artist, source_url, file_data, file_mimetype, submitted_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, type, title, artist, source_url, submitted_by, status, created_at',
-        ['youtube', ytTitle, ytArtist, source_url, fileBuffer, 'audio/mpeg', submitted_by || 'Anonyme']
+        ['youtube', ytTitle, ytArtist, source_url, fileBuffer, 'audio/webm', submitted_by || 'Anonyme']
       );
       await pool.query('INSERT INTO votes (queue_id) VALUES ($1)', [rows[0].id]);
       return res.json(rows[0]);
