@@ -1522,14 +1522,10 @@ async function fetchAndLoadQueue(type) {
       let firstLoaded = false;
       for (const item of serverQueue) {
         try {
-          const response = await fetch(item.file_path);
+          // Fetch audio from DB via API
+          const response = await fetch(`/api/audio/${item.id}`);
           if (!response.ok) {
             console.error('HTTP error loading:', item.title, response.status);
-            continue;
-          }
-          const contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('text/html')) {
-            console.error('Got HTML instead of audio for:', item.title, item.file_path);
             continue;
           }
           const arrayBuffer = await response.arrayBuffer();

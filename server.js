@@ -30,6 +30,8 @@ async function initDB() {
       artist TEXT DEFAULT '',
       source_url TEXT DEFAULT '',
       file_path TEXT DEFAULT '',
+      file_data BYTEA,
+      file_mimetype TEXT DEFAULT 'audio/mpeg',
       submitted_by TEXT DEFAULT 'Anonyme',
       status TEXT DEFAULT 'pending',
       created_at TIMESTAMP DEFAULT NOW()
@@ -45,6 +47,12 @@ async function initDB() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+  `);
+
+  // Migrate: add file_data column if missing
+  await pool.query(`
+    ALTER TABLE queue ADD COLUMN IF NOT EXISTS file_data BYTEA;
+    ALTER TABLE queue ADD COLUMN IF NOT EXISTS file_mimetype TEXT DEFAULT 'audio/mpeg';
   `);
 
   // Seed default admin if none exists
@@ -170,15 +178,16 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
 
     if (type === 'upload') {
       if (!req.file) return res.status(400).json({ error: 'Fichier audio requis' });
-      const ext = req.file.originalname.split('.').pop();
-      const newPath = req.file.path + '.' + ext;
-      fs.renameSync(req.file.path, newPath);
-      const relativePath = '/uploads/' + path.basename(newPath);
+      // Read file into buffer for DB storage
+      const fileBuffer = fs.readFileSync(req.file.path);
+      const mimetype = req.file.mimetype || 'audio/mpeg';
 
       const { rows } = await pool.query(
-        'INSERT INTO queue (type, title, artist, file_path, submitted_by) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        ['upload', title || req.file.originalname, artist || '', relativePath, submitted_by || 'Anonyme']
+        'INSERT INTO queue (type, title, artist, file_data, file_mimetype, submitted_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, type, title, artist, submitted_by, status, created_at',
+        ['upload', title || req.file.originalname, artist || '', fileBuffer, mimetype, submitted_by || 'Anonyme']
       );
+      // Clean up temp file
+      fs.unlinkSync(req.file.path);
       await pool.query('INSERT INTO votes (queue_id) VALUES ($1)', [rows[0].id]);
       return res.json(rows[0]);
     }
@@ -210,7 +219,7 @@ app.get('/api/queue/count', async (req, res) => {
 app.get('/api/queue', requireAdmin, async (req, res) => {
   const status = req.query.status || 'pending';
   const { rows } = await pool.query(
-    'SELECT q.*, v.fire, v.up, v.down FROM queue q LEFT JOIN votes v ON v.queue_id = q.id WHERE q.status = $1 ORDER BY q.created_at ASC',
+    'SELECT q.id, q.type, q.title, q.artist, q.source_url, q.submitted_by, q.status, q.created_at, v.fire, v.up, v.down FROM queue q LEFT JOIN votes v ON v.queue_id = q.id WHERE q.status = $1 ORDER BY q.created_at ASC',
     [status]
   );
   res.json(rows);
@@ -228,11 +237,6 @@ app.patch('/api/queue/:id', requireAdmin, async (req, res) => {
 
 // Delete queue item (admin)
 app.delete('/api/queue/:id', requireAdmin, async (req, res) => {
-  const { rows } = await pool.query('SELECT file_path FROM queue WHERE id = $1', [req.params.id]);
-  if (rows.length && rows[0].file_path) {
-    const filePath = path.join(__dirname, rows[0].file_path);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-  }
   await pool.query('DELETE FROM queue WHERE id = $1', [req.params.id]);
   res.json({ success: true });
 });
@@ -284,13 +288,37 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
+// ===== SERVE AUDIO FROM DB =====
+app.get('/api/audio/:id', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT file_data, file_mimetype, title FROM queue WHERE id = $1 AND type = $2',
+      [req.params.id, 'upload']
+    );
+    if (!rows.length || !rows[0].file_data) {
+      return res.status(404).json({ error: 'Audio non trouvé' });
+    }
+    const { file_data, file_mimetype, title } = rows[0];
+    res.set({
+      'Content-Type': file_mimetype || 'audio/mpeg',
+      'Content-Length': file_data.length,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=86400',
+    });
+    res.send(file_data);
+  } catch (err) {
+    console.error('Audio serve error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // ===== PLAYER PLAYLIST (public) =====
 
 // Returns shuffled tracks for the player, filtered by type
 app.get('/api/player/playlist', async (req, res) => {
   try {
     const type = req.query.type; // 'upload' or 'youtube'
-    let query = "SELECT q.*, v.fire, v.up, v.down FROM queue q LEFT JOIN votes v ON v.queue_id = q.id WHERE q.status IN ('pending', 'playing')";
+    let query = "SELECT q.id, q.type, q.title, q.artist, q.source_url, q.submitted_by, q.status, q.created_at, v.fire, v.up, v.down FROM queue q LEFT JOIN votes v ON v.queue_id = q.id WHERE q.status IN ('pending', 'playing')";
     const params = [];
     if (type && ['upload', 'youtube'].includes(type)) {
       query += ' AND q.type = $1';
@@ -323,7 +351,7 @@ app.get('/api/player/count', async (req, res) => {
 
 app.get('/api/current-track', requireAdmin, async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT q.*, v.fire, v.up, v.down FROM queue q LEFT JOIN votes v ON v.queue_id = q.id WHERE q.status = 'playing' ORDER BY q.created_at DESC LIMIT 1"
+    "SELECT q.id, q.type, q.title, q.artist, q.source_url, q.submitted_by, q.status, q.created_at, v.fire, v.up, v.down FROM queue q LEFT JOIN votes v ON v.queue_id = q.id WHERE q.status = 'playing' ORDER BY q.created_at DESC LIMIT 1"
   );
   res.json(rows[0] || null);
 });
