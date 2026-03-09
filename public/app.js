@@ -1346,23 +1346,77 @@ async function loadTrack(index, autoPlay) {
 
   const track = playlist[index];
 
-  // YouTube track: use IFrame player
+  // YouTube track: try to fetch real audio from Piped (client-side), fall back to IFrame
   if (track.youtubeId) {
-    ytIsCurrentSource = true;
+    ytIsCurrentSource = false; // will be set true only if we need IFrame fallback
     audioBuffer = null;
     waveformData = [];
     waveformSigned = [];
 
-    // Update track info immediately (no waiting)
+    // Update track info immediately
     updateTrackInfo(track.queueItem);
     updateQueueCounter();
 
+    // Try fetching real audio from Piped instances (browser IP is not blocked)
+    let realAudioBuffer = null;
+    const pipedInstances = [
+      'https://pipedapi.kavin.rocks',
+      'https://pipedapi.adminforge.de',
+      'https://pipedapi.r4fo.com',
+      'https://piped-api.privacy.com.de',
+      'https://pipedapi.darkness.services',
+    ];
+
+    for (const instance of pipedInstances) {
+      try {
+        console.log(`Piped client (${instance}): fetching streams for ${track.youtubeId}`);
+        const infoRes = await fetch(`${instance}/streams/${track.youtubeId}`, {
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!infoRes.ok) continue;
+        const info = await infoRes.json();
+        const audioStreams = (info.audioStreams || [])
+          .filter(s => s.url && s.mimeType && s.mimeType.startsWith('audio/'))
+          .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+        if (audioStreams.length === 0) continue;
+
+        // Fetch the actual audio data
+        console.log(`Piped client: downloading audio (${audioStreams[0].mimeType}, ${audioStreams[0].bitrate}bps)`);
+        const audioRes = await fetch(audioStreams[0].url, { signal: AbortSignal.timeout(30000) });
+        if (!audioRes.ok) continue;
+        const arrayBuffer = await audioRes.arrayBuffer();
+        if (arrayBuffer.byteLength < 1000) continue;
+
+        // Decode audio — full real analysis!
+        realAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        console.log(`Piped client: decoded ${realAudioBuffer.duration.toFixed(1)}s audio`);
+        break;
+      } catch (e) {
+        console.warn(`Piped client ${instance} error:`, e.message);
+      }
+    }
+
+    if (realAudioBuffer) {
+      // SUCCESS: Real audio — treat exactly like an upload
+      audioBuffer = realAudioBuffer;
+      extractWaveformData(audioBuffer);
+      prescanTrackCriteria(audioBuffer);
+      detectedBPM = await detectBPM(audioBuffer);
+      console.log('YouTube real BPM:', detectedBPM);
+      resizeCanvases();
+      drawMiniWaveform();
+      pauseOffset = 0;
+      if (autoPlay) playAudio();
+      loadingOverlay.classList.remove('visible');
+      return;
+    }
+
+    // FALLBACK: Piped failed — use YouTube IFrame + synthetic waveform
+    console.log('Piped unavailable, falling back to YouTube IFrame');
+    ytIsCurrentSource = true;
     if (ytPlayer && ytReady) {
-      // Use cueVideoById first (doesn't start loading audio immediately),
-      // then wait for CUED state to get duration, then play
       await new Promise((resolve) => {
         const onStateChange = (e) => {
-          // CUED (5) or PLAYING (1) = video is ready
           if (e.data === YT.PlayerState.CUED || e.data === YT.PlayerState.PLAYING) {
             ytPlayer.removeEventListener('onStateChange', onStateChange);
             resolve();
@@ -1370,19 +1424,17 @@ async function loadTrack(index, autoPlay) {
         };
         ytPlayer.addEventListener('onStateChange', onStateChange);
         ytPlayer.cueVideoById(track.youtubeId);
-        // Fallback timeout in case event never fires
         setTimeout(resolve, 3000);
       });
 
       ytDuration = ytPlayer.getDuration();
-      if (ytDuration <= 0) ytDuration = 180; // fallback 3min
+      if (ytDuration <= 0) ytDuration = 180;
 
-      // Generate a synthetic waveform for visual display
       generateSyntheticWaveform(ytDuration);
       resizeCanvases();
       drawMiniWaveform();
       pauseOffset = 0;
-      detectedBPM = 120; // default BPM for YouTube tracks
+      detectedBPM = 120;
       if (autoPlay) {
         ytPlayer.playVideo();
         isPlaying = true;
@@ -1519,10 +1571,9 @@ let votes = { fire: 0, up: 0, down: 0 };
 
 function updateVoteDisplay() {
   const total = votes.fire + votes.up + votes.down;
-  if (total === 0) return;
-  const pctFire = (votes.fire / total) * 100;
-  const pctUp = (votes.up / total) * 100;
-  const pctDown = (votes.down / total) * 100;
+  const pctFire = total > 0 ? (votes.fire / total) * 100 : 0;
+  const pctUp = total > 0 ? (votes.up / total) * 100 : 0;
+  const pctDown = total > 0 ? (votes.down / total) * 100 : 0;
 
   document.getElementById('chatPct1').textContent = Math.round(pctFire) + '%';
   document.getElementById('chatPct2').textContent = Math.round(pctUp) + '%';
@@ -1816,9 +1867,10 @@ loadTrack = async function(index, autoPlay) {
 
 // ===== WIPE ALL =====
 document.getElementById('wipeBtn').addEventListener('click', async () => {
-  if (!confirm('Supprimer TOUS les uploads ? Cette action est irréversible.')) return;
+  const label = currentSource === 'youtube' ? 'liens YouTube' : 'uploads';
+  if (!confirm(`Supprimer TOUS les ${label} ? Cette action est irréversible.`)) return;
   try {
-    const res = await fetch('/api/queue/wipe-all', { method: 'DELETE' });
+    const res = await fetch(`/api/queue/wipe-all?type=${currentSource}`, { method: 'DELETE' });
     if (res.ok) {
       stopAudio();
       serverQueue = [];

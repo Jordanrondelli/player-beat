@@ -289,9 +289,14 @@ app.patch('/api/queue/:id', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-// Wipe all uploads (admin)
+// Wipe all by type (admin)
 app.delete('/api/queue/wipe-all', requireAdmin, async (req, res) => {
-  await pool.query("DELETE FROM queue WHERE type = 'upload'");
+  const type = req.query.type;
+  if (type && ['upload', 'youtube'].includes(type)) {
+    await pool.query('DELETE FROM queue WHERE type = $1', [type]);
+  } else {
+    await pool.query('DELETE FROM queue');
+  }
   res.json({ success: true });
 });
 
