@@ -568,10 +568,10 @@ function drawWaveform(currentTime) {
     hammerSmooth += (wfLevel - hammerSmooth) * 0.12;
 
     // --- FINAL SCORE ---
-    // 50% waveform envelope + 50% bass bonus
+    // 35% waveform envelope + 65% bass bonus
     // Waveform ensures visual/score coherence
     // Bass bonus differentiates drops (with bass) from buildups (loud but no bass)
-    const rawScore = wfLevel * 0.50 + wfLevel * bassBonus * 0.50;
+    const rawScore = wfLevel * 0.35 + wfLevel * bassBonus * 0.65;
 
     // Power curve — score^1.8 gives good dynamic range
     // wfLevel 0.15 (intro) → ~3%.  wfLevel 0.5 (buildup) → ~28%.  wfLevel 0.9 (drop) → ~82%.
