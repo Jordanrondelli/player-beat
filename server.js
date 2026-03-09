@@ -6,9 +6,26 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fs = require('fs');
 const crypto = require('crypto');
-const { execFile } = require('child_process');
+const { execFile, execSync } = require('child_process');
 const { parseBuffer } = require('music-metadata');
 const ytdl = require('@distube/ytdl-core');
+
+// Auto-update yt-dlp at startup for reliability
+const ytdlpBinPath = path.join(__dirname, 'yt-dlp');
+async function ensureYtdlp() {
+  try {
+    console.log('yt-dlp: checking/downloading latest version...');
+    execSync(
+      'curl -L --retry 3 --max-time 30 https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o ' +
+      JSON.stringify(ytdlpBinPath) + ' && chmod +x ' + JSON.stringify(ytdlpBinPath),
+      { timeout: 60000, stdio: 'pipe' }
+    );
+    const ver = execSync(ytdlpBinPath + ' --version', { timeout: 10000, encoding: 'utf8' }).trim();
+    console.log('yt-dlp: ready, version', ver);
+  } catch (e) {
+    console.error('yt-dlp: failed to download/update:', e.message);
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -247,17 +264,18 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
       let fileBuffer = null;
       let fileMime = 'audio/mpeg';
 
-      // Method 1: yt-dlp binary (downloaded at build time, no pip/ffmpeg needed)
-      const ytdlpBin = path.join(__dirname, 'yt-dlp');
+      // Method 1: yt-dlp binary (auto-updated at startup)
       const tmpBase = path.join(uploadDir, `yt-${Date.now()}`);
       try {
         console.log('yt-dlp: downloading audio for', source_url);
         await new Promise((resolve, reject) => {
-          execFile(ytdlpBin, [
-            '-f', 'bestaudio[ext=m4a]/bestaudio',
+          execFile(ytdlpBinPath, [
+            '-f', 'bestaudio[ext=m4a]/bestaudio/bestaudio',
             '--no-playlist',
             '--max-filesize', '50m',
             '--no-check-certificates',
+            '--extractor-args', 'youtube:player_client=web,default',
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             '-o', tmpBase + '.%(ext)s',
             source_url
           ], { timeout: 120000 }, (err, stdout, stderr) => {
@@ -307,6 +325,40 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
           console.log('ytdl-core: downloaded', fileBuffer.length, 'bytes');
         } catch (e) {
           console.error('ytdl-core error:', e.message);
+        }
+      }
+
+      // Method 3: cobalt API fallback
+      if (!fileBuffer) {
+        console.log('ytdl-core failed, trying cobalt API...');
+        try {
+          const cobaltRes = await fetch('https://api.cobalt.tools/api/json', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+              url: source_url,
+              isAudioOnly: true,
+              aFormat: 'mp3',
+              filenamePattern: 'basic',
+            }),
+          });
+          const cobaltData = await cobaltRes.json();
+          if (cobaltData.url) {
+            const audioRes = await fetch(cobaltData.url, { signal: AbortSignal.timeout(120000) });
+            if (audioRes.ok) {
+              const arrayBuf = await audioRes.arrayBuffer();
+              fileBuffer = Buffer.from(arrayBuf);
+              fileMime = 'audio/mpeg';
+              console.log('cobalt: downloaded', fileBuffer.length, 'bytes');
+            }
+          } else {
+            console.error('cobalt: no URL in response', cobaltData);
+          }
+        } catch (e) {
+          console.error('cobalt API error:', e.message);
         }
       }
 
@@ -597,6 +649,8 @@ app.get('/api/twitch-votes', async (req, res) => {
 // ===== START =====
 initDB().then(async () => {
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  // Download/update yt-dlp in background (non-blocking)
+  ensureYtdlp().catch(() => {});
   // Start Twitch bot
   await startTwitchBot();
 }).catch(err => {
