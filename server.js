@@ -247,14 +247,14 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
       let fileBuffer = null;
       let fileMime = 'audio/mpeg';
 
-      // Method 1: yt-dlp binary (most reliable, installed via pip on Render)
+      // Method 1: yt-dlp binary (downloaded at build time, no pip/ffmpeg needed)
+      const ytdlpBin = path.join(__dirname, 'yt-dlp');
       const tmpBase = path.join(uploadDir, `yt-${Date.now()}`);
       try {
         console.log('yt-dlp: downloading audio for', source_url);
         await new Promise((resolve, reject) => {
-          execFile('yt-dlp', [
-            '-x', '--audio-format', 'mp3',
-            '--audio-quality', '5',
+          execFile(ytdlpBin, [
+            '-f', 'bestaudio[ext=m4a]/bestaudio',
             '--no-playlist',
             '--max-filesize', '50m',
             '--no-check-certificates',
@@ -269,10 +269,9 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
           .filter(f => f.startsWith(path.basename(tmpBase)))
           .map(f => path.join(uploadDir, f));
         if (candidates.length > 0) {
-          const mp3 = candidates.find(f => f.endsWith('.mp3'));
-          const actualFile = mp3 || candidates[0];
+          const actualFile = candidates[0];
           fileBuffer = fs.readFileSync(actualFile);
-          fileMime = 'audio/mpeg';
+          fileMime = actualFile.endsWith('.m4a') ? 'audio/mp4' : actualFile.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
           candidates.forEach(f => { try { fs.unlinkSync(f); } catch {} });
           console.log('yt-dlp: downloaded', fileBuffer.length, 'bytes');
         }
