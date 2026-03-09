@@ -264,47 +264,153 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
       let fileBuffer = null;
       let fileMime = 'audio/mpeg';
 
-      // Method 1: yt-dlp binary (auto-updated at startup)
-      const tmpBase = path.join(uploadDir, `yt-${Date.now()}`);
-      try {
-        console.log('yt-dlp: downloading audio for', source_url);
-        await new Promise((resolve, reject) => {
-          execFile(ytdlpBinPath, [
-            '-f', 'bestaudio[ext=m4a]/bestaudio/bestaudio',
-            '--no-playlist',
-            '--max-filesize', '50m',
-            '--no-check-certificates',
-            '--extractor-args', 'youtube:player_client=web,default',
-            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            '-o', tmpBase + '.%(ext)s',
-            source_url
-          ], { timeout: 120000 }, (err, stdout, stderr) => {
-            if (err) reject(new Error(stderr || err.message));
-            else resolve(stdout);
-          });
-        });
-        const candidates = fs.readdirSync(uploadDir)
-          .filter(f => f.startsWith(path.basename(tmpBase)))
-          .map(f => path.join(uploadDir, f));
-        if (candidates.length > 0) {
-          const actualFile = candidates[0];
-          fileBuffer = fs.readFileSync(actualFile);
-          fileMime = actualFile.endsWith('.m4a') ? 'audio/mp4' : actualFile.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
-          candidates.forEach(f => { try { fs.unlinkSync(f); } catch {} });
-          console.log('yt-dlp: downloaded', fileBuffer.length, 'bytes');
+      // Extract video ID from URL
+      function extractVideoId(url) {
+        const patterns = [
+          /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|music\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
+        ];
+        for (const p of patterns) {
+          const m = url.match(p);
+          if (m) return m[1];
         }
-      } catch (e) {
-        console.error('yt-dlp error:', e.message);
-        try {
-          fs.readdirSync(uploadDir)
-            .filter(f => f.startsWith(path.basename(tmpBase)))
-            .forEach(f => fs.unlinkSync(path.join(uploadDir, f)));
-        } catch {}
+        return null;
+      }
+      const videoId = extractVideoId(source_url);
+
+      // Method 1: Invidious instances (proxied YouTube audio - most reliable from cloud servers)
+      if (videoId) {
+        const invidiousInstances = [
+          'https://inv.nadeko.net',
+          'https://invidious.nerdvpn.de',
+          'https://iv.datura.network',
+          'https://invidious.private.coffee',
+          'https://vid.puffyan.us',
+          'https://invidious.lunar.icu',
+        ];
+        for (const instance of invidiousInstances) {
+          if (fileBuffer) break;
+          try {
+            console.log(`Invidious (${instance}): fetching audio for ${videoId}`);
+            const infoRes = await fetch(`${instance}/api/v1/videos/${videoId}`, {
+              signal: AbortSignal.timeout(15000),
+              headers: { 'Accept': 'application/json' },
+            });
+            if (!infoRes.ok) { console.log(`Invidious ${instance}: HTTP ${infoRes.status}`); continue; }
+            const info = await infoRes.json();
+
+            // Find best audio-only stream
+            const audioFormats = (info.adaptiveFormats || [])
+              .filter(f => f.type && f.type.startsWith('audio/'))
+              .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+
+            if (audioFormats.length === 0) { console.log(`Invidious ${instance}: no audio formats`); continue; }
+
+            const bestAudio = audioFormats[0];
+            const audioUrl = bestAudio.url;
+            if (!audioUrl) { console.log(`Invidious ${instance}: no URL in format`); continue; }
+
+            console.log(`Invidious (${instance}): downloading ${bestAudio.type}, ${bestAudio.bitrate}bps`);
+            const audioRes = await fetch(audioUrl, { signal: AbortSignal.timeout(120000) });
+            if (!audioRes.ok) { console.log(`Invidious ${instance}: audio download HTTP ${audioRes.status}`); continue; }
+
+            const arrayBuf = await audioRes.arrayBuffer();
+            fileBuffer = Buffer.from(arrayBuf);
+            fileMime = bestAudio.type.split(';')[0] || 'audio/mp4';
+            console.log(`Invidious (${instance}): downloaded ${fileBuffer.length} bytes`);
+
+            // Update title/artist from Invidious if missing
+            if (ytTitle === 'YouTube Track' && info.title) ytTitle = info.title;
+            if (!ytArtist && info.author) ytArtist = info.author;
+          } catch (e) {
+            console.error(`Invidious ${instance} error:`, e.message);
+          }
+        }
       }
 
-      // Method 2: ytdl-core fallback (pure JS, no binary needed)
+      // Method 2: Piped API (another YouTube proxy)
+      if (!fileBuffer && videoId) {
+        const pipedInstances = [
+          'https://pipedapi.kavin.rocks',
+          'https://pipedapi.r4fo.com',
+          'https://pipedapi.adminforge.de',
+        ];
+        for (const instance of pipedInstances) {
+          if (fileBuffer) break;
+          try {
+            console.log(`Piped (${instance}): fetching audio for ${videoId}`);
+            const infoRes = await fetch(`${instance}/streams/${videoId}`, {
+              signal: AbortSignal.timeout(15000),
+              headers: { 'Accept': 'application/json' },
+            });
+            if (!infoRes.ok) { console.log(`Piped ${instance}: HTTP ${infoRes.status}`); continue; }
+            const info = await infoRes.json();
+
+            const audioStreams = (info.audioStreams || [])
+              .filter(s => s.url)
+              .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+            if (audioStreams.length === 0) { console.log(`Piped ${instance}: no audio streams`); continue; }
+
+            const best = audioStreams[0];
+            console.log(`Piped (${instance}): downloading ${best.mimeType}, ${best.bitrate}bps`);
+            const audioRes = await fetch(best.url, { signal: AbortSignal.timeout(120000) });
+            if (!audioRes.ok) continue;
+
+            const arrayBuf = await audioRes.arrayBuffer();
+            fileBuffer = Buffer.from(arrayBuf);
+            fileMime = (best.mimeType || 'audio/mp4').split(';')[0];
+            console.log(`Piped (${instance}): downloaded ${fileBuffer.length} bytes`);
+
+            if (ytTitle === 'YouTube Track' && info.title) ytTitle = info.title;
+            if (!ytArtist && info.uploader) ytArtist = info.uploader;
+          } catch (e) {
+            console.error(`Piped ${instance} error:`, e.message);
+          }
+        }
+      }
+
+      // Method 3: yt-dlp binary (auto-updated at startup)
       if (!fileBuffer) {
-        console.log('yt-dlp failed, trying ytdl-core...');
+        const tmpBase = path.join(uploadDir, `yt-${Date.now()}`);
+        try {
+          console.log('yt-dlp: downloading audio for', source_url);
+          await new Promise((resolve, reject) => {
+            execFile(ytdlpBinPath, [
+              '-f', 'bestaudio[ext=m4a]/bestaudio',
+              '--no-playlist',
+              '--max-filesize', '50m',
+              '--no-check-certificates',
+              '--extractor-args', 'youtube:player_client=web,default',
+              '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+              '-o', tmpBase + '.%(ext)s',
+              source_url
+            ], { timeout: 120000 }, (err, stdout, stderr) => {
+              if (err) reject(new Error(stderr || err.message));
+              else resolve(stdout);
+            });
+          });
+          const candidates = fs.readdirSync(uploadDir)
+            .filter(f => f.startsWith(path.basename(tmpBase)))
+            .map(f => path.join(uploadDir, f));
+          if (candidates.length > 0) {
+            const actualFile = candidates[0];
+            fileBuffer = fs.readFileSync(actualFile);
+            fileMime = actualFile.endsWith('.m4a') ? 'audio/mp4' : actualFile.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
+            candidates.forEach(f => { try { fs.unlinkSync(f); } catch {} });
+            console.log('yt-dlp: downloaded', fileBuffer.length, 'bytes');
+          }
+        } catch (e) {
+          console.error('yt-dlp error:', e.message);
+          try {
+            fs.readdirSync(uploadDir)
+              .filter(f => f.startsWith(path.basename(tmpBase)))
+              .forEach(f => fs.unlinkSync(path.join(uploadDir, f)));
+          } catch {}
+        }
+      }
+
+      // Method 4: ytdl-core fallback (pure JS)
+      if (!fileBuffer) {
+        console.log('All methods failed, trying ytdl-core...');
         try {
           const chunks = [];
           await new Promise((resolve, reject) => {
@@ -325,40 +431,6 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
           console.log('ytdl-core: downloaded', fileBuffer.length, 'bytes');
         } catch (e) {
           console.error('ytdl-core error:', e.message);
-        }
-      }
-
-      // Method 3: cobalt API fallback
-      if (!fileBuffer) {
-        console.log('ytdl-core failed, trying cobalt API...');
-        try {
-          const cobaltRes = await fetch('https://api.cobalt.tools/api/json', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: JSON.stringify({
-              url: source_url,
-              isAudioOnly: true,
-              aFormat: 'mp3',
-              filenamePattern: 'basic',
-            }),
-          });
-          const cobaltData = await cobaltRes.json();
-          if (cobaltData.url) {
-            const audioRes = await fetch(cobaltData.url, { signal: AbortSignal.timeout(120000) });
-            if (audioRes.ok) {
-              const arrayBuf = await audioRes.arrayBuffer();
-              fileBuffer = Buffer.from(arrayBuf);
-              fileMime = 'audio/mpeg';
-              console.log('cobalt: downloaded', fileBuffer.length, 'bytes');
-            }
-          } else {
-            console.error('cobalt: no URL in response', cobaltData);
-          }
-        } catch (e) {
-          console.error('cobalt API error:', e.message);
         }
       }
 
