@@ -1133,12 +1133,24 @@ function updateHammerVisuals(pct, kick) {
 }
 
 function triggerHammerActivation(stage) {
-  // Shockwave
+  // Shockwave — primary ring
   if (hammerShockwave) {
     hammerShockwave.classList.remove('active');
     void hammerShockwave.offsetWidth;
     hammerShockwave.classList.add('active');
     setTimeout(() => hammerShockwave.classList.remove('active'), 700);
+
+    // Secondary ripple (delayed)
+    const parent = hammerShockwave.parentElement;
+    if (parent) {
+      const ring2 = document.createElement('div');
+      ring2.className = 'hammer-shockwave-2';
+      parent.appendChild(ring2);
+      setTimeout(() => {
+        ring2.classList.add('active');
+        setTimeout(() => ring2.remove(), 850);
+      }, 80);
+    }
   }
 
   // Hammer slam
@@ -1858,19 +1870,20 @@ function spawnFireParticles(cx, cy, count, intensity) {
     const speed = (3 + Math.random() * 8) * intensity;
     const size = 2 + Math.random() * 4 * intensity;
     const life = 0.6 + Math.random() * 0.8;
-    // Color: orange → yellow → white based on intensity
-    const hue = 15 + Math.random() * 30; // 15-45 (red-orange-yellow)
+    const hue = 15 + Math.random() * 30;
     const sat = 80 + Math.random() * 20;
     const lum = 50 + Math.random() * 30 + intensity * 15;
+    const vx = Math.cos(angle) * speed + (Math.random() - .5) * 2;
+    const vy = Math.sin(angle) * speed - Math.random() * 3;
     fireParticles.push({
       x: cx, y: cy,
-      vx: Math.cos(angle) * speed + (Math.random() - .5) * 2,
-      vy: Math.sin(angle) * speed - Math.random() * 3, // bias upward
+      prevX: cx, prevY: cy,
+      vx, vy,
       size, life, maxLife: life,
       hue, sat, lum,
       gravity: 0.15 + Math.random() * 0.1,
       friction: 0.97 + Math.random() * 0.02,
-      type: Math.random() < 0.3 ? 'spark' : 'ember',
+      type: Math.random() < 0.35 ? 'spark' : 'ember',
     });
   }
   if (!fireParticleRAF) tickFireParticles();
@@ -1882,23 +1895,53 @@ function tickFireParticles() {
 
   for (let i = fireParticles.length - 1; i >= 0; i--) {
     const p = fireParticles[i];
-    p.life -= 0.016; // ~60fps
+    p.life -= 0.016;
     if (p.life <= 0) { fireParticles.splice(i, 1); continue; }
 
+    p.prevX = p.x;
+    p.prevY = p.y;
     p.vy += p.gravity;
     p.vx *= p.friction;
     p.vy *= p.friction;
     p.x += p.vx;
     p.y += p.vy;
 
-    const alpha = Math.min(1, p.life / (p.maxLife * 0.3)); // fade in last 30%
+    const alpha = Math.min(1, p.life / (p.maxLife * 0.3));
     const sizeNow = p.size * (0.3 + 0.7 * (p.life / p.maxLife));
+    const color = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha})`;
 
-    // Simple circle — no glow pass (halves draw calls)
-    fpCtx.beginPath();
-    fpCtx.arc(p.x, p.y, sizeNow, 0, Math.PI * 2);
-    fpCtx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha})`;
-    fpCtx.fill();
+    if (p.type === 'spark') {
+      // Spark: draw a line trail from previous to current position
+      const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+      const trailLen = Math.min(speed * 3, 20);
+      const dx = p.vx / (speed || 1);
+      const dy = p.vy / (speed || 1);
+      fpCtx.beginPath();
+      fpCtx.moveTo(p.x, p.y);
+      fpCtx.lineTo(p.x - dx * trailLen, p.y - dy * trailLen);
+      fpCtx.strokeStyle = color;
+      fpCtx.lineWidth = sizeNow * 0.8;
+      fpCtx.lineCap = 'round';
+      fpCtx.stroke();
+      // Bright head
+      fpCtx.beginPath();
+      fpCtx.arc(p.x, p.y, sizeNow * 0.6, 0, Math.PI * 2);
+      fpCtx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${Math.min(95, p.lum + 20)}%, ${alpha})`;
+      fpCtx.fill();
+    } else {
+      // Ember: soft glowing circle
+      fpCtx.beginPath();
+      fpCtx.arc(p.x, p.y, sizeNow, 0, Math.PI * 2);
+      fpCtx.fillStyle = color;
+      fpCtx.fill();
+      // Subtle glow
+      if (sizeNow > 2) {
+        fpCtx.beginPath();
+        fpCtx.arc(p.x, p.y, sizeNow * 2, 0, Math.PI * 2);
+        fpCtx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha * 0.15})`;
+        fpCtx.fill();
+      }
+    }
   }
 
   if (fireParticles.length > 0) {
@@ -1964,20 +2007,41 @@ function playFireSound(combo) {
   }
 }
 
-// --- Shockwave effect ---
+// --- Shockwave effect — double ring with heat distortion ---
 function triggerShockwave(cx, cy, combo) {
+  // Primary ring — gradient + backdrop blur
   const el = document.getElementById('fireShockwave');
   el.classList.remove('active');
-  el.style.left = (cx - 20) + 'px';
-  el.style.top = (cy - 20) + 'px';
-  // Scale shockwave with combo
-  const scale = 1 + Math.min(combo, 10) * 0.15;
-  el.style.setProperty('--sw-scale', scale);
-  const borderColor = combo >= 5 ? 'rgba(255, 200, 50, .9)' : 'rgba(255, 100, 0, .8)';
-  el.style.borderColor = borderColor;
+  el.style.left = (cx - 30) + 'px';
+  el.style.top = (cy - 30) + 'px';
   void el.offsetWidth;
   el.classList.add('active');
-  setTimeout(() => el.classList.remove('active'), 700);
+  setTimeout(() => el.classList.remove('active'), 600);
+
+  // Secondary ring — thin border, delayed, wider spread
+  const ring = document.createElement('div');
+  ring.className = 'fire-shockwave-ring';
+  ring.style.left = (cx - 30) + 'px';
+  ring.style.top = (cy - 30) + 'px';
+  document.body.appendChild(ring);
+  setTimeout(() => {
+    ring.classList.add('active');
+    setTimeout(() => ring.remove(), 750);
+  }, 60);
+
+  // Third ring on high combos
+  if (combo >= 5) {
+    const ring2 = document.createElement('div');
+    ring2.className = 'fire-shockwave-ring';
+    ring2.style.left = (cx - 30) + 'px';
+    ring2.style.top = (cy - 30) + 'px';
+    ring2.style.borderColor = 'rgba(255, 220, 100, .4)';
+    document.body.appendChild(ring2);
+    setTimeout(() => {
+      ring2.classList.add('active');
+      setTimeout(() => ring2.remove(), 750);
+    }, 140);
+  }
 }
 
 // --- Button squish animation ---
@@ -2071,13 +2135,41 @@ document.getElementById('btnFire').addEventListener('click', function () {
     updateComboDisplay();
   }
 
-  // 7. Screen shake only on 3+ combo (lightweight)
-  if (fireCombo >= 3) {
+  // 7. Screen shake — intensity scales with combo
+  if (fireCombo >= 2) {
     const wrapper = document.getElementById('wrapper');
-    wrapper.classList.add('shaking');
-    setTimeout(() => wrapper.classList.remove('shaking'), 300);
+    const shakeIntensity = Math.min(1, fireCombo / 12);
+    wrapper.style.animation = 'none';
+    void wrapper.offsetWidth;
+    wrapper.style.animation = `fireShake ${0.4 + shakeIntensity * 0.3}s ease-out`;
+    setTimeout(() => { wrapper.style.animation = ''; }, 400 + shakeIntensity * 300);
+  }
+
+  // 8. Persistent fire halo — grows with combo
+  let halo = document.querySelector('.fire-halo');
+  if (!halo) {
+    halo = document.createElement('div');
+    halo.className = 'fire-halo';
+    this.parentElement.appendChild(halo);
+  }
+  const haloScale = 1 + Math.min(fireCombo, 15) * 0.12;
+  halo.style.setProperty('--halo-scale', haloScale);
+  halo.classList.add('visible');
+
+  // 9. Chromatic aberration on high combo
+  if (fireCombo >= 7) {
+    document.body.classList.add('chromatic-active');
+    setTimeout(() => document.body.classList.remove('chromatic-active'), 300);
   }
 });
+
+// Hide halo when combo ends
+const _origHideCombo = hideCombo;
+hideCombo = function() {
+  _origHideCombo();
+  const halo = document.querySelector('.fire-halo');
+  if (halo) halo.classList.remove('visible');
+};
 
 // ===== COMMUNITY QUEUE =====
 let currentSource = 'upload'; // 'upload' or 'youtube'
