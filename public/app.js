@@ -572,16 +572,21 @@ function drawWaveform(currentTime) {
     // Feed hammerSmooth for other uses
     hammerSmooth += (wfLevel - hammerSmooth) * 0.12;
 
-    // --- FINAL SCORE ---
-    // 30% waveform envelope + 45% bass presence + 25% kick impact
-    // Waveform = visual coherence (small bars = low score)
-    // Bass = sustained low-end presence (sub + bass)
-    // Kick = transient impacts in 60-100Hz (drums, kicks hitting)
-    // Bass alone without kicks scores lower than bass WITH kicks
-    const rawScore = wfLevel * 0.30 + bassBonus * 0.45 + kickImpact * 0.25;
+    // --- FINAL SCORE: MULTIPLICATIVE ---
+    // Each criterion lifts the others. Missing one = score stays low.
+    // All three high = score explodes. This matches perception:
+    // kick alone = weak, bass alone = weak, all together = POWER.
+    //
+    // Each factor has a floor (0.1-0.15) so silence = near-zero, not exactly zero.
+    // Without floors, a single missing criterion would kill the score entirely,
+    // making bass-only sections score 0% which feels wrong.
+    const wfFactor = 0.15 + wfLevel * 0.85;         // 0.15 → 1.0
+    const bassFactor = 0.1 + bassBonus * 0.9;        // 0.1  → 1.0
+    const kickFactor = 0.1 + kickImpact * 0.9;       // 0.1  → 1.0
+    const rawScore = wfFactor * bassFactor * kickFactor;
 
-    // Power curve — score^1.8 gives good dynamic range
-    const shaped = Math.pow(Math.min(1, rawScore), 1.8) * 100;
+    // Power curve — score^1.2 (lighter curve since multiplication already compresses)
+    const shaped = Math.pow(Math.min(1, rawScore), 1.2) * 100;
 
     // Charge dynamics: fast rise, slow release for momentum
     const diff = shaped - hammerCharge;
