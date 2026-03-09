@@ -1497,47 +1497,14 @@ async function loadTrack(index, autoPlay) {
     updateTrackInfo(track.queueItem);
     updateQueueCounter();
 
-    // Fetch real audio via our server proxy (server fetches from Piped/Invidious, no CORS)
-    let realAudioBuffer = null;
-    try {
-      console.log(`Fetching YouTube audio via server proxy for ${track.youtubeId}`);
-      const audioRes = await fetch(`/api/yt-audio/${track.youtubeId}`, {
-        signal: AbortSignal.timeout(8000),
-      });
-      if (audioRes.ok) {
-        const arrayBuffer = await audioRes.arrayBuffer();
-        if (arrayBuffer.byteLength > 1000) {
-          realAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-          console.log(`YouTube audio decoded: ${realAudioBuffer.duration.toFixed(1)}s`);
-        }
-      } else {
-        console.warn(`Server proxy returned ${audioRes.status}`);
-      }
-    } catch (e) {
-      console.warn('YouTube audio proxy error:', e.message);
-    }
-
-    if (realAudioBuffer) {
-      // SUCCESS: Real audio — treat exactly like an upload
-      audioBuffer = realAudioBuffer;
-      extractWaveformData(audioBuffer);
-      prescanTrackCriteria(audioBuffer);
-      detectedBPM = await detectBPM(audioBuffer);
-      console.log('YouTube real BPM:', detectedBPM);
-      resizeCanvases();
-      drawMiniWaveform();
-      pauseOffset = 0;
-      if (autoPlay) playAudio();
-      loadingOverlay.classList.remove('visible');
-      return;
-    }
-
-    // FALLBACK: Piped failed — use YouTube IFrame + synthetic waveform
-    console.log('Piped unavailable, falling back to YouTube IFrame');
+    // FAST START: Launch YouTube IFrame immediately for instant playback,
+    // while fetching real audio from proxy in background for upgrade
     ytIsCurrentSource = true;
-    applyPlayerSettings(); // Refresh power block visibility for YouTube source
+    applyPlayerSettings();
+
+    // Start IFrame playback right away
     if (ytPlayer && ytReady) {
-      await new Promise((resolve) => {
+      const cuePromise = new Promise((resolve) => {
         const onStateChange = (e) => {
           if (e.data === YT.PlayerState.CUED || e.data === YT.PlayerState.PLAYING) {
             ytPlayer.removeEventListener('onStateChange', onStateChange);
@@ -1546,8 +1513,9 @@ async function loadTrack(index, autoPlay) {
         };
         ytPlayer.addEventListener('onStateChange', onStateChange);
         ytPlayer.cueVideoById(track.youtubeId);
-        setTimeout(resolve, 3000);
+        setTimeout(resolve, 2000); // shorter timeout
       });
+      await cuePromise;
 
       ytDuration = ytPlayer.getDuration();
       if (ytDuration <= 0) ytDuration = 180;
@@ -1565,6 +1533,42 @@ async function loadTrack(index, autoPlay) {
       }
     }
     loadingOverlay.classList.remove('visible');
+
+    // Background: try to upgrade to real audio (non-blocking)
+    const ytVideoId = track.youtubeId;
+    fetch(`/api/yt-audio/${ytVideoId}`, { signal: AbortSignal.timeout(12000) })
+      .then(async (audioRes) => {
+        if (!audioRes.ok) return;
+        const arrayBuffer = await audioRes.arrayBuffer();
+        if (arrayBuffer.byteLength <= 1000) return;
+        const realAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        console.log(`YouTube audio upgraded: ${realAudioBuffer.duration.toFixed(1)}s`);
+        // Only upgrade if we're still playing the same track
+        if (playlist[currentTrackIndex] && playlist[currentTrackIndex].youtubeId === ytVideoId) {
+          // Get current playback position from YT player
+          const currentPos = (ytPlayer && ytReady) ? ytPlayer.getCurrentTime() : 0;
+          const wasPlaying = isPlaying;
+
+          // Switch to real audio
+          audioBuffer = realAudioBuffer;
+          extractWaveformData(audioBuffer);
+          prescanTrackCriteria(audioBuffer);
+          detectedBPM = await detectBPM(audioBuffer);
+          console.log('YouTube upgraded BPM:', detectedBPM);
+          resizeCanvases();
+          drawMiniWaveform();
+
+          // Stop YouTube, start Web Audio from same position
+          if (ytPlayer && ytReady) ytPlayer.pauseVideo();
+          ytIsCurrentSource = false;
+          applyPlayerSettings();
+          pauseOffset = currentPos;
+          if (wasPlaying) playAudio();
+        }
+      })
+      .catch((e) => {
+        console.log('YouTube proxy upgrade skipped:', e.message);
+      });
     return;
   }
 

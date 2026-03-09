@@ -517,198 +517,140 @@ app.get('/api/yt-audio/:videoId', ytProxyLimiter, async (req, res) => {
     }
   } catch (e) { /* ignore cache errors */ }
 
-  // Try only 3 Piped instances (fast fail, most are dead anyway)
-  const pipedInstances = [
-    'https://pipedapi.kavin.rocks',
-    'https://pipedapi.adminforge.de',
-    'https://piped-api.codespace.cz',
-  ];
-
-  for (const instance of pipedInstances) {
-    try {
-      console.log(`YT proxy (${instance}): fetching streams for ${videoId}`);
-      const infoRes = await fetch(`${instance}/streams/${videoId}`, {
-        signal: AbortSignal.timeout(3000),
-        headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
-      });
-      if (!infoRes.ok) {
-        console.log(`YT proxy ${instance}: HTTP ${infoRes.status}`);
-        continue;
-      }
-      const info = await infoRes.json();
-      const audioStreams = (info.audioStreams || [])
-        .filter(s => s.url && s.mimeType && s.mimeType.startsWith('audio/'))
-        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-      if (audioStreams.length === 0) {
-        console.log(`YT proxy ${instance}: no audio streams found`);
-        continue;
-      }
-
-      // Fetch actual audio from Piped proxy (NOT from YouTube directly)
-      const stream = audioStreams[0];
-      console.log(`YT proxy: downloading from ${instance} (${stream.mimeType}, ${stream.bitrate}bps)`);
-      const audioRes = await fetch(stream.url, {
-        signal: AbortSignal.timeout(60000),
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-      });
-      if (!audioRes.ok) {
-        console.log(`YT proxy: audio download failed HTTP ${audioRes.status}`);
-        continue;
-      }
-      const buf = Buffer.from(await audioRes.arrayBuffer());
-      if (buf.length < 1000) {
-        console.log(`YT proxy: audio too small (${buf.length} bytes)`);
-        continue;
-      }
-
-      const mime = stream.mimeType.split(';')[0];
-      console.log(`YT proxy: success! ${buf.length} bytes (${mime})`);
-
-      // Cache in DB for next time
-      pool.query(
-        "UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL",
-        [buf, mime, `%${videoId}%`]
-      ).catch(() => {});
-
-      res.set({
-        'Content-Type': mime,
-        'Content-Length': buf.length,
-        'Cache-Control': 'public, max-age=86400',
-      });
-      return res.send(buf);
-    } catch (e) {
-      console.error(`YT proxy ${instance} error:`, e.message);
-    }
+  // Race all providers in parallel — first successful response wins
+  async function tryPiped(instance) {
+    console.log(`YT proxy (${instance}): fetching streams for ${videoId}`);
+    const infoRes = await fetch(`${instance}/streams/${videoId}`, {
+      signal: AbortSignal.timeout(4000),
+      headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!infoRes.ok) throw new Error(`HTTP ${infoRes.status}`);
+    const info = await infoRes.json();
+    const audioStreams = (info.audioStreams || [])
+      .filter(s => s.url && s.mimeType && s.mimeType.startsWith('audio/'))
+      .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+    if (audioStreams.length === 0) throw new Error('no audio streams');
+    const stream = audioStreams[0];
+    console.log(`YT proxy: downloading from ${instance} (${stream.mimeType}, ${stream.bitrate}bps)`);
+    const audioRes = await fetch(stream.url, {
+      signal: AbortSignal.timeout(30000),
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!audioRes.ok) throw new Error(`download HTTP ${audioRes.status}`);
+    const buf = Buffer.from(await audioRes.arrayBuffer());
+    if (buf.length < 1000) throw new Error('too small');
+    return { buf, mime: stream.mimeType.split(';')[0], source: `Piped ${instance}` };
   }
 
-  // Try Invidious instances as fallback
-  // Try only 2 Invidious instances
-  const invidiousInstances = [
-    'https://inv.nadeko.net',
-    'https://yewtu.be',
-  ];
-
-  for (const instance of invidiousInstances) {
-    try {
-      console.log(`YT proxy Invidious (${instance}): trying ${videoId}`);
-      const infoRes = await fetch(`${instance}/api/v1/videos/${videoId}`, {
-        signal: AbortSignal.timeout(3000),
-        headers: { 'Accept': 'application/json' },
-      });
-      if (!infoRes.ok) continue;
-      const info = await infoRes.json();
-      const audioFormats = (info.adaptiveFormats || [])
-        .filter(f => f.type && f.type.startsWith('audio/'))
-        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-      if (audioFormats.length === 0 || !audioFormats[0].url) continue;
-
-      const audioRes = await fetch(audioFormats[0].url, { signal: AbortSignal.timeout(60000) });
-      if (!audioRes.ok) continue;
-      const buf = Buffer.from(await audioRes.arrayBuffer());
-      if (buf.length < 1000) continue;
-
-      const mime = audioFormats[0].type.split(';')[0];
-      console.log(`YT proxy Invidious (${instance}): success! ${buf.length} bytes`);
-
-      pool.query(
-        "UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL",
-        [buf, mime, `%${videoId}%`]
-      ).catch(() => {});
-
-      res.set({ 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400' });
-      return res.send(buf);
-    } catch (e) {
-      console.error(`YT proxy Invidious ${instance} error:`, e.message);
-    }
+  async function tryInvidious(instance) {
+    console.log(`YT proxy Invidious (${instance}): trying ${videoId}`);
+    const infoRes = await fetch(`${instance}/api/v1/videos/${videoId}`, {
+      signal: AbortSignal.timeout(4000),
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!infoRes.ok) throw new Error(`HTTP ${infoRes.status}`);
+    const info = await infoRes.json();
+    const audioFormats = (info.adaptiveFormats || [])
+      .filter(f => f.type && f.type.startsWith('audio/'))
+      .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+    if (audioFormats.length === 0 || !audioFormats[0].url) throw new Error('no audio');
+    const audioRes = await fetch(audioFormats[0].url, { signal: AbortSignal.timeout(30000) });
+    if (!audioRes.ok) throw new Error(`download HTTP ${audioRes.status}`);
+    const buf = Buffer.from(await audioRes.arrayBuffer());
+    if (buf.length < 1000) throw new Error('too small');
+    return { buf, mime: audioFormats[0].type.split(';')[0], source: `Invidious ${instance}` };
   }
 
-  // Try Cobalt API instances as fallback
-  // v10 instances (POST /)
-  const cobaltV10 = [
-    'https://api.cobalt.tools',
-    'https://cobalt-api.ayo.tf',
-  ];
-  // v7 instances (POST /api/json)
-  const cobaltV7 = [
-    'https://cobaltapi.clebootin.com',
-    'https://ca.haloz.at',
-    'https://nyc1.coapi.ggtyler.dev',
+  // Launch all providers in parallel, take first success
+  const providers = [
+    tryPiped('https://pipedapi.kavin.rocks'),
+    tryPiped('https://pipedapi.adminforge.de'),
+    tryPiped('https://piped-api.codespace.cz'),
+    tryInvidious('https://inv.nadeko.net'),
+    tryInvidious('https://yewtu.be'),
   ];
 
-  // Try v10 instances
-  for (const cobaltBase of cobaltV10) {
-    try {
-      console.log(`YT proxy Cobalt v10 (${cobaltBase}): trying ${videoId}`);
-      const cobaltRes = await fetch(`${cobaltBase}/`, {
-        method: 'POST',
-        signal: AbortSignal.timeout(15000),
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: `https://www.youtube.com/watch?v=${videoId}`,
-          downloadMode: 'audio',
-          audioFormat: 'mp3',
-          audioBitrate: '128',
-        }),
-      });
-      if (!cobaltRes.ok) {
-        console.log(`YT proxy Cobalt v10 ${cobaltBase}: HTTP ${cobaltRes.status}`);
-        continue;
-      }
-      const cobaltData = await cobaltRes.json();
-      const downloadUrl = cobaltData.url || cobaltData.audio;
-      if (!downloadUrl) {
-        console.log(`YT proxy Cobalt v10 ${cobaltBase}: no URL`, JSON.stringify(cobaltData).slice(0, 200));
-        continue;
-      }
-      console.log(`YT proxy Cobalt v10: downloading from ${cobaltBase}`);
-      const audioRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(60000) });
-      if (!audioRes.ok) { console.log(`YT proxy Cobalt v10: download failed HTTP ${audioRes.status}`); continue; }
-      const buf = Buffer.from(await audioRes.arrayBuffer());
-      if (buf.length < 1000) { console.log(`YT proxy Cobalt v10: too small`); continue; }
-      const mime = audioRes.headers.get('content-type')?.split(';')[0] || 'audio/mpeg';
-      console.log(`YT proxy Cobalt v10 (${cobaltBase}): success! ${buf.length} bytes (${mime})`);
-      pool.query("UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL", [buf, mime, `%${videoId}%`]).catch(() => {});
-      res.set({ 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400' });
-      return res.send(buf);
-    } catch (e) { console.error(`YT proxy Cobalt v10 ${cobaltBase} error:`, e.message); }
+  // Promise.any resolves with the first fulfilled promise
+  try {
+    const result = await Promise.any(providers);
+    console.log(`YT proxy: success via ${result.source}! ${result.buf.length} bytes (${result.mime})`);
+    pool.query(
+      "UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL",
+      [result.buf, result.mime, `%${videoId}%`]
+    ).catch(() => {});
+    res.set({ 'Content-Type': result.mime, 'Content-Length': result.buf.length, 'Cache-Control': 'public, max-age=86400' });
+    return res.send(result.buf);
+  } catch (e) {
+    console.log('YT proxy: all Piped/Invidious failed, trying Cobalt...');
   }
 
-  // Try v7 instances
-  for (const cobaltBase of cobaltV7) {
-    try {
-      console.log(`YT proxy Cobalt v7 (${cobaltBase}): trying ${videoId}`);
-      const cobaltRes = await fetch(`${cobaltBase}/api/json`, {
-        method: 'POST',
-        signal: AbortSignal.timeout(15000),
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: `https://www.youtube.com/watch?v=${videoId}`,
-          isAudioOnly: true,
-          aFormat: 'mp3',
-        }),
-      });
-      if (!cobaltRes.ok) {
-        console.log(`YT proxy Cobalt v7 ${cobaltBase}: HTTP ${cobaltRes.status}`);
-        continue;
-      }
-      const cobaltData = await cobaltRes.json();
-      if (cobaltData.status !== 'stream' && cobaltData.status !== 'redirect') {
-        console.log(`YT proxy Cobalt v7 ${cobaltBase}: status=${cobaltData.status}`, cobaltData.text || '');
-        continue;
-      }
-      const downloadUrl = cobaltData.url;
-      if (!downloadUrl) { console.log(`YT proxy Cobalt v7 ${cobaltBase}: no URL`); continue; }
-      console.log(`YT proxy Cobalt v7: downloading from ${cobaltBase}`);
-      const audioRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(60000) });
-      if (!audioRes.ok) { console.log(`YT proxy Cobalt v7: download failed HTTP ${audioRes.status}`); continue; }
-      const buf = Buffer.from(await audioRes.arrayBuffer());
-      if (buf.length < 1000) { console.log(`YT proxy Cobalt v7: too small`); continue; }
-      const mime = audioRes.headers.get('content-type')?.split(';')[0] || 'audio/mpeg';
-      console.log(`YT proxy Cobalt v7 (${cobaltBase}): success! ${buf.length} bytes (${mime})`);
-      pool.query("UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL", [buf, mime, `%${videoId}%`]).catch(() => {});
-      res.set({ 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400' });
-      return res.send(buf);
-    } catch (e) { console.error(`YT proxy Cobalt v7 ${cobaltBase} error:`, e.message); }
+  // Try Cobalt API instances in parallel as fallback
+  async function tryCobaltV10(cobaltBase) {
+    console.log(`YT proxy Cobalt v10 (${cobaltBase}): trying ${videoId}`);
+    const cobaltRes = await fetch(`${cobaltBase}/`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(10000),
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        downloadMode: 'audio',
+        audioFormat: 'mp3',
+        audioBitrate: '128',
+      }),
+    });
+    if (!cobaltRes.ok) throw new Error(`HTTP ${cobaltRes.status}`);
+    const cobaltData = await cobaltRes.json();
+    const downloadUrl = cobaltData.url || cobaltData.audio;
+    if (!downloadUrl) throw new Error('no URL');
+    const audioRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(30000) });
+    if (!audioRes.ok) throw new Error(`download HTTP ${audioRes.status}`);
+    const buf = Buffer.from(await audioRes.arrayBuffer());
+    if (buf.length < 1000) throw new Error('too small');
+    const mime = audioRes.headers.get('content-type')?.split(';')[0] || 'audio/mpeg';
+    return { buf, mime, source: `Cobalt v10 ${cobaltBase}` };
+  }
+
+  async function tryCobaltV7(cobaltBase) {
+    console.log(`YT proxy Cobalt v7 (${cobaltBase}): trying ${videoId}`);
+    const cobaltRes = await fetch(`${cobaltBase}/api/json`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(10000),
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        isAudioOnly: true,
+        aFormat: 'mp3',
+      }),
+    });
+    if (!cobaltRes.ok) throw new Error(`HTTP ${cobaltRes.status}`);
+    const cobaltData = await cobaltRes.json();
+    if (cobaltData.status !== 'stream' && cobaltData.status !== 'redirect') throw new Error(`status=${cobaltData.status}`);
+    const downloadUrl = cobaltData.url;
+    if (!downloadUrl) throw new Error('no URL');
+    const audioRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(30000) });
+    if (!audioRes.ok) throw new Error(`download HTTP ${audioRes.status}`);
+    const buf = Buffer.from(await audioRes.arrayBuffer());
+    if (buf.length < 1000) throw new Error('too small');
+    const mime = audioRes.headers.get('content-type')?.split(';')[0] || 'audio/mpeg';
+    return { buf, mime, source: `Cobalt v7 ${cobaltBase}` };
+  }
+
+  const cobaltProviders = [
+    tryCobaltV10('https://api.cobalt.tools'),
+    tryCobaltV10('https://cobalt-api.ayo.tf'),
+    tryCobaltV7('https://cobaltapi.clebootin.com'),
+    tryCobaltV7('https://ca.haloz.at'),
+    tryCobaltV7('https://nyc1.coapi.ggtyler.dev'),
+  ];
+
+  try {
+    const result = await Promise.any(cobaltProviders);
+    console.log(`YT proxy: success via ${result.source}! ${result.buf.length} bytes (${result.mime})`);
+    pool.query("UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL", [result.buf, result.mime, `%${videoId}%`]).catch(() => {});
+    res.set({ 'Content-Type': result.mime, 'Content-Length': result.buf.length, 'Cache-Control': 'public, max-age=86400' });
+    return res.send(result.buf);
+  } catch (e) {
+    console.log('YT proxy: all Cobalt instances failed too');
   }
 
   res.status(502).json({ error: 'Audio YouTube indisponible' });

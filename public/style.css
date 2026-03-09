@@ -744,7 +744,7 @@ body {
 
 /* ===== MEILLEUR SON ===== */
 .legend-card {
-  position: absolute; bottom: -120px; right: 20px; z-index: 30;
+  position: absolute; bottom: -200px; right: 20px; z-index: 30;
   width: 200px;
   aspect-ratio: 830 / 900;
   box-sizing: border-box;
