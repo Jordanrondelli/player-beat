@@ -70,6 +70,24 @@ async function initDB() {
     );
   `);
 
+  // Skins system
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS skins (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      is_active BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS skin_images (
+      id SERIAL PRIMARY KEY,
+      skin_id INTEGER REFERENCES skins(id) ON DELETE CASCADE,
+      image_key TEXT NOT NULL,
+      file_data BYTEA NOT NULL,
+      file_mimetype TEXT DEFAULT 'image/png',
+      UNIQUE(skin_id, image_key)
+    );
+  `);
+
   // Seed default admin if none exists
   const { rows } = await pool.query('SELECT id FROM admin_users LIMIT 1');
   if (rows.length === 0) {
@@ -860,6 +878,143 @@ app.get('/api/twitch-votes', async (req, res) => {
   if (!queueId) return res.json({ fire: 0, up: 0, down: 0 });
   const { rows } = await pool.query('SELECT * FROM votes WHERE queue_id = $1', [queueId]);
   res.json(rows[0] || { fire: 0, up: 0, down: 0 });
+});
+
+// ===== SKINS API =====
+
+const SKIN_IMAGE_KEYS = ['bg', 'marteau', 'play', 'pause', 'fire', 'pouce_rouge', 'pouce_vert', 'bloc_titre', 'bloc_chat', 'murlegende'];
+
+const skinUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Seuls les fichiers image sont acceptés'));
+  },
+});
+
+// List all skins
+app.get('/api/skins', requireAdmin, async (req, res) => {
+  try {
+    const { rows: skins } = await pool.query('SELECT * FROM skins ORDER BY created_at ASC');
+    // Get image keys for each skin
+    for (const skin of skins) {
+      const { rows: imgs } = await pool.query('SELECT image_key FROM skin_images WHERE skin_id = $1', [skin.id]);
+      skin.images = imgs.map(i => i.image_key);
+    }
+    res.json(skins);
+  } catch (err) {
+    console.error('List skins error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Create new skin
+app.post('/api/skins', requireAdmin, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || name.length > 50) return res.status(400).json({ error: 'Nom requis (max 50 caractères)' });
+    const { rows } = await pool.query('INSERT INTO skins (name) VALUES ($1) RETURNING *', [name]);
+    rows[0].images = [];
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Create skin error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Delete skin
+app.delete('/api/skins/:id', requireAdmin, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM skins WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete skin error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Upload image for a skin slot
+app.post('/api/skins/:id/images/:key', requireAdmin, skinUpload.single('image'), async (req, res) => {
+  try {
+    const { id, key } = req.params;
+    if (!SKIN_IMAGE_KEYS.includes(key)) return res.status(400).json({ error: 'Clé image invalide' });
+    if (!req.file) return res.status(400).json({ error: 'Fichier image requis' });
+    await pool.query(
+      'INSERT INTO skin_images (skin_id, image_key, file_data, file_mimetype) VALUES ($1, $2, $3, $4) ON CONFLICT (skin_id, image_key) DO UPDATE SET file_data = $3, file_mimetype = $4',
+      [id, key, req.file.buffer, req.file.mimetype]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Upload skin image error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Remove image from skin slot
+app.delete('/api/skins/:id/images/:key', requireAdmin, async (req, res) => {
+  try {
+    const { id, key } = req.params;
+    await pool.query('DELETE FROM skin_images WHERE skin_id = $1 AND image_key = $2', [id, key]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete skin image error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Activate a skin
+app.post('/api/skins/:id/activate', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('UPDATE skins SET is_active = FALSE');
+    if (id !== '0') {
+      await pool.query('UPDATE skins SET is_active = TRUE WHERE id = $1', [id]);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Activate skin error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Serve skin image (public — needed by the player)
+app.get('/api/skins/:id/images/:key', async (req, res) => {
+  try {
+    const { id, key } = req.params;
+    const { rows } = await pool.query(
+      'SELECT file_data, file_mimetype FROM skin_images WHERE skin_id = $1 AND image_key = $2',
+      [id, key]
+    );
+    if (!rows.length || !rows[0].file_data) return res.status(404).json({ error: 'Image non trouvée' });
+    res.set({
+      'Content-Type': rows[0].file_mimetype || 'image/png',
+      'Content-Length': rows[0].file_data.length,
+      'Cache-Control': 'public, max-age=3600',
+    });
+    res.send(rows[0].file_data);
+  } catch (err) {
+    console.error('Serve skin image error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Get active skin info (public — player uses this to load skin)
+app.get('/api/active-skin', async (req, res) => {
+  try {
+    const { rows: skins } = await pool.query('SELECT id, name FROM skins WHERE is_active = TRUE LIMIT 1');
+    if (!skins.length) return res.json({ id: null, name: 'Défaut', images: {} });
+    const skin = skins[0];
+    const { rows: imgs } = await pool.query('SELECT image_key FROM skin_images WHERE skin_id = $1', [skin.id]);
+    const images = {};
+    for (const img of imgs) {
+      images[img.image_key] = `/api/skins/${skin.id}/images/${img.image_key}`;
+    }
+    res.json({ id: skin.id, name: skin.name, images });
+  } catch (err) {
+    console.error('Active skin error:', err);
+    res.json({ id: null, name: 'Défaut', images: {} });
+  }
 });
 
 // ===== START =====

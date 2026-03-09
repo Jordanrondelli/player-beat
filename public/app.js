@@ -2225,6 +2225,39 @@ document.getElementById('wipeBtn').addEventListener('click', async () => {
   }
 });
 
+// ===== ACTIVE SKIN =====
+async function loadActiveSkin() {
+  try {
+    const res = await fetch('/api/active-skin');
+    const skin = await res.json();
+    if (!skin || !skin.id) return; // default skin
+    const imgs = skin.images || {};
+
+    // HTML images
+    if (imgs.marteau) { const el = document.getElementById('hammerIcon'); if (el) el.src = imgs.marteau; }
+    if (imgs.play) { const el = document.getElementById('playImg'); if (el) el.src = imgs.play; }
+    if (imgs.pause) { const el = document.getElementById('pauseImg'); if (el) el.src = imgs.pause; }
+    if (imgs.fire) { const el = document.querySelector('.fire-img'); if (el) el.src = imgs.fire; }
+    if (imgs.pouce_rouge) { const el = document.querySelector('.vote-btn-red .vote-icon'); if (el) el.src = imgs.pouce_rouge; }
+    if (imgs.pouce_vert) { const el = document.querySelector('.vote-btn-green .vote-icon'); if (el) el.src = imgs.pouce_vert; }
+
+    // CSS background images
+    const style = document.createElement('style');
+    let css = '';
+    if (imgs.bg) css += `.bg { background-image: url('${imgs.bg}') !important; }\n`;
+    if (imgs.bloc_titre) css += `.user-card { background: url('${imgs.bloc_titre}') center / 100% 100% no-repeat !important; }\n`;
+    if (imgs.bloc_chat) css += `.chat-card { background: url('${imgs.bloc_chat}') center / 100% 100% no-repeat !important; }\n`;
+    if (imgs.murlegende) css += `.legend-card { background: url('${imgs.murlegende}') center / contain no-repeat !important; }\n`;
+    if (css) {
+      style.textContent = css;
+      document.head.appendChild(style);
+    }
+  } catch (e) {
+    // Silently use default skin
+  }
+}
+loadActiveSkin();
+
 // ===== INIT =====
 resizeCanvases();
 generateDemoData();
