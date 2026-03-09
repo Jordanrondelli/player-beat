@@ -611,9 +611,9 @@ function drawWaveform(currentTime) {
     criteriaSmooth.lowHighRatio = smooth(criteriaSmooth.lowHighRatio, lowHighN, 0.20, 0.06);
 
     const s = criteriaSmooth;
-    // Weighted sum — low/high ratio penalizes buildups, rewards drops
-    const base = s.sub * 0.18 + s.bass * 0.18 + s.kick * 0.14 +
-                 s.fullness * 0.15 + s.loudness * 0.20 + s.lowHighRatio * 0.15;
+    // Weighted sum — sub/kick dominant, low/high ratio separates drops from buildups
+    const base = s.sub * 0.22 + s.bass * 0.18 + s.kick * 0.20 +
+                 s.fullness * 0.10 + s.loudness * 0.15 + s.lowHighRatio * 0.15;
 
     // Convergence bonus reduced to 25% — prevents artificial inflation
     const minCore = Math.min(s.sub, s.bass, s.fullness, s.loudness);
