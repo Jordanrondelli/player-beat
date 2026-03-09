@@ -8,6 +8,8 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { parseBuffer } = require('music-metadata');
 const ytdl = require('@distube/ytdl-core');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -71,9 +73,14 @@ async function initDB() {
   // Seed default admin if none exists
   const { rows } = await pool.query('SELECT id FROM admin_users LIMIT 1');
   if (rows.length === 0) {
-    const hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'admin123', 10);
-    await pool.query('INSERT INTO admin_users (username, password_hash) VALUES ($1, $2)', ['admin', hash]);
-    console.log('Default admin created (user: admin)');
+    if (!process.env.ADMIN_PASSWORD) {
+      console.error('WARNING: ADMIN_PASSWORD env variable is not set! Default admin will NOT be created.');
+      console.error('Set ADMIN_PASSWORD in your environment to create the admin user.');
+    } else {
+      const hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10);
+      await pool.query('INSERT INTO admin_users (username, password_hash) VALUES ($1, $2)', ['admin', hash]);
+      console.log('Default admin created (user: admin)');
+    }
   }
 
   // Seed default settings
@@ -98,6 +105,15 @@ async function initDB() {
 }
 
 // ===== MIDDLEWARE =====
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Let the app manage CSP
+}));
+
+// Trust proxy (for rate limiting behind Render/reverse proxy)
+app.set('trust proxy', 1);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -108,7 +124,12 @@ app.use(session({
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, secure: false },
+  cookie: {
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'strict',
+  },
 }));
 
 // Upload config
@@ -147,8 +168,8 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'login.html'));
 });
 
-// Player page (public)
-app.get('/player', (req, res) => {
+// Player page (admin only)
+app.get('/player', requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
@@ -162,7 +183,14 @@ app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // ===== AUTH API =====
 
-app.post('/api/login', async (req, res) => {
+// Rate limit login: 5 attempts per 15 min per IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Trop de tentatives, réessaie dans 15 minutes' },
+});
+
+app.post('/api/login', loginLimiter, async (req, res) => {
   const { password } = req.body;
   if (!password) return res.status(400).json({ error: 'Mot de passe requis' });
 
@@ -187,10 +215,28 @@ app.get('/api/me', (req, res) => {
 
 // ===== QUEUE API =====
 
+// Rate limit queue submissions: 10 per hour per IP
+const queueLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { error: 'Trop de soumissions, réessaie plus tard' },
+});
+
 // Submit a track (public)
-app.post('/api/queue', upload.single('audio'), async (req, res) => {
+app.post('/api/queue', queueLimiter, upload.single('audio'), async (req, res) => {
   try {
     const { type, title, artist, source_url, submitted_by } = req.body;
+
+    // Input length validation
+    if (submitted_by && submitted_by.length > 50) {
+      return res.status(400).json({ error: 'Pseudo trop long (max 50 caractères)' });
+    }
+    if (title && title.length > 200) {
+      return res.status(400).json({ error: 'Titre trop long (max 200 caractères)' });
+    }
+    if (artist && artist.length > 200) {
+      return res.status(400).json({ error: 'Artiste trop long (max 200 caractères)' });
+    }
 
     if (type === 'upload') {
       if (!req.file) return res.status(400).json({ error: 'Fichier audio requis' });
@@ -322,14 +368,28 @@ app.get('/api/votes', async (req, res) => {
   res.json(rows[0]);
 });
 
-app.post('/api/votes', async (req, res) => {
+// Rate limit votes: 30 per minute per IP
+const voteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: 'Trop de votes, réessaie dans une minute' },
+});
+
+app.post('/api/votes', voteLimiter, async (req, res) => {
   const { type, queue_id } = req.body;
   if (!type || !['fire', 'up', 'down'].includes(type)) {
     return res.status(400).json({ error: 'Type must be fire, up, or down' });
   }
   const amount = type === 'fire' ? 5 : 1;
   if (queue_id) {
-    await pool.query(`UPDATE votes SET ${type} = ${type} + $1 WHERE queue_id = $2`, [amount, queue_id]);
+    await pool.query(
+      `UPDATE votes SET
+        fire = fire + CASE WHEN $1 = 'fire' THEN $2 ELSE 0 END,
+        up = up + CASE WHEN $1 = 'up' THEN $2 ELSE 0 END,
+        down = down + CASE WHEN $1 = 'down' THEN $2 ELSE 0 END
+      WHERE queue_id = $3`,
+      [type, amount, queue_id]
+    );
     const { rows } = await pool.query('SELECT * FROM votes WHERE queue_id = $1', [queue_id]);
     return res.json(rows[0]);
   }
@@ -337,7 +397,7 @@ app.post('/api/votes', async (req, res) => {
 });
 
 // Player marks a track as now playing (resets votes + enables Twitch voting)
-app.post('/api/player/now-playing/:id', async (req, res) => {
+app.post('/api/player/now-playing/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   // Set all other tracks to non-playing, then set this one to playing
   await pool.query("UPDATE queue SET status = 'pending' WHERE status = 'playing'");
@@ -408,8 +468,15 @@ app.get('/api/audio/:id', async (req, res) => {
 });
 
 // ===== YOUTUBE AUDIO PROXY (via Piped/Invidious) =====
+// Rate limit YT proxy: 30 per hour per IP
+const ytProxyLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  message: { error: 'Trop de requêtes YouTube, réessaie plus tard' },
+});
+
 // Server fetches from Piped (no CORS issues), Piped fetches from YouTube (different IP than Render)
-app.get('/api/yt-audio/:videoId', async (req, res) => {
+app.get('/api/yt-audio/:videoId', ytProxyLimiter, async (req, res) => {
   const videoId = req.params.videoId;
   if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
     return res.status(400).json({ error: 'Invalid video ID' });
@@ -748,8 +815,12 @@ async function startTwitchBot() {
       // Only update votes table if the insert actually happened (not a duplicate)
       if (rowCount > 0) {
         await pool.query(
-          `UPDATE votes SET ${voteType} = ${voteType} + 1 WHERE queue_id = $1`,
-          [queueId]
+          `UPDATE votes SET
+            fire = fire + CASE WHEN $1 = 'fire' THEN 1 ELSE 0 END,
+            up = up + CASE WHEN $1 = 'up' THEN 1 ELSE 0 END,
+            down = down + CASE WHEN $1 = 'down' THEN 1 ELSE 0 END
+          WHERE queue_id = $2`,
+          [voteType, queueId]
         );
       }
     } catch (e) {
