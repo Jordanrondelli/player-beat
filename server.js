@@ -7,6 +7,7 @@ const multer = require('multer');
 const fs = require('fs');
 const crypto = require('crypto');
 const { parseBuffer } = require('music-metadata');
+const ytdl = require('@distube/ytdl-core');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -508,6 +509,44 @@ app.get('/api/yt-audio/:videoId', async (req, res) => {
     } catch (e) {
       console.error(`YT proxy Invidious ${instance} error:`, e.message);
     }
+  }
+
+  // Try ytdl-core as last resort (direct extraction)
+  try {
+    console.log(`YT proxy ytdl-core: trying ${videoId}`);
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    const info = await ytdl.getInfo(url);
+    const format = ytdl.chooseFormat(info.formats, {
+      quality: 'highestaudio',
+      filter: 'audioonly',
+    });
+    if (format && format.url) {
+      console.log(`YT proxy ytdl-core: found format ${format.mimeType} ${format.bitrate}bps`);
+      const audioRes = await fetch(format.url, {
+        signal: AbortSignal.timeout(60000),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      });
+      if (audioRes.ok) {
+        const buf = Buffer.from(await audioRes.arrayBuffer());
+        if (buf.length > 1000) {
+          const mime = (format.mimeType || 'audio/mp4').split(';')[0];
+          console.log(`YT proxy ytdl-core: success! ${buf.length} bytes (${mime})`);
+
+          pool.query(
+            "UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL",
+            [buf, mime, `%${videoId}%`]
+          ).catch(() => {});
+
+          res.set({ 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400' });
+          return res.send(buf);
+        }
+      }
+    }
+    console.log('YT proxy ytdl-core: no suitable format found');
+  } catch (e) {
+    console.error(`YT proxy ytdl-core error:`, e.message);
   }
 
   res.status(502).json({ error: 'Audio YouTube indisponible' });
