@@ -1357,43 +1357,24 @@ async function loadTrack(index, autoPlay) {
     updateTrackInfo(track.queueItem);
     updateQueueCounter();
 
-    // Try fetching real audio from Piped instances (browser IP is not blocked)
+    // Fetch real audio via our server proxy (server fetches from Piped/Invidious, no CORS)
     let realAudioBuffer = null;
-    const pipedInstances = [
-      'https://pipedapi.kavin.rocks',
-      'https://pipedapi.adminforge.de',
-      'https://pipedapi.r4fo.com',
-      'https://piped-api.privacy.com.de',
-      'https://pipedapi.darkness.services',
-    ];
-
-    for (const instance of pipedInstances) {
-      try {
-        console.log(`Piped client (${instance}): fetching streams for ${track.youtubeId}`);
-        const infoRes = await fetch(`${instance}/streams/${track.youtubeId}`, {
-          signal: AbortSignal.timeout(8000),
-        });
-        if (!infoRes.ok) continue;
-        const info = await infoRes.json();
-        const audioStreams = (info.audioStreams || [])
-          .filter(s => s.url && s.mimeType && s.mimeType.startsWith('audio/'))
-          .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-        if (audioStreams.length === 0) continue;
-
-        // Fetch the actual audio data
-        console.log(`Piped client: downloading audio (${audioStreams[0].mimeType}, ${audioStreams[0].bitrate}bps)`);
-        const audioRes = await fetch(audioStreams[0].url, { signal: AbortSignal.timeout(30000) });
-        if (!audioRes.ok) continue;
+    try {
+      console.log(`Fetching YouTube audio via server proxy for ${track.youtubeId}`);
+      const audioRes = await fetch(`/api/yt-audio/${track.youtubeId}`, {
+        signal: AbortSignal.timeout(45000),
+      });
+      if (audioRes.ok) {
         const arrayBuffer = await audioRes.arrayBuffer();
-        if (arrayBuffer.byteLength < 1000) continue;
-
-        // Decode audio — full real analysis!
-        realAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        console.log(`Piped client: decoded ${realAudioBuffer.duration.toFixed(1)}s audio`);
-        break;
-      } catch (e) {
-        console.warn(`Piped client ${instance} error:`, e.message);
+        if (arrayBuffer.byteLength > 1000) {
+          realAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+          console.log(`YouTube audio decoded: ${realAudioBuffer.duration.toFixed(1)}s`);
+        }
+      } else {
+        console.warn(`Server proxy returned ${audioRes.status}`);
       }
+    } catch (e) {
+      console.warn('YouTube audio proxy error:', e.message);
     }
 
     if (realAudioBuffer) {

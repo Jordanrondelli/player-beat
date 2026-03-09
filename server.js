@@ -366,6 +366,142 @@ app.get('/api/audio/:id', async (req, res) => {
   }
 });
 
+// ===== YOUTUBE AUDIO PROXY (via Piped/Invidious) =====
+// Server fetches from Piped (no CORS issues), Piped fetches from YouTube (different IP than Render)
+app.get('/api/yt-audio/:videoId', async (req, res) => {
+  const videoId = req.params.videoId;
+  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+    return res.status(400).json({ error: 'Invalid video ID' });
+  }
+
+  // Check DB cache first
+  try {
+    const { rows } = await pool.query(
+      "SELECT file_data, file_mimetype FROM queue WHERE source_url LIKE $1 AND file_data IS NOT NULL LIMIT 1",
+      [`%${videoId}%`]
+    );
+    if (rows.length && rows[0].file_data && rows[0].file_data.length > 1000) {
+      console.log(`YT proxy: serving cached audio for ${videoId}`);
+      res.set({
+        'Content-Type': rows[0].file_mimetype || 'audio/mp4',
+        'Content-Length': rows[0].file_data.length,
+        'Cache-Control': 'public, max-age=86400',
+      });
+      return res.send(rows[0].file_data);
+    }
+  } catch (e) { /* ignore cache errors */ }
+
+  // Try Piped instances
+  const pipedInstances = [
+    'https://pipedapi.kavin.rocks',
+    'https://pipedapi.adminforge.de',
+    'https://pipedapi.r4fo.com',
+    'https://pipedapi.darkness.services',
+    'https://api.piped.yt',
+  ];
+
+  for (const instance of pipedInstances) {
+    try {
+      console.log(`YT proxy (${instance}): fetching streams for ${videoId}`);
+      const infoRes = await fetch(`${instance}/streams/${videoId}`, {
+        signal: AbortSignal.timeout(10000),
+        headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (!infoRes.ok) {
+        console.log(`YT proxy ${instance}: HTTP ${infoRes.status}`);
+        continue;
+      }
+      const info = await infoRes.json();
+      const audioStreams = (info.audioStreams || [])
+        .filter(s => s.url && s.mimeType && s.mimeType.startsWith('audio/'))
+        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+      if (audioStreams.length === 0) {
+        console.log(`YT proxy ${instance}: no audio streams found`);
+        continue;
+      }
+
+      // Fetch actual audio from Piped proxy (NOT from YouTube directly)
+      const stream = audioStreams[0];
+      console.log(`YT proxy: downloading from ${instance} (${stream.mimeType}, ${stream.bitrate}bps)`);
+      const audioRes = await fetch(stream.url, {
+        signal: AbortSignal.timeout(60000),
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (!audioRes.ok) {
+        console.log(`YT proxy: audio download failed HTTP ${audioRes.status}`);
+        continue;
+      }
+      const buf = Buffer.from(await audioRes.arrayBuffer());
+      if (buf.length < 1000) {
+        console.log(`YT proxy: audio too small (${buf.length} bytes)`);
+        continue;
+      }
+
+      const mime = stream.mimeType.split(';')[0];
+      console.log(`YT proxy: success! ${buf.length} bytes (${mime})`);
+
+      // Cache in DB for next time
+      pool.query(
+        "UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL",
+        [buf, mime, `%${videoId}%`]
+      ).catch(() => {});
+
+      res.set({
+        'Content-Type': mime,
+        'Content-Length': buf.length,
+        'Cache-Control': 'public, max-age=86400',
+      });
+      return res.send(buf);
+    } catch (e) {
+      console.error(`YT proxy ${instance} error:`, e.message);
+    }
+  }
+
+  // Try Invidious instances as fallback
+  const invidiousInstances = [
+    'https://inv.nadeko.net',
+    'https://invidious.nerdvpn.de',
+    'https://iv.datura.network',
+    'https://invidious.private.coffee',
+  ];
+
+  for (const instance of invidiousInstances) {
+    try {
+      console.log(`YT proxy Invidious (${instance}): trying ${videoId}`);
+      const infoRes = await fetch(`${instance}/api/v1/videos/${videoId}`, {
+        signal: AbortSignal.timeout(10000),
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!infoRes.ok) continue;
+      const info = await infoRes.json();
+      const audioFormats = (info.adaptiveFormats || [])
+        .filter(f => f.type && f.type.startsWith('audio/'))
+        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+      if (audioFormats.length === 0 || !audioFormats[0].url) continue;
+
+      const audioRes = await fetch(audioFormats[0].url, { signal: AbortSignal.timeout(60000) });
+      if (!audioRes.ok) continue;
+      const buf = Buffer.from(await audioRes.arrayBuffer());
+      if (buf.length < 1000) continue;
+
+      const mime = audioFormats[0].type.split(';')[0];
+      console.log(`YT proxy Invidious (${instance}): success! ${buf.length} bytes`);
+
+      pool.query(
+        "UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL",
+        [buf, mime, `%${videoId}%`]
+      ).catch(() => {});
+
+      res.set({ 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400' });
+      return res.send(buf);
+    } catch (e) {
+      console.error(`YT proxy Invidious ${instance} error:`, e.message);
+    }
+  }
+
+  res.status(502).json({ error: 'Audio YouTube indisponible' });
+});
+
 // ===== PLAYER PLAYLIST (public) =====
 
 // Returns shuffled tracks for the player, filtered by type
