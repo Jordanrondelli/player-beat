@@ -1763,6 +1763,10 @@ resizeFireCanvas();
 window.addEventListener('resize', resizeFireCanvas);
 
 function spawnFireParticles(cx, cy, count, intensity) {
+  // Hard cap: never exceed 80 total particles alive
+  const maxAlive = 80;
+  if (fireParticles.length >= maxAlive) return;
+  count = Math.min(count, maxAlive - fireParticles.length);
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
     const speed = (3 + Math.random() * 8) * intensity;
@@ -1786,28 +1790,6 @@ function spawnFireParticles(cx, cy, count, intensity) {
   if (!fireParticleRAF) tickFireParticles();
 }
 
-function spawnTrailParticles(cx, cy, count) {
-  // Upward trail particles (like embers rising)
-  for (let i = 0; i < count; i++) {
-    const delay = Math.random() * 500;
-    setTimeout(() => {
-      fireParticles.push({
-        x: cx + (Math.random() - .5) * 200,
-        y: cy + Math.random() * 50,
-        vx: (Math.random() - .5) * 1.5,
-        vy: -(2 + Math.random() * 4),
-        size: 1.5 + Math.random() * 3,
-        life: 1.5 + Math.random() * 2,
-        maxLife: 2.5,
-        hue: 20 + Math.random() * 25,
-        sat: 90, lum: 55 + Math.random() * 20,
-        gravity: -0.02, // float up
-        friction: 0.995,
-        type: 'trail',
-      });
-    }, delay);
-  }
-}
 
 function tickFireParticles() {
   fpCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
@@ -1826,27 +1808,11 @@ function tickFireParticles() {
     const alpha = Math.min(1, p.life / (p.maxLife * 0.3)); // fade in last 30%
     const sizeNow = p.size * (0.3 + 0.7 * (p.life / p.maxLife));
 
-    if (p.type === 'spark') {
-      // Bright spark with motion trail
-      fpCtx.beginPath();
-      fpCtx.moveTo(p.x, p.y);
-      fpCtx.lineTo(p.x - p.vx * 2, p.y - p.vy * 2);
-      fpCtx.strokeStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha})`;
-      fpCtx.lineWidth = sizeNow * 0.7;
-      fpCtx.lineCap = 'round';
-      fpCtx.stroke();
-    } else {
-      // Glowing ember
-      fpCtx.beginPath();
-      fpCtx.arc(p.x, p.y, sizeNow, 0, Math.PI * 2);
-      fpCtx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha})`;
-      fpCtx.fill();
-      // Glow
-      fpCtx.beginPath();
-      fpCtx.arc(p.x, p.y, sizeNow * 2.5, 0, Math.PI * 2);
-      fpCtx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha * 0.15})`;
-      fpCtx.fill();
-    }
+    // Simple circle — no glow pass (halves draw calls)
+    fpCtx.beginPath();
+    fpCtx.arc(p.x, p.y, sizeNow, 0, Math.PI * 2);
+    fpCtx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha})`;
+    fpCtx.fill();
   }
 
   if (fireParticles.length > 0) {
@@ -1979,43 +1945,7 @@ function triggerFlash(combo) {
   inner.addEventListener('animationend', () => flash.remove());
 }
 
-// --- Fire overlay (lightweight glow only, no DOM flames) ---
-function triggerFire() {
-  const overlay = document.getElementById('fireOverlay');
-  const wrapper = document.getElementById('wrapper');
-
-  if (fireTimeout) clearTimeout(fireTimeout);
-  if (fireFadeTimeout) clearTimeout(fireFadeTimeout);
-
-  // Clear old DOM flame elements
-  document.getElementById('flameBottom').innerHTML = '';
-  document.getElementById('flameTop').innerHTML = '';
-  document.getElementById('emberContainer').innerHTML = '';
-
-  // Only show the glow overlay (lightweight, no DOM spam)
-  overlay.style.transition = 'opacity .2s';
-  overlay.style.opacity = '';
-  overlay.classList.remove('on');
-  void overlay.offsetWidth;
-  overlay.classList.add('on');
-
-  // Screen shake
-  wrapper.classList.add('shaking');
-  setTimeout(() => wrapper.classList.remove('shaking'), 500);
-
-  // Quick fade-out
-  const fireDuration = 2000 + Math.min(fireCombo * 300, 3000);
-  fireFadeTimeout = setTimeout(() => {
-    overlay.style.transition = 'opacity 1.5s ease-out';
-    overlay.style.opacity = '0';
-  }, fireDuration);
-
-  fireTimeout = setTimeout(() => {
-    overlay.classList.remove('on');
-    overlay.style.opacity = '';
-    overlay.style.transition = '';
-  }, fireDuration + 1500);
-}
+// --- Fire overlay disabled (removed for performance) ---
 
 // --- Main fire click handler ---
 document.getElementById('btnFire').addEventListener('click', function () {
@@ -2026,62 +1956,40 @@ document.getElementById('btnFire').addEventListener('click', function () {
   clearTimeout(fireComboTimer);
   clearTimeout(fireComboDecayTimer);
   fireComboTimer = setTimeout(() => {
-    // Combo decay: fade out after inactivity
-    fireComboDecayTimer = setTimeout(hideCombo, 300);
+    fireComboDecayTimer = setTimeout(hideCombo, 400);
   }, COMBO_WINDOW);
 
   const r = this.getBoundingClientRect();
   const cx = r.left + r.width / 2;
   const cy = r.top + r.height / 2;
 
-  // 1. Instant button squish
+  // 1. Button squish (satisfying tactile feel)
   squishButton(this);
 
   // 2. Procedural sound
   playFireSound(fireCombo);
 
-  // 3. Canvas particle explosion (scales with combo)
-  const particleCount = Math.min(300, 30 + fireCombo * 25);
-  const intensity = Math.min(2, 0.8 + fireCombo * 0.12);
-  spawnFireParticles(cx, cy, particleCount, intensity);
-
-  // 4. Trailing embers (high combo)
-  if (fireCombo >= 3) {
-    spawnTrailParticles(cx, cy - 50, Math.min(50, fireCombo * 8));
-  }
-
-  // 5. Shockwave
+  // 3. Shockwave (single reused DOM element — zero cost)
   triggerShockwave(cx, cy, fireCombo);
 
-  // 6. Flash
+  // 4. Small flash (single DOM element, removed on animationend)
   triggerFlash(fireCombo);
 
-  // 7. Fire overlay
-  triggerFire();
+  // 5. Light particle burst (capped, no trails)
+  const particleCount = Math.min(40, 12 + fireCombo * 4);
+  const intensity = Math.min(1.3, 0.7 + fireCombo * 0.06);
+  spawnFireParticles(cx, cy, particleCount, intensity);
 
-  // 8. Combo display
+  // 6. Combo number — THE star of the show
   if (fireCombo >= 2) {
     updateComboDisplay();
   }
 
-  // 9. Chromatic aberration on high combo
-  if (fireCombo >= 5) {
+  // 7. Screen shake only on 3+ combo (lightweight)
+  if (fireCombo >= 3) {
     const wrapper = document.getElementById('wrapper');
-    wrapper.classList.remove('chromatic-active');
-    void wrapper.offsetWidth;
-    wrapper.classList.add('chromatic-active');
-    setTimeout(() => wrapper.classList.remove('chromatic-active'), 300);
-  }
-
-  // 10. Emoji explosion (scales with combo)
-  const emojiCount = Math.min(40, 10 + fireCombo * 3);
-  for (let i = 0; i < emojiCount; i++) {
-    setTimeout(() => {
-      showEmojiSplash('\uD83D\uDD25',
-        cx - 30 + (Math.random() - .5) * (200 + fireCombo * 20),
-        cy - 20 + (Math.random() - .5) * (150 + fireCombo * 15)
-      );
-    }, i * Math.max(20, 60 - fireCombo * 4));
+    wrapper.classList.add('shaking');
+    setTimeout(() => wrapper.classList.remove('shaking'), 300);
   }
 });
 
