@@ -727,19 +727,41 @@ body {
 
 /* ===== MEILLEUR SON ===== */
 .legend-card {
-  position: absolute; bottom: -20px; right: 20px; z-index: 30;
-  width: 220px; padding: 14px 18px; border-radius: 16px;
-  background: linear-gradient(135deg, rgba(30, 10, 0, .85) 0%, rgba(60, 20, 0, .8) 100%);
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-  border: 2px solid rgba(255, 180, 50, .4);
-  box-shadow: 0 0 30px rgba(255, 120, 0, .2), 0 4px 20px rgba(0, 0, 0, .4),
-              inset 0 1px 0 rgba(255, 200, 100, .15);
-  animation: floatLegend 8s ease-in-out infinite;
+  position: absolute; bottom: -90px; right: 20px; z-index: 30;
+  width: 220px; padding: 14px 18px; border-radius: 18px;
+  background: url('Murlegende.png') center / 100% 100% no-repeat !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
+  animation: floatLegend 7s ease-in-out infinite;
   transform-style: preserve-3d;
+  overflow: hidden;
+}
+.legend-card::before {
+  content: '' !important; display: block !important;
+  position: absolute; inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, .06) 45%,
+    rgba(255, 255, 255, .14) 50%,
+    rgba(255, 255, 255, .06) 55%,
+    transparent 70%
+  );
+  animation: shineReflect 5s ease-in-out infinite;
+  animation-delay: 2.5s;
+  pointer-events: none;
+  border-radius: 18px;
+  z-index: 10;
+}
+.legend-card::after {
+  display: none !important;
 }
 @keyframes floatLegend {
-  0%, 100% { transform: translateY(0) translateZ(6px); }
-  50% { transform: translateY(-6px) translateZ(10px); }
+  0%, 100% { transform: rotateX(1deg) rotateY(-2deg) translateY(0) translateZ(8px); }
+  33% { transform: rotateX(-0.5deg) rotateY(1deg) translateY(-6px) translateZ(12px); }
+  66% { transform: rotateX(0.8deg) rotateY(-0.5deg) translateY(-3px) translateZ(9px); }
 }
 .legend-crown {
   font-size: 32px; text-align: center; line-height: 1;
@@ -777,10 +799,10 @@ body {
   animation: legendPop 1.5s ease-out;
 }
 @keyframes legendPop {
-  0%   { transform: translateY(0) scale(1); box-shadow: 0 0 30px rgba(255, 120, 0, .2), 0 4px 20px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 200, 100, .15); }
-  15%  { transform: translateY(-10px) scale(1.08); box-shadow: 0 0 60px rgba(255, 120, 0, .6), 0 0 100px rgba(255, 60, 0, .3), 0 4px 20px rgba(0, 0, 0, .4); border-color: rgba(255, 200, 50, .8); }
+  0%   { transform: translateY(0) scale(1); box-shadow: 0 4px 20px rgba(0, 0, 0, .3); }
+  15%  { transform: translateY(-10px) scale(1.08); box-shadow: 0 0 60px rgba(255, 120, 0, .6), 0 0 100px rgba(255, 60, 0, .3), 0 4px 20px rgba(0, 0, 0, .4); }
   30%  { transform: translateY(-4px) scale(1.02); }
-  100% { transform: translateY(0) scale(1); box-shadow: 0 0 30px rgba(255, 120, 0, .2), 0 4px 20px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 200, 100, .15); }
+  100% { transform: translateY(0) scale(1); box-shadow: 0 4px 20px rgba(0, 0, 0, .3); }
 }
 
 /* ===== VOTE BAR (pouce rouge | FIRE | pouce vert) ===== */
