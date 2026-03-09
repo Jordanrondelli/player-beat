@@ -672,6 +672,24 @@ body {
   100% { border-color: rgba(255, 80, 20, .7); box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 0 40px rgba(255,40,0,.6), 0 0 80px rgba(255,20,0,.35), 0 20px 60px rgba(0,0,0,.4); }
 }
 
+/* Overload micro-shake for panels */
+@keyframes overloadPanelShake {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(-1px, 0.5px); }
+  50%  { transform: translate(1px, -0.5px); }
+  75%  { transform: translate(-0.5px, -0.5px); }
+  100% { transform: translate(0.5px, 0); }
+}
+.waveform-panel.overload-shake {
+  animation: overloadPanelShake .08s linear infinite;
+}
+.chat-card.overload-shake {
+  animation: overloadPanelShake .1s linear infinite;
+}
+.user-card.overload-shake {
+  animation: overloadPanelShake .1s linear infinite;
+}
+
 /* Slam impact animation */
 .hammer-icon.slam {
   animation: hammerSlam .15s ease-out forwards;

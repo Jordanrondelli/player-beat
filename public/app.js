@@ -944,10 +944,25 @@ function updateHammerVisuals(pct, kick) {
 
   // Visual stage follows current percentage (not locked)
   if (newStage !== currentHammerStage) {
+    const wasOverload = currentHammerStage === 'overload';
     currentHammerStage = newStage;
     if (hammerCard) hammerCard.setAttribute('data-stage', newStage);
     const labels = { chill: 'CHILL', cool: 'COOL', chaud: 'CHAUD', enfeu: 'EN FEU', lourd: 'TRÈS LOURD', overload: 'OVERLOAD' };
     if (hammerStageEl) hammerStageEl.textContent = labels[newStage];
+
+    // Add/remove overload shake on panels
+    const wp = document.querySelector('.waveform-panel');
+    const cc = document.querySelector('.chat-card');
+    const uc = document.querySelector('.user-card');
+    if (newStage === 'overload') {
+      if (wp) wp.classList.add('overload-shake');
+      if (cc) cc.classList.add('overload-shake');
+      if (uc) uc.classList.add('overload-shake');
+    } else if (wasOverload) {
+      if (wp) { wp.classList.remove('overload-shake'); wp.classList.remove('overload-border'); }
+      if (cc) cc.classList.remove('overload-shake');
+      if (uc) uc.classList.remove('overload-shake');
+    }
   }
 }
 
