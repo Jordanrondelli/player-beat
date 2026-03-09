@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BEAT PLAYER — Admin</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    html, body { overflow: auto; }
+    .admin-page {
+      position: relative; z-index: 10;
+      min-height: 100vh;
+      padding: 30px 20px 60px;
+      max-width: 900px; margin: 0 auto;
+    }
+    .admin-header {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      margin-bottom: 30px;
+    }
+    .admin-title {
+      font-family: 'Bangers', cursive;
+      font-size: 32px; letter-spacing: 3px;
+      background: linear-gradient(135deg, #fff 0%, #a8c0ff 50%, #ff6040 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .admin-nav {
+      display: flex; gap: 10px;
+    }
+    .admin-nav a {
+      padding: 8px 16px; border-radius: 10px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.1);
+      color: rgba(255,255,255,.6); text-decoration: none;
+      font-size: 13px; font-weight: 700;
+      transition: all .2s;
+    }
+    .admin-nav a:hover {
+      background: rgba(255,255,255,.1);
+      color: #fff;
+    }
+    .admin-nav a.danger {
+      border-color: rgba(255,60,40,.2);
+      color: rgba(255,100,80,.7);
+    }
+    .admin-nav a.danger:hover {
+      background: rgba(255,40,20,.15);
+      color: #ff6040;
+    }
+
+    /* Sections */
+    .admin-section {
+      margin-bottom: 28px;
+    }
+    .section-title {
+      font-family: 'Bangers', cursive;
+      font-size: 20px; letter-spacing: 2px;
+      color: rgba(255,255,255,.7);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .section-title .count {
+      font-family: 'Quicksand', sans-serif;
+      font-size: 13px; color: #ff7040;
+      margin-left: 8px;
+    }
+
+    /* Cards */
+    .panel {
+      padding: 24px 28px;
+      border-radius: 20px;
+      background: linear-gradient(165deg, rgba(30,45,90,.4) 0%, rgba(12,20,55,.55) 40%, rgba(8,14,40,.6) 100%);
+      backdrop-filter: blur(30px) saturate(1.3);
+      -webkit-backdrop-filter: blur(30px) saturate(1.3);
+      border: 1px solid rgba(255,255,255,.08);
+      border-top-color: rgba(255,255,255,.15);
+      box-shadow: 0 12px 40px rgba(0,0,0,.3);
+    }
+
+    /* Queue items */
+    .queue-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 18px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.06);
+      margin-bottom: 10px;
+      transition: all .2s;
+    }
+    .queue-item:hover {
+      background: rgba(255,255,255,.07);
+      border-color: rgba(255,255,255,.1);
+    }
+    .queue-icon {
+      font-size: 22px; flex-shrink: 0;
+    }
+    .queue-info { flex: 1; min-width: 0; }
+    .queue-title {
+      font-weight: 700; font-size: 14px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .queue-meta {
+      font-size: 12px; color: rgba(255,255,255,.4);
+      margin-top: 2px;
+    }
+    .queue-meta span { margin-right: 12px; }
+    .queue-actions {
+      display: flex; gap: 6px; flex-shrink: 0;
+    }
+    .q-btn {
+      padding: 6px 12px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.1);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.7);
+      font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: all .2s;
+    }
+    .q-btn:hover { background: rgba(255,255,255,.12); color: #fff; }
+    .q-btn.play {
+      border-color: rgba(80,255,120,.2);
+      color: #6dff80;
+    }
+    .q-btn.play:hover { background: rgba(40,200,80,.15); }
+    .q-btn.reject {
+      border-color: rgba(255,60,40,.2);
+      color: #ff6060;
+    }
+    .q-btn.reject:hover { background: rgba(255,40,20,.15); }
+    .queue-empty {
+      text-align: center; padding: 30px;
+      color: rgba(255,255,255,.3); font-weight: 600;
+    }
+
+    /* Settings grid */
+    .settings-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .setting-item { display: flex; flex-direction: column; gap: 6px; }
+    .setting-label {
+      font-size: 11px; font-weight: 700;
+      color: rgba(255,255,255,.4);
+      text-transform: uppercase; letter-spacing: 1.5px;
+    }
+    .setting-input {
+      padding: 10px 14px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.1);
+      background: rgba(255,255,255,.06);
+      color: #fff; font-family: 'Quicksand', sans-serif;
+      font-size: 14px; font-weight: 600;
+      outline: none; transition: all .25s;
+    }
+    .setting-input:focus {
+      border-color: rgba(255,120,60,.4);
+      background: rgba(255,255,255,.1);
+    }
+    .setting-toggle {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .toggle-switch {
+      width: 44px; height: 24px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.15);
+      cursor: pointer; position: relative;
+      transition: background .25s;
+      border: none;
+    }
+    .toggle-switch::after {
+      content: ''; position: absolute;
+      top: 3px; left: 3px;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform .25s;
+    }
+    .toggle-switch.on {
+      background: linear-gradient(135deg, #ff6030, #ff4010);
+    }
+    .toggle-switch.on::after {
+      transform: translateX(20px);
+    }
+    .save-btn {
+      padding: 12px 28px;
+      border-radius: 12px; border: none;
+      background: linear-gradient(135deg, #ff6030, #ff4010);
+      color: #fff; font-family: 'Bangers', cursive;
+      font-size: 16px; letter-spacing: 2px;
+      cursor: pointer; transition: all .25s;
+      box-shadow: 0 4px 15px rgba(255,60,20,.25);
+      margin-top: 20px;
+    }
+    .save-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(255,60,20,.4);
+    }
+
+    /* Source toggle */
+    .source-toggle {
+      display: flex; gap: 0; border-radius: 12px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,.1);
+      margin-bottom: 18px;
+    }
+    .source-btn {
+      flex: 1; padding: 12px;
+      border: none; background: transparent;
+      color: rgba(255,255,255,.4);
+      font-family: 'Bangers', cursive;
+      font-size: 15px; letter-spacing: 1.5px;
+      cursor: pointer; transition: all .25s;
+    }
+    .source-btn.active {
+      background: linear-gradient(135deg, rgba(255,80,30,.2), rgba(255,40,10,.15));
+      color: #fff;
+    }
+
+    /* Playing now */
+    .now-playing {
+      display: flex; align-items: center; gap: 16px;
+      padding: 18px 22px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(255,80,30,.08), rgba(255,40,10,.05));
+      border: 1px solid rgba(255,80,30,.2);
+      margin-bottom: 18px;
+    }
+    .now-playing .np-icon { font-size: 28px; }
+    .now-playing .np-info { flex: 1; }
+    .now-playing .np-title { font-weight: 700; font-size: 15px; }
+    .now-playing .np-meta { font-size: 12px; color: rgba(255,255,255,.4); margin-top: 2px; }
+    .now-playing .np-label {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 2px;
+      color: #ff7040; margin-bottom: 4px;
+    }
+
+    @media (max-width: 600px) {
+      .settings-grid { grid-template-columns: 1fr; }
+      .admin-header { flex-direction: column; gap: 12px; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="bg-dim"></div>
+  <div class="bg-grain"></div>
+  <div class="vig"></div>
+
+  <div class="admin-page">
+    <div class="admin-header">
+      <div class="admin-title">&#9881; BACK OFFICE</div>
+      <div class="admin-nav">
+        <a href="/player">&#127925; Player</a>
+        <a href="/">&#128196; Page publique</a>
+        <a href="#" id="logoutBtn" class="danger">D&eacute;connexion</a>
+      </div>
+    </div>
+
+    <!-- Now Playing -->
+    <div class="admin-section">
+      <div class="section-title">&#127926; EN COURS DE LECTURE</div>
+      <div class="panel">
+        <div id="nowPlaying">
+          <div class="queue-empty">Aucun son en lecture</div>
+        </div>
+        <button class="save-btn" id="playNextBtn" style="width:100%">&#9654; JOUER LE SUIVANT</button>
+      </div>
+    </div>
+
+    <!-- Queue -->
+    <div class="admin-section">
+      <div class="section-title">&#128203; FILE D'ATTENTE <span class="count" id="pendingCount"></span></div>
+      <div class="panel">
+        <div id="queueList">
+          <div class="queue-empty">Aucun son en attente</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="admin-section">
+      <div class="section-title">&#9881; REGLAGES DU PLAYER</div>
+      <div class="panel">
+        <div class="settings-grid" id="settingsGrid">
+          <div class="setting-item">
+            <div class="setting-label">Source du player</div>
+            <select class="setting-input" data-key="player_source">
+              <option value="community">Communaut&eacute;</option>
+              <option value="local">Fichier local</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">Sensibilit&eacute; puissance</div>
+            <input type="range" class="setting-input" data-key="power_sensitivity"
+                   min="0.5" max="2.0" step="0.1" style="padding:4px">
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">Release puissance</div>
+            <input type="range" class="setting-input" data-key="power_release"
+                   min="0.002" max="0.02" step="0.001" style="padding:4px">
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">Couleur primaire</div>
+            <input type="color" class="setting-input" data-key="primary_color"
+                   style="padding:4px; height:42px; cursor:pointer">
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">Bouton Fire</div>
+            <div class="setting-toggle">
+              <button class="toggle-switch on" data-key="fire_button_enabled"></button>
+              <span style="font-size:13px;color:rgba(255,255,255,.5)">Activ&eacute;</span>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">Style de fond</div>
+            <select class="setting-input" data-key="background_style">
+              <option value="default">Par d&eacute;faut</option>
+              <option value="dark">Sombre</option>
+              <option value="neon">N&eacute;on</option>
+              <option value="minimal">Minimal</option>
+            </select>
+          </div>
+        </div>
+        <button class="save-btn" id="saveSettingsBtn">SAUVEGARDER</button>
+      </div>
+    </div>
+
+    <!-- Played history -->
+    <div class="admin-section">
+      <div class="section-title">&#9989; HISTORIQUE (D&Eacute;J&Agrave; JOU&Eacute;S)</div>
+      <div class="panel">
+        <div id="historyList">
+          <div class="queue-empty">Aucun historique</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== QUEUE MANAGEMENT =====
+    async function loadQueue() {
+      const [pendingRes, playingRes, playedRes] = await Promise.all([
+        fetch('/api/queue?status=pending'),
+        fetch('/api/queue?status=playing'),
+        fetch('/api/queue?status=played'),
+      ]);
+      const pending = await pendingRes.json();
+      const playing = await playingRes.json();
+      const played = await playedRes.json();
+
+      // Now playing
+      const npEl = document.getElementById('nowPlaying');
+      if (playing.length) {
+        const t = playing[0];
+        npEl.innerHTML = `
+          <div class="now-playing">
+            <div class="np-icon">${t.type === 'upload' ? '&#127925;' : '&#127909;'}</div>
+            <div class="np-info">
+              <div class="np-label">EN LECTURE</div>
+              <div class="np-title">${esc(t.title)}</div>
+              <div class="np-meta">
+                <span>${esc(t.artist || 'Inconnu')}</span>
+                <span>par ${esc(t.submitted_by)}</span>
+              </div>
+            </div>
+          </div>`;
+      } else {
+        npEl.innerHTML = '<div class="queue-empty">Aucun son en lecture</div>';
+      }
+
+      // Pending queue
+      const ql = document.getElementById('queueList');
+      document.getElementById('pendingCount').textContent = `(${pending.length})`;
+      if (pending.length === 0) {
+        ql.innerHTML = '<div class="queue-empty">Aucun son en attente</div>';
+      } else {
+        ql.innerHTML = pending.map(t => `
+          <div class="queue-item" data-id="${t.id}">
+            <div class="queue-icon">${t.type === 'upload' ? '&#127925;' : '&#127909;'}</div>
+            <div class="queue-info">
+              <div class="queue-title">${esc(t.title)}</div>
+              <div class="queue-meta">
+                <span>${esc(t.artist || 'Inconnu')}</span>
+                <span>par ${esc(t.submitted_by)}</span>
+                <span>${timeAgo(t.created_at)}</span>
+              </div>
+            </div>
+            <div class="queue-actions">
+              <button class="q-btn play" onclick="playTrack(${t.id})">&#9654; Jouer</button>
+              <button class="q-btn reject" onclick="rejectTrack(${t.id})">&#10005;</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // History
+      const hl = document.getElementById('historyList');
+      if (played.length === 0) {
+        hl.innerHTML = '<div class="queue-empty">Aucun historique</div>';
+      } else {
+        hl.innerHTML = played.slice(0, 20).map(t => `
+          <div class="queue-item" data-id="${t.id}">
+            <div class="queue-icon" style="opacity:.4">${t.type === 'upload' ? '&#127925;' : '&#127909;'}</div>
+            <div class="queue-info">
+              <div class="queue-title" style="opacity:.6">${esc(t.title)}</div>
+              <div class="queue-meta">
+                <span>${esc(t.artist || 'Inconnu')}</span>
+                <span>par ${esc(t.submitted_by)}</span>
+                <span>&#128293; ${t.fire || 0} &#128077; ${t.up || 0} &#128078; ${t.down || 0}</span>
+              </div>
+            </div>
+            <div class="queue-actions">
+              <button class="q-btn reject" onclick="deleteTrack(${t.id})">&#128465;</button>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    async function playTrack(id) {
+      // Mark current as played, then play this one
+      await fetch('/api/queue', { method: 'GET' }); // just to sync
+      const playing = await (await fetch('/api/queue?status=playing')).json();
+      for (const t of playing) {
+        await fetch(`/api/queue/${t.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'played' }),
+        });
+      }
+      await fetch(`/api/queue/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'playing' }),
+      });
+      loadQueue();
+    }
+
+    async function rejectTrack(id) {
+      await fetch(`/api/queue/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected' }),
+      });
+      loadQueue();
+    }
+
+    async function deleteTrack(id) {
+      await fetch(`/api/queue/${id}`, { method: 'DELETE' });
+      loadQueue();
+    }
+
+    document.getElementById('playNextBtn').addEventListener('click', async () => {
+      await fetch('/api/play-next', { method: 'POST' });
+      loadQueue();
+    });
+
+    // ===== SETTINGS =====
+    async function loadSettings() {
+      const res = await fetch('/api/settings');
+      const settings = await res.json();
+
+      document.querySelectorAll('[data-key]').forEach(el => {
+        const key = el.dataset.key;
+        if (!(key in settings)) return;
+        if (el.classList.contains('toggle-switch')) {
+          el.classList.toggle('on', settings[key] === 'true');
+          el.nextElementSibling.textContent = settings[key] === 'true' ? 'Activ\u00e9' : 'D\u00e9sactiv\u00e9';
+        } else {
+          el.value = settings[key];
+        }
+      });
+    }
+
+    // Toggle switches
+    document.querySelectorAll('.toggle-switch').forEach(btn => {
+      btn.addEventListener('click', () => {
+        btn.classList.toggle('on');
+        btn.nextElementSibling.textContent = btn.classList.contains('on') ? 'Activ\u00e9' : 'D\u00e9sactiv\u00e9';
+      });
+    });
+
+    document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
+      const settings = {};
+      document.querySelectorAll('[data-key]').forEach(el => {
+        const key = el.dataset.key;
+        if (el.classList.contains('toggle-switch')) {
+          settings[key] = el.classList.contains('on') ? 'true' : 'false';
+        } else {
+          settings[key] = el.value;
+        }
+      });
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+      const btn = document.getElementById('saveSettingsBtn');
+      btn.textContent = '\u2713 SAUVEGARD\u00c9';
+      setTimeout(() => btn.textContent = 'SAUVEGARDER', 2000);
+    });
+
+    // ===== LOGOUT =====
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = '/login';
+    });
+
+    // ===== UTILS =====
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s || '';
+      return d.innerHTML;
+    }
+
+    function timeAgo(dateStr) {
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return '\u00e0 l\'instant';
+      if (mins < 60) return `il y a ${mins}min`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `il y a ${hours}h`;
+      return `il y a ${Math.floor(hours / 24)}j`;
+    }
+
+    // ===== INIT =====
+    loadQueue();
+    loadSettings();
+    // Auto-refresh queue every 10s
+    setInterval(loadQueue, 10000);
+  </script>
+</body>
+</html>

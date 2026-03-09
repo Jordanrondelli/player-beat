@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BEAT PLAYER — Envoie ton son</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    html, body { overflow: auto; }
+    .submit-page {
+      position: relative; z-index: 10;
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 40px 20px;
+      gap: 24px;
+    }
+    .submit-hero {
+      text-align: center; margin-bottom: 12px;
+    }
+    .submit-hero-icon { font-size: 56px; margin-bottom: 8px; }
+    .submit-hero-title {
+      font-family: 'Bangers', cursive;
+      font-size: 42px; letter-spacing: 4px;
+      background: linear-gradient(135deg, #fff 0%, #a8c0ff 50%, #ff6040 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .submit-hero-sub {
+      color: rgba(255,255,255,.45); font-size: 14px;
+      font-weight: 600; margin-top: 4px;
+    }
+
+    .submit-tabs {
+      display: flex; gap: 0; border-radius: 16px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,.1);
+      background: rgba(255,255,255,.04);
+      width: 100%; max-width: 520px;
+    }
+    .submit-tab {
+      flex: 1; padding: 14px 20px;
+      font-family: 'Bangers', cursive;
+      font-size: 16px; letter-spacing: 2px;
+      text-align: center; cursor: pointer;
+      background: transparent; border: none; color: rgba(255,255,255,.4);
+      transition: all .25s;
+    }
+    .submit-tab.active {
+      background: linear-gradient(135deg, rgba(255,80,30,.2), rgba(255,40,10,.15));
+      color: #fff;
+      border-bottom: 2px solid #ff5020;
+    }
+    .submit-tab:hover:not(.active) {
+      color: rgba(255,255,255,.7);
+      background: rgba(255,255,255,.04);
+    }
+
+    .submit-card {
+      width: 100%; max-width: 520px;
+      padding: 36px 32px;
+      border-radius: 24px;
+      background: linear-gradient(165deg, rgba(30,45,90,.45) 0%, rgba(12,20,55,.6) 40%, rgba(8,14,40,.65) 100%);
+      backdrop-filter: blur(40px) saturate(1.3);
+      -webkit-backdrop-filter: blur(40px) saturate(1.3);
+      border: 1px solid rgba(255,255,255,.1);
+      border-top-color: rgba(255,255,255,.18);
+      box-shadow: 0 20px 60px rgba(0,0,0,.4), 0 0 40px rgba(100,140,255,.05);
+    }
+    .submit-card[hidden] { display: none; }
+
+    .field-label {
+      font-family: 'Quicksand', sans-serif;
+      font-size: 12px; font-weight: 700;
+      color: rgba(255,255,255,.45);
+      text-transform: uppercase; letter-spacing: 1.5px;
+      margin-bottom: 8px;
+    }
+    .field-input {
+      width: 100%; padding: 13px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.1);
+      background: rgba(255,255,255,.06);
+      color: #fff; font-family: 'Quicksand', sans-serif;
+      font-size: 14px; font-weight: 600;
+      outline: none; transition: all .25s;
+      margin-bottom: 18px;
+    }
+    .field-input:focus {
+      border-color: rgba(255,120,60,.4);
+      background: rgba(255,255,255,.1);
+      box-shadow: 0 0 15px rgba(255,80,30,.1);
+    }
+    .field-input::placeholder { color: rgba(255,255,255,.25); }
+
+    /* Upload drop zone */
+    .drop-zone {
+      width: 100%; padding: 40px 20px;
+      border-radius: 16px;
+      border: 2px dashed rgba(255,255,255,.15);
+      background: rgba(255,255,255,.03);
+      text-align: center;
+      cursor: pointer;
+      transition: all .3s;
+      margin-bottom: 18px;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: rgba(255,120,60,.5);
+      background: rgba(255,80,30,.06);
+    }
+    .drop-zone-icon { font-size: 36px; margin-bottom: 8px; }
+    .drop-zone-text {
+      font-size: 14px; font-weight: 600;
+      color: rgba(255,255,255,.5);
+    }
+    .drop-zone-text strong { color: #ff7040; }
+    .drop-zone-file {
+      margin-top: 10px; font-size: 13px;
+      color: #6dff80; font-weight: 700;
+      display: none;
+    }
+
+    .submit-btn {
+      width: 100%; padding: 15px;
+      border-radius: 14px; border: none;
+      background: linear-gradient(135deg, #ff6030, #ff4010);
+      color: #fff; font-family: 'Bangers', cursive;
+      font-size: 18px; letter-spacing: 2px;
+      cursor: pointer; transition: all .25s;
+      box-shadow: 0 4px 20px rgba(255,60,20,.3);
+    }
+    .submit-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(255,60,20,.5);
+    }
+    .submit-btn:active { transform: translateY(1px); }
+    .submit-btn:disabled {
+      opacity: .4; cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .submit-toast {
+      position: fixed; bottom: 30px; left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      padding: 14px 28px; border-radius: 14px;
+      font-weight: 700; font-size: 14px;
+      backdrop-filter: blur(20px);
+      transition: transform .4s cubic-bezier(.22, 1, .36, 1);
+      z-index: 999;
+    }
+    .submit-toast.success {
+      background: rgba(40,200,80,.2);
+      border: 1px solid rgba(40,200,80,.3);
+      color: #6dff80;
+    }
+    .submit-toast.error {
+      background: rgba(255,40,40,.2);
+      border: 1px solid rgba(255,40,40,.3);
+      color: #ff6060;
+    }
+    .submit-toast.show { transform: translateX(-50%) translateY(0); }
+
+    .admin-link {
+      position: fixed; bottom: 16px; right: 16px;
+      font-size: 12px; color: rgba(255,255,255,.2);
+      text-decoration: none; z-index: 50;
+      transition: color .2s;
+    }
+    .admin-link:hover { color: rgba(255,255,255,.5); }
+
+    .queue-count {
+      text-align: center; margin-top: -8px;
+      font-size: 13px; color: rgba(255,255,255,.35);
+      font-weight: 600;
+    }
+    .queue-count span { color: #ff7040; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="bg-dim"></div>
+  <div class="bg-grain"></div>
+  <div class="vig"></div>
+
+  <div class="submit-page">
+    <div class="submit-hero">
+      <div class="submit-hero-icon">&#128296;</div>
+      <div class="submit-hero-title">BEAT PLAYER</div>
+      <div class="submit-hero-sub">Envoie ton son, il sera jug&eacute; en live</div>
+    </div>
+
+    <div class="queue-count">
+      <span id="queueCount">...</span> sons en attente
+    </div>
+
+    <div class="submit-tabs">
+      <button class="submit-tab active" data-tab="upload">&#127925; UPLOAD MP3</button>
+      <button class="submit-tab" data-tab="youtube">&#127909; LIEN YOUTUBE</button>
+    </div>
+
+    <!-- Upload tab -->
+    <div class="submit-card" id="tab-upload">
+      <form id="uploadForm">
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-zone-icon">&#128190;</div>
+          <div class="drop-zone-text">
+            Glisse ton fichier ici ou <strong>clique pour choisir</strong>
+          </div>
+          <div class="drop-zone-file" id="dropFileName"></div>
+          <input type="file" id="fileInput" accept=".mp3,.wav" style="display:none">
+        </div>
+
+        <div class="field-label">Titre du son</div>
+        <input type="text" class="field-input" id="uploadTitle" placeholder="Ex: Mon beat fire...">
+
+        <div class="field-label">Artiste / Pseudo</div>
+        <input type="text" class="field-input" id="uploadArtist" placeholder="Ex: DJ Sauce">
+
+        <div class="field-label">Ton pseudo (visible en live)</div>
+        <input type="text" class="field-input" id="uploadSubmitter" placeholder="Ex: SAUCEBOY19">
+
+        <button type="submit" class="submit-btn" id="uploadBtn" disabled>ENVOYER MON SON</button>
+      </form>
+    </div>
+
+    <!-- YouTube tab -->
+    <div class="submit-card" id="tab-youtube" hidden>
+      <form id="youtubeForm">
+        <div class="field-label">Lien YouTube</div>
+        <input type="url" class="field-input" id="ytUrl"
+               placeholder="https://youtube.com/watch?v=...">
+
+        <div class="field-label">Titre (optionnel)</div>
+        <input type="text" class="field-input" id="ytTitle" placeholder="Ex: Mon morceau pr&eacute;f&eacute;r&eacute;">
+
+        <div class="field-label">Artiste (optionnel)</div>
+        <input type="text" class="field-input" id="ytArtist" placeholder="Ex: Artiste inconnu">
+
+        <div class="field-label">Ton pseudo (visible en live)</div>
+        <input type="text" class="field-input" id="ytSubmitter" placeholder="Ex: SAUCEBOY19">
+
+        <button type="submit" class="submit-btn" id="ytBtn">ENVOYER LE LIEN</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="submit-toast" id="toast"></div>
+  <a href="/login" class="admin-link">Admin</a>
+
+  <script>
+    // Tabs
+    document.querySelectorAll('.submit-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.submit-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const target = tab.dataset.tab;
+        document.getElementById('tab-upload').hidden = target !== 'upload';
+        document.getElementById('tab-youtube').hidden = target !== 'youtube';
+      });
+    });
+
+    // Drop zone
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const dropFileName = document.getElementById('dropFileName');
+    const uploadBtn = document.getElementById('uploadBtn');
+    let selectedFile = null;
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault(); dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
+
+    function handleFile(file) {
+      if (!file.name.match(/\.(mp3|wav)$/i)) {
+        showToast('Seuls les fichiers MP3 et WAV sont accept\u00e9s', 'error');
+        return;
+      }
+      selectedFile = file;
+      dropFileName.textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(1) + ' MB)';
+      dropFileName.style.display = 'block';
+      uploadBtn.disabled = false;
+    }
+
+    // Upload form
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!selectedFile) return;
+
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = 'ENVOI EN COURS...';
+
+      const fd = new FormData();
+      fd.append('type', 'upload');
+      fd.append('audio', selectedFile);
+      fd.append('title', document.getElementById('uploadTitle').value || selectedFile.name);
+      fd.append('artist', document.getElementById('uploadArtist').value);
+      fd.append('submitted_by', document.getElementById('uploadSubmitter').value || 'Anonyme');
+
+      try {
+        const res = await fetch('/api/queue', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (res.ok) {
+          showToast('Son envoy\u00e9 ! Il sera jug\u00e9 en live', 'success');
+          document.getElementById('uploadForm').reset();
+          selectedFile = null;
+          dropFileName.style.display = 'none';
+          uploadBtn.disabled = true;
+          loadQueueCount();
+        } else {
+          showToast(data.error || 'Erreur', 'error');
+        }
+      } catch {
+        showToast('Erreur de connexion', 'error');
+      }
+      uploadBtn.textContent = 'ENVOYER MON SON';
+    });
+
+    // YouTube form
+    document.getElementById('youtubeForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = document.getElementById('ytUrl').value.trim();
+      if (!url) return showToast('Colle un lien YouTube', 'error');
+
+      const ytBtn = document.getElementById('ytBtn');
+      ytBtn.disabled = true;
+      ytBtn.textContent = 'ENVOI EN COURS...';
+
+      try {
+        const res = await fetch('/api/queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'youtube',
+            source_url: url,
+            title: document.getElementById('ytTitle').value || 'YouTube Track',
+            artist: document.getElementById('ytArtist').value,
+            submitted_by: document.getElementById('ytSubmitter').value || 'Anonyme',
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast('Lien envoy\u00e9 ! Il sera jug\u00e9 en live', 'success');
+          document.getElementById('youtubeForm').reset();
+          loadQueueCount();
+        } else {
+          showToast(data.error || 'Erreur', 'error');
+        }
+      } catch {
+        showToast('Erreur de connexion', 'error');
+      }
+      ytBtn.disabled = false;
+      ytBtn.textContent = 'ENVOYER LE LIEN';
+    });
+
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'submit-toast ' + type + ' show';
+      setTimeout(() => t.classList.remove('show'), 3500);
+    }
+
+    async function loadQueueCount() {
+      try {
+        const res = await fetch('/api/queue/count');
+        const data = await res.json();
+        document.getElementById('queueCount').textContent = data.count || '0';
+      } catch {
+        document.getElementById('queueCount').textContent = '0';
+      }
+    }
+    loadQueueCount();
+  </script>
+</body>
+</html>
