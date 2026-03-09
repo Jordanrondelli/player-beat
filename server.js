@@ -239,7 +239,8 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
 
       // Download audio from YouTube via yt-dlp
       let fileBuffer = null;
-      const tmpFile = path.join(uploadDir, `yt-${Date.now()}.mp3`);
+      const tmpBase = path.join(uploadDir, `yt-${Date.now()}`);
+      const tmpOutput = tmpBase + '.%(ext)s';
       try {
         await new Promise((resolve, reject) => {
           execFile('yt-dlp', [
@@ -247,23 +248,33 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
             '--audio-quality', '0',
             '--no-playlist',
             '--max-filesize', '50m',
-            '-o', tmpFile.replace('.mp3', '.%(ext)s'),
+            '-o', tmpOutput,
             source_url
           ], { timeout: 120000 }, (err, stdout, stderr) => {
             if (err) reject(new Error(stderr || err.message));
             else resolve(stdout);
           });
         });
-        // yt-dlp may output with different extension during conversion
-        const actualFile = fs.existsSync(tmpFile) ? tmpFile : tmpFile.replace('.mp3', '.mp3');
-        if (fs.existsSync(actualFile)) {
+        // yt-dlp may output .mp3, .webm, .opus etc — find the actual file
+        const candidates = fs.readdirSync(uploadDir)
+          .filter(f => f.startsWith(path.basename(tmpBase)))
+          .map(f => path.join(uploadDir, f));
+        if (candidates.length > 0) {
+          // Prefer .mp3, otherwise take whatever exists
+          const mp3 = candidates.find(f => f.endsWith('.mp3'));
+          const actualFile = mp3 || candidates[0];
           fileBuffer = fs.readFileSync(actualFile);
-          fs.unlinkSync(actualFile);
+          // Clean up all temp files for this download
+          candidates.forEach(f => { try { fs.unlinkSync(f); } catch {} });
         }
       } catch (e) {
         console.error('yt-dlp error:', e.message);
         // Clean up any temp files
-        try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch {}
+        try {
+          fs.readdirSync(uploadDir)
+            .filter(f => f.startsWith(path.basename(tmpBase)))
+            .forEach(f => fs.unlinkSync(path.join(uploadDir, f)));
+        } catch {}
       }
 
       if (!fileBuffer) {
@@ -308,6 +319,11 @@ app.patch('/api/queue/:id', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Status invalide' });
   }
   await pool.query('UPDATE queue SET status = $1 WHERE id = $2', [status, req.params.id]);
+  // When a track starts playing, reset its votes so each track starts fresh
+  if (status === 'playing') {
+    await pool.query('UPDATE votes SET fire = 0, up = 0, down = 0 WHERE queue_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM twitch_votes WHERE queue_id = $1', [req.params.id]);
+  }
   res.json({ success: true });
 });
 
@@ -436,6 +452,9 @@ app.post('/api/play-next', requireAdmin, async (req, res) => {
   );
   if (rows.length === 0) return res.json(null);
   await pool.query("UPDATE queue SET status = 'playing' WHERE id = $1", [rows[0].id]);
+  // Reset votes for this new track
+  await pool.query('UPDATE votes SET fire = 0, up = 0, down = 0 WHERE queue_id = $1', [rows[0].id]);
+  await pool.query('DELETE FROM twitch_votes WHERE queue_id = $1', [rows[0].id]);
   rows[0].status = 'playing';
   res.json(rows[0]);
 });
@@ -483,25 +502,26 @@ async function startTwitchBot() {
     else return;
 
     try {
-      // Get currently playing or first pending track
+      // Only vote on the currently PLAYING track
       const { rows: playing } = await pool.query(
-        "SELECT id FROM queue WHERE status IN ('pending', 'playing') ORDER BY CASE WHEN status='playing' THEN 0 ELSE 1 END, created_at ASC LIMIT 1"
+        "SELECT id FROM queue WHERE status = 'playing' LIMIT 1"
       );
       if (!playing.length) return;
       const queueId = playing[0].id;
 
-      // Insert vote (1 per user per track — UNIQUE constraint)
-      await pool.query(
+      // 1 vote per user per track (UNIQUE constraint prevents duplicates)
+      const { rowCount } = await pool.query(
         'INSERT INTO twitch_votes (queue_id, twitch_user, vote_type) VALUES ($1, $2, $3) ON CONFLICT (queue_id, twitch_user) DO NOTHING',
         [queueId, user, voteType]
       );
 
-      // Update the votes table
-      const amount = voteType === 'fire' ? 5 : 1;
-      await pool.query(
-        `UPDATE votes SET ${voteType} = ${voteType} + $1 WHERE queue_id = $2`,
-        [amount, queueId]
-      );
+      // Only update votes table if the insert actually happened (not a duplicate)
+      if (rowCount > 0) {
+        await pool.query(
+          `UPDATE votes SET ${voteType} = ${voteType} + 1 WHERE queue_id = $1`,
+          [queueId]
+        );
+      }
     } catch (e) {
       console.error('Twitch vote error:', e.message);
     }
@@ -517,8 +537,7 @@ async function startTwitchBot() {
   }
 }
 
-// Reconnect when settings change
-const _originalSettingsPut = app._router;
+// Settings update (+ reconnect twitch if channel changed)
 app.put('/api/settings', requireAdmin, async (req, res) => {
   const entries = Object.entries(req.body);
   for (const [key, value] of entries) {

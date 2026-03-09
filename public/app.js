@@ -1295,7 +1295,7 @@ document.getElementById('nextBtn').addEventListener('click', () => {
 });
 
 // ===== VOTES =====
-let votes = { fire: 430, up: 96, down: 111 };
+let votes = { fire: 0, up: 0, down: 0 };
 
 function updateVoteDisplay() {
   const total = votes.fire + votes.up + votes.down;
@@ -1573,6 +1573,9 @@ document.querySelectorAll('.source-btn').forEach(btn => {
 // Override loadTrack to update queue info
 const _originalLoadTrack = loadTrack;
 loadTrack = async function(index, autoPlay) {
+  // Reset votes display immediately on track change
+  votes = { fire: 0, up: 0, down: 0 };
+  updateVoteDisplay();
   await _originalLoadTrack(index, autoPlay);
   if (serverQueue.length > 0 && playlist[index] && playlist[index].queueItem) {
     updateTrackInfo(playlist[index].queueItem);
