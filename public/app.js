@@ -574,25 +574,23 @@ function drawWaveform(currentTime) {
     const bassBonus = Math.min(1, (subRaw * 0.6 + bassRaw * 0.4) * 3);
 
     // Kick activity: smoothed envelope that stays high while kicks keep hitting
-    // Unlike raw kickDecay (spiky), kickActivity holds steady during drops
     const kickImpact = Math.min(1, kickActivity);
 
     // Feed hammerSmooth for other uses
     hammerSmooth += (wfLevel - hammerSmooth) * 0.12;
 
-    // --- FINAL SCORE: GEOMETRIC MEAN ---
-    // Geometric mean = cube root of product. Rewards convergence of all 3
-    // without the harsh penalty of pure multiplication.
-    // Three factors at 0.85 → pure product = 0.61, geometric mean = 0.85.
-    const wfFactor = 0.05 + wfLevel * 0.95;          // 0.05 → 1.0
-    const bassFactor = 0.05 + bassBonus * 0.95;       // 0.05 → 1.0
-    const kickFactor = 0.05 + kickImpact * 0.95;      // 0.05 → 1.0
-    const rawScore = Math.pow(wfFactor * bassFactor * kickFactor, 1 / 3);
+    // --- FINAL SCORE: ADDITIVE (stable, no geometric mean crash) ---
+    // wfLevel is the backbone (0-1, pre-computed, stable).
+    // Bass and kick are BONUSES that push the score higher.
+    // This way, between kicks the score doesn't tank — it just loses a small bonus.
+    const baseScore = wfLevel;                          // 0-1, stable
+    const bassAdd = bassBonus * 0.20;                   // up to +0.20
+    const kickAdd = kickImpact * 0.20;                  // up to +0.20
+    const rawScore = Math.min(1, baseScore + bassAdd + kickAdd);
 
-    // Light power curve to add punch at the top
-    const shaped = Math.pow(Math.min(1, rawScore), 1.3) * 100;
+    // Gentle S-curve: push mids up, keep extremes intact
+    const shaped = rawScore * rawScore * (3 - 2 * rawScore) * 100; // smoothstep 0-100
 
-    // Debug: log factors every 30 frames to see what's limiting
     // Debug: aggregate stats over ~2s then log summary
     if (typeof window._hDbg === 'undefined') {
       window._hDbg = { n: 0, sum: 0, min: 999, max: 0, wfSum: 0, bassSum: 0, kickSum: 0 };
@@ -605,23 +603,28 @@ function drawWaveform(currentTime) {
       window._hDbg = { n: 0, sum: 0, min: 999, max: 0, wfSum: 0, bassSum: 0, kickSum: 0 };
     }
 
-    // Charge dynamics: fast rise, VERY slow release for stability
-    // Release at 0.008 means it takes ~5-6s to drop significantly
+    // Charge dynamics: instant rise on big jumps, very slow release
     const diff = shaped - hammerCharge;
-    hammerCharge += diff * (diff > 0 ? 0.45 : 0.008);
+    if (diff > 0) {
+      // Jump instantly to new highs — the first impact must HIT
+      hammerCharge = shaped;
+    } else {
+      // Slow decay: score holds its peak for several seconds
+      hammerCharge += diff * 0.006;
+    }
     hammerCharge = Math.max(0, Math.min(100, hammerCharge));
   }
 
-  // Smooth displayed percentage — fast rise, gentle stabilization on fall
+  // Smooth displayed percentage — instant rise, very slow fall
   const targetPct = hammerCharge;
   const pctDiff = targetPct - displayedHammerPct;
-  const isRising = pctDiff > 0;
-  // Rise: near-instant for big jumps, smooth for small ones.
-  // Fall: very gentle — score holds steady during sustained sections.
-  const pctAlpha = isRising
-    ? (pctDiff > 10 ? 0.5 : 0.2)
-    : 0.02;
-  displayedHammerPct += pctDiff * pctAlpha;
+  if (pctDiff > 0) {
+    // Instant rise — score snaps to new peaks
+    displayedHammerPct = targetPct;
+  } else {
+    // Very slow descent
+    displayedHammerPct += pctDiff * 0.015;
+  }
   const hammerPct = Math.round(displayedHammerPct);
   updateHammerVisuals(hammerPct, kickDecay);
 
