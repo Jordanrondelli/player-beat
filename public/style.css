@@ -771,6 +771,16 @@ body {
   color: #ff6600; margin-top: 6px; letter-spacing: 1px;
   text-shadow: 0 0 10px rgba(255, 60, 0, .4);
 }
+/* New legend animation */
+.legend-card.legend-new {
+  animation: legendPop 1.5s ease-out;
+}
+@keyframes legendPop {
+  0%   { transform: translateY(0) scale(1); box-shadow: 0 0 30px rgba(255, 120, 0, .2), 0 4px 20px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 200, 100, .15); }
+  15%  { transform: translateY(-10px) scale(1.08); box-shadow: 0 0 60px rgba(255, 120, 0, .6), 0 0 100px rgba(255, 60, 0, .3), 0 4px 20px rgba(0, 0, 0, .4); border-color: rgba(255, 200, 50, .8); }
+  30%  { transform: translateY(-4px) scale(1.02); }
+  100% { transform: translateY(0) scale(1); box-shadow: 0 0 30px rgba(255, 120, 0, .2), 0 4px 20px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 200, 100, .15); }
+}
 
 /* ===== VOTE BAR (pouce rouge | FIRE | pouce vert) ===== */
 .vote-bar {

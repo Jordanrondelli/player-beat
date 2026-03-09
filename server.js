@@ -361,7 +361,7 @@ app.get('/api/legend', async (req, res) => {
     const { rows } = await pool.query(`
       SELECT q.title, q.artist, q.submitted_by, v.fire
       FROM votes v JOIN queue q ON v.queue_id = q.id
-      WHERE v.fire > 0 AND q.status = 'played'
+      WHERE v.fire > 0
       ORDER BY v.fire DESC LIMIT 1
     `);
     if (rows.length > 0) {

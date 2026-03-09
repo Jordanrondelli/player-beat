@@ -1749,26 +1749,39 @@ setInterval(() => {
 }, 3000);
 
 // ===== MUR DES LÉGENDES =====
+let currentLegendUser = null;
 async function loadLegend() {
   try {
     const res = await fetch('/api/legend');
     const data = await res.json();
-    const card = document.getElementById('legendCard');
-    if (!card) return;
+    const userEl = document.getElementById('legendUser');
+    const trackEl = document.getElementById('legendTrack');
+    const fireEl = document.getElementById('legendFire');
+    if (!userEl) return;
     if (data && data.fire > 0) {
-      document.getElementById('legendUser').textContent = data.submitted_by || 'Anonyme';
-      document.getElementById('legendTrack').textContent = (data.title || 'Sans titre') + (data.artist ? ' — ' + data.artist : '');
-      document.getElementById('legendFire').textContent = '\uD83D\uDD25 ' + data.fire + ' FIRE';
-      card.style.display = '';
+      const newUser = data.submitted_by || 'Anonyme';
+      userEl.textContent = newUser;
+      trackEl.textContent = (data.title || 'Sans titre') + (data.artist ? ' \u2014 ' + data.artist : '');
+      fireEl.textContent = '\uD83D\uDD25 ' + data.fire + ' FIRE';
+      // Animate when legend changes
+      if (currentLegendUser !== null && currentLegendUser !== newUser) {
+        const card = document.getElementById('legendCard');
+        card.classList.add('legend-new');
+        setTimeout(() => card.classList.remove('legend-new'), 1500);
+      }
+      currentLegendUser = newUser;
     } else {
-      card.style.display = 'none';
+      userEl.textContent = 'En attente...';
+      trackEl.textContent = 'Le track avec le plus de \uD83D\uDD25 appara\u00eetra ici';
+      fireEl.textContent = '';
+      currentLegendUser = null;
     }
   } catch (e) {
     // Silently fail
   }
 }
 loadLegend();
-setInterval(loadLegend, 10000);
+setInterval(loadLegend, 5000);
 
 // ===== EMOJI SPLASH EFFECT =====
 function showEmojiSplash(emoji, x, y) {
