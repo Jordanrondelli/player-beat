@@ -85,7 +85,8 @@ async function initDB() {
     primary_color: '#ff4400',
     player_source: 'community',
     twitch_channel: '',
-    power_block_enabled: 'true',
+    power_youtube: 'true',
+    power_uploads: 'true',
   };
   for (const [key, value] of Object.entries(defaults)) {
     await pool.query(
@@ -332,6 +333,18 @@ app.post('/api/votes', async (req, res) => {
     const { rows } = await pool.query('SELECT * FROM votes WHERE queue_id = $1', [queue_id]);
     return res.json(rows[0]);
   }
+  res.json({ fire: 0, up: 0, down: 0 });
+});
+
+// Player marks a track as now playing (resets votes + enables Twitch voting)
+app.post('/api/player/now-playing/:id', async (req, res) => {
+  const { id } = req.params;
+  // Set all other tracks to non-playing, then set this one to playing
+  await pool.query("UPDATE queue SET status = 'pending' WHERE status = 'playing'");
+  await pool.query("UPDATE queue SET status = 'playing' WHERE id = $1", [id]);
+  // Reset votes for fresh start
+  await pool.query('UPDATE votes SET fire = 0, up = 0, down = 0 WHERE queue_id = $1', [id]);
+  await pool.query('DELETE FROM twitch_votes WHERE queue_id = $1', [id]);
   res.json({ fire: 0, up: 0, down: 0 });
 });
 

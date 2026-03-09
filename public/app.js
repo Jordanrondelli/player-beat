@@ -36,15 +36,45 @@ async function loadPlayerSettings() {
   } catch (e) { /* use defaults */ }
   applyPlayerSettings();
 }
+function isPowerEnabled() {
+  if (ytIsCurrentSource) {
+    return playerSettings.power_youtube !== 'false'; // default true
+  }
+  return playerSettings.power_uploads !== 'false'; // default true
+}
 function applyPlayerSettings() {
-  // Power block visibility
-  const powerEnabled = playerSettings.power_block_enabled !== 'false';
+  // Power block visibility (depends on current source)
+  const powerOn = isPowerEnabled();
   const hammerEl = document.getElementById('hammerMeter');
-  if (hammerEl) hammerEl.style.display = powerEnabled ? '' : 'none';
+  if (hammerEl) hammerEl.style.display = powerOn ? '' : 'none';
+  // If power just got disabled, clean up all lingering effects
+  if (!powerOn) {
+    cleanupPowerEffects();
+  }
   // Fire button visibility
   const fireEnabled = playerSettings.fire_button_enabled !== 'false';
   const fireWrap = document.querySelector('.fire-wrap');
   if (fireWrap) fireWrap.style.display = fireEnabled ? '' : 'none';
+}
+function cleanupPowerEffects() {
+  // Remove all overload/shake classes from all elements
+  const wp = document.querySelector('.waveform-panel');
+  const cc = document.querySelector('.chat-card');
+  const uc = document.querySelector('.user-card');
+  const wrapper = document.getElementById('wrapper');
+  if (wp) wp.classList.remove('overload-shake', 'overload-border');
+  if (cc) cc.classList.remove('overload-shake');
+  if (uc) uc.classList.remove('overload-shake');
+  if (wrapper) wrapper.classList.remove('shaking');
+  document.querySelectorAll('.overload-chroma').forEach(el => el.remove());
+  // Reset hammer state
+  hammerCharge = 0;
+  displayedHammerPct = 0;
+  currentHammerStage = 'cool';
+  const hammerCard = document.getElementById('hammerMeter');
+  if (hammerCard) hammerCard.setAttribute('data-stage', 'cold');
+  const hammerStageEl = document.getElementById('hammerStage');
+  if (hammerStageEl) hammerStageEl.textContent = '';
 }
 loadPlayerSettings();
 // Reload settings periodically (admin can change them live)
@@ -605,7 +635,9 @@ function drawWaveform(currentTime) {
   // Uses the pre-computed waveform envelope (same data that drives the visual bars)
   // as the primary power source. What you SEE is what you GET.
   // Bass presence from FFT adds a bonus to reward actual low-end content.
-  if (isPlaying && ytIsCurrentSource) {
+  if (!isPowerEnabled()) {
+    // Power disabled for this source — skip all hammer computation
+  } else if (isPlaying && ytIsCurrentSource) {
     // YouTube mode: power from synthetic waveform (beat-aligned, section-aware)
     const wfIdx = Math.floor((currentTime / duration) * waveformData.length);
     // Wider window for smoother section-level energy
@@ -1021,8 +1053,8 @@ function detectBPM(buffer) {
 
 // ===== HAMMER VISUALS =====
 function updateHammerVisuals(pct, kick) {
-  // Skip all hammer visuals if power block is disabled
-  if (playerSettings.power_block_enabled === 'false') return;
+  // Skip all hammer visuals if power is disabled for current source
+  if (!isPowerEnabled()) return;
   const hPctEl = document.getElementById('hammerPct');
   if (!hPctEl) return;
 
@@ -1171,6 +1203,7 @@ function triggerHammerActivation(stage) {
 
 function startBeatSync() {
   stopBeatSync();
+  if (!isPowerEnabled()) return; // Power disabled — no beat animations
   if (!detectedBPM || !hammerIconEl) return;
   const beatSec = 60 / detectedBPM;
 
@@ -1401,6 +1434,15 @@ async function loadTrack(index, autoPlay) {
   prescanDone = false; // reset before loading new track
   stopAudio();
 
+  // Mark track as playing + reset votes for Twitch re-voting
+  votes = { fire: 0, up: 0, down: 0 };
+  updateVoteDisplay();
+  const qItem = playlist[index] && playlist[index].queueItem;
+  if (qItem && qItem.id) {
+    // Mark as playing (enables Twitch votes for this track)
+    fetch(`/api/player/now-playing/${qItem.id}`, { method: 'POST' }).catch(() => {});
+  }
+
   const track = playlist[index];
 
   // YouTube track: try to fetch real audio from Piped (client-side), fall back to IFrame
@@ -1452,6 +1494,7 @@ async function loadTrack(index, autoPlay) {
     // FALLBACK: Piped failed — use YouTube IFrame + synthetic waveform
     console.log('Piped unavailable, falling back to YouTube IFrame');
     ytIsCurrentSource = true;
+    applyPlayerSettings(); // Refresh power block visibility for YouTube source
     if (ytPlayer && ytReady) {
       await new Promise((resolve) => {
         const onStateChange = (e) => {
@@ -1486,6 +1529,7 @@ async function loadTrack(index, autoPlay) {
 
   // Regular audio track
   ytIsCurrentSource = false;
+  applyPlayerSettings(); // Refresh power block visibility for upload source
   try {
     const bufferCopy = track.arrayBuffer.slice(0);
     audioBuffer = await audioCtx.decodeAudioData(bufferCopy);
