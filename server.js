@@ -57,6 +57,17 @@ async function initDB() {
     ALTER TABLE queue ADD COLUMN IF NOT EXISTS file_mimetype TEXT DEFAULT 'audio/mpeg';
   `);
 
+  // Twitch votes: 1 vote per user per track
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS twitch_votes (
+      id SERIAL PRIMARY KEY,
+      queue_id INTEGER REFERENCES queue(id) ON DELETE CASCADE,
+      twitch_user TEXT NOT NULL,
+      vote_type TEXT NOT NULL,
+      UNIQUE(queue_id, twitch_user)
+    );
+  `);
+
   // Seed default admin if none exists
   const { rows } = await pool.query('SELECT id FROM admin_users LIMIT 1');
   if (rows.length === 0) {
@@ -73,6 +84,7 @@ async function initDB() {
     power_release: '0.006',
     primary_color: '#ff4400',
     player_source: 'community',
+    twitch_channel: '',
   };
   for (const [key, value] of Object.entries(defaults)) {
     await pool.query(
@@ -347,17 +359,6 @@ app.get('/api/settings', async (req, res) => {
   res.json(settings);
 });
 
-app.put('/api/settings', requireAdmin, async (req, res) => {
-  const entries = Object.entries(req.body);
-  for (const [key, value] of entries) {
-    await pool.query(
-      'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
-      [key, String(value)]
-    );
-  }
-  res.json({ success: true });
-});
-
 // ===== SERVE AUDIO FROM DB =====
 app.get('/api/audio/:id', async (req, res) => {
   try {
@@ -439,9 +440,113 @@ app.post('/api/play-next', requireAdmin, async (req, res) => {
   res.json(rows[0]);
 });
 
+// ===== TWITCH CHAT INTEGRATION =====
+const tmi = require('tmi.js');
+let twitchClient = null;
+let currentTwitchChannel = '';
+
+async function startTwitchBot() {
+  // Get twitch channel from settings
+  const { rows } = await pool.query("SELECT value FROM settings WHERE key = 'twitch_channel'");
+  const channel = (rows[0] && rows[0].value || '').trim().toLowerCase();
+
+  if (!channel) {
+    console.log('No Twitch channel configured, bot not started');
+    return;
+  }
+  if (channel === currentTwitchChannel && twitchClient) {
+    return; // Already connected to this channel
+  }
+
+  // Disconnect existing client
+  if (twitchClient) {
+    try { twitchClient.disconnect(); } catch {}
+    twitchClient = null;
+  }
+
+  currentTwitchChannel = channel;
+  console.log(`Connecting to Twitch channel: ${channel}`);
+
+  twitchClient = new tmi.Client({
+    channels: [channel],
+  });
+
+  twitchClient.on('message', async (ch, tags, message, self) => {
+    if (self) return;
+    const msg = message.trim().toLowerCase();
+    const user = tags['display-name'] || tags.username || 'anonymous';
+
+    let voteType = null;
+    if (msg === '!jaime') voteType = 'up';
+    else if (msg === '!jaimepas') voteType = 'down';
+    else if (msg === '!fire') voteType = 'fire';
+    else return;
+
+    try {
+      // Get currently playing or first pending track
+      const { rows: playing } = await pool.query(
+        "SELECT id FROM queue WHERE status IN ('pending', 'playing') ORDER BY CASE WHEN status='playing' THEN 0 ELSE 1 END, created_at ASC LIMIT 1"
+      );
+      if (!playing.length) return;
+      const queueId = playing[0].id;
+
+      // Insert vote (1 per user per track — UNIQUE constraint)
+      await pool.query(
+        'INSERT INTO twitch_votes (queue_id, twitch_user, vote_type) VALUES ($1, $2, $3) ON CONFLICT (queue_id, twitch_user) DO NOTHING',
+        [queueId, user, voteType]
+      );
+
+      // Update the votes table
+      const amount = voteType === 'fire' ? 5 : 1;
+      await pool.query(
+        `UPDATE votes SET ${voteType} = ${voteType} + $1 WHERE queue_id = $2`,
+        [amount, queueId]
+      );
+    } catch (e) {
+      console.error('Twitch vote error:', e.message);
+    }
+  });
+
+  try {
+    await twitchClient.connect();
+    console.log(`Twitch bot connected to #${channel}`);
+  } catch (e) {
+    console.error('Twitch connect error:', e.message);
+    twitchClient = null;
+    currentTwitchChannel = '';
+  }
+}
+
+// Reconnect when settings change
+const _originalSettingsPut = app._router;
+app.put('/api/settings', requireAdmin, async (req, res) => {
+  const entries = Object.entries(req.body);
+  for (const [key, value] of entries) {
+    await pool.query(
+      'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+      [key, String(value)]
+    );
+  }
+  res.json({ success: true });
+  // Restart twitch bot if channel changed
+  if ('twitch_channel' in req.body) {
+    startTwitchBot().catch(e => console.error('Twitch restart error:', e));
+  }
+});
+
+// API: get twitch votes for current track (for the player to poll)
+app.get('/api/twitch-votes', async (req, res) => {
+  const queueId = req.query.queue_id;
+  if (!queueId) return res.json({ fire: 0, up: 0, down: 0 });
+  const { rows } = await pool.query('SELECT * FROM votes WHERE queue_id = $1', [queueId]);
+  res.json(rows[0] || { fire: 0, up: 0, down: 0 });
+});
+
 // ===== START =====
-initDB().then(() => {
+initDB().then(async () => {
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  // Start Twitch bot
+  await startTwitchBot();
 }).catch(err => {
   console.error('DB init failed:', err);
   process.exit(1);

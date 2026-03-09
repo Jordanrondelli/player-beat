@@ -840,13 +840,13 @@ body {
   color: rgba(255, 180, 60, .7); letter-spacing: 1px; margin-top: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
 }
-.track-submitter-wrap {
-  margin-left: 8px;
-}
-.user-rank {
-  font-family: 'Quicksand', sans-serif; font-size: 11px; font-weight: 600;
-  letter-spacing: 1px; color: rgba(255, 255, 255, .35);
-  white-space: nowrap;
+.track-proposed {
+  font-family: 'Bangers', cursive; font-size: 14px;
+  letter-spacing: 1.5px;
+  color: rgba(255, 200, 80, .85);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .4), 0 0 10px rgba(255, 180, 50, .15);
+  margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;
 }
 
 /* ===== CHAT CARD (top-right) ===== */

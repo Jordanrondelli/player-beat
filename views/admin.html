@@ -288,15 +288,24 @@
               <option value="local">Fichier local</option>
             </select>
           </div>
-          <div class="setting-item">
-            <div class="setting-label">Sensibilit&eacute; puissance</div>
+          <div class="setting-item" style="grid-column: 1 / -1">
+            <div class="setting-label">Sensibilit&eacute; puissance (uploads &amp; youtube) <span id="sensitivityPct" style="color:#ff7040"></span></div>
+            <div style="font-size:11px;color:rgba(255,255,255,.35);margin-bottom:4px">
+              Bas = marteau calme, le son doit &ecirc;tre tr&egrave;s fort pour monter.
+              Haut = marteau r&eacute;actif, monte vite m&ecirc;me sur les sons calmes.
+            </div>
             <input type="range" class="setting-input" data-key="power_sensitivity"
-                   min="0.5" max="2.0" step="0.1" style="padding:4px">
+                   min="0.5" max="2.0" step="0.1" style="padding:4px"
+                   oninput="document.getElementById('sensitivityPct').textContent = Math.round(this.value * 100) + '%'">
           </div>
           <div class="setting-item">
-            <div class="setting-label">Release puissance</div>
+            <div class="setting-label">Release puissance <span id="releasePct" style="color:#ff7040"></span></div>
+            <div style="font-size:11px;color:rgba(255,255,255,.35);margin-bottom:4px">
+              Vitesse de retomb&eacute;e du marteau quand le son faiblit.
+            </div>
             <input type="range" class="setting-input" data-key="power_release"
-                   min="0.002" max="0.02" step="0.001" style="padding:4px">
+                   min="0.002" max="0.02" step="0.001" style="padding:4px"
+                   oninput="document.getElementById('releasePct').textContent = Math.round(this.value * 1000) / 10">
           </div>
           <div class="setting-item">
             <div class="setting-label">Couleur primaire</div>
@@ -318,6 +327,14 @@
               <option value="neon">N&eacute;on</option>
               <option value="minimal">Minimal</option>
             </select>
+          </div>
+          <div class="setting-item" style="grid-column: 1 / -1">
+            <div class="setting-label">&#128172; Cha&icirc;ne Twitch (pour les votes du chat)</div>
+            <div style="font-size:11px;color:rgba(255,255,255,.35);margin-bottom:4px">
+              Entre ton nom de cha&icirc;ne Twitch. Les viewers pourront voter avec <b>!jaime</b>, <b>!jaimepas</b> et <b>!fire</b> (1 vote par personne par son).
+            </div>
+            <input type="text" class="setting-input" data-key="twitch_channel"
+                   placeholder="Ex: jordanrondelli" style="text-transform:lowercase">
           </div>
         </div>
         <button class="save-btn" id="saveSettingsBtn">SAUVEGARDER</button>
@@ -397,22 +414,31 @@
       if (played.length === 0) {
         hl.innerHTML = '<div class="queue-empty">Aucun historique</div>';
       } else {
-        hl.innerHTML = played.slice(0, 20).map(t => `
+        hl.innerHTML = played.slice(0, 50).map(t => {
+          const total = (t.fire || 0) + (t.up || 0) + (t.down || 0);
+          const score = total > 0 ? Math.round(((t.fire || 0) + (t.up || 0)) / total * 100) : 0;
+          const scoreColor = score >= 70 ? '#6dff80' : score >= 40 ? '#ffaa40' : '#ff6060';
+          return `
           <div class="queue-item" data-id="${t.id}">
             <div class="queue-icon" style="opacity:.4">${t.type === 'upload' ? '&#127925;' : '&#127909;'}</div>
             <div class="queue-info">
-              <div class="queue-title" style="opacity:.6">${esc(t.title)}</div>
+              <div class="queue-title" style="opacity:.8">${esc(t.title)}</div>
               <div class="queue-meta">
                 <span>${esc(t.artist || 'Inconnu')}</span>
                 <span>par ${esc(t.submitted_by)}</span>
-                <span>&#128293; ${t.fire || 0} &#128077; ${t.up || 0} &#128078; ${t.down || 0}</span>
+              </div>
+              <div class="queue-meta" style="margin-top:4px">
+                <span>&#128293; ${t.fire || 0}</span>
+                <span>&#128077; ${t.up || 0}</span>
+                <span>&#128078; ${t.down || 0}</span>
+                <span style="color:${scoreColor};font-weight:700;font-size:13px">SCORE: ${score}%</span>
               </div>
             </div>
             <div class="queue-actions">
               <button class="q-btn reject" onclick="deleteTrack(${t.id})">&#128465;</button>
             </div>
-          </div>
-        `).join('');
+          </div>`;
+        }).join('');
       }
     }
 
@@ -469,6 +495,11 @@
           el.value = settings[key];
         }
       });
+      // Update live % displays
+      const sensEl = document.querySelector('[data-key="power_sensitivity"]');
+      if (sensEl) document.getElementById('sensitivityPct').textContent = Math.round(sensEl.value * 100) + '%';
+      const relEl = document.querySelector('[data-key="power_release"]');
+      if (relEl) document.getElementById('releasePct').textContent = Math.round(relEl.value * 1000) / 10;
     }
 
     // Toggle switches

@@ -1350,12 +1350,10 @@ function loadVotesForCurrentTrack() {
 }
 loadVotesForCurrentTrack();
 
-// Simulated chat votes (local only for ambiance)
+// Poll Twitch/real votes every 3s
 setInterval(() => {
-  const keys = ['fire', 'fire', 'fire', 'up', 'up', 'down', 'fire', 'up'];
-  votes[keys[Math.floor(Math.random() * keys.length)]]++;
-  updateVoteDisplay();
-}, 2000 + Math.random() * 2000);
+  loadVotesForCurrentTrack();
+}, 3000);
 
 // ===== EMOJI SPLASH EFFECT =====
 function showEmojiSplash(emoji, x, y) {
@@ -1502,7 +1500,7 @@ function updateTrackInfo(item) {
   }
   trackTitleEl.textContent = item.title || 'Sans titre';
   trackArtistEl.textContent = item.artist || '';
-  trackSubmitterEl.textContent = item.submitted_by ? `par ${item.submitted_by}` : '';
+  trackSubmitterEl.textContent = item.submitted_by ? `Propos\u00e9 par ${item.submitted_by}` : '';
 }
 
 async function fetchAndLoadQueue(type) {
