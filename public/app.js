@@ -1240,8 +1240,26 @@ async function loadTrack(index) {
     pauseOffset = 0;
     playAudio();
   } catch (err) {
-    alert('Impossible de lire ce fichier audio. Essaie un autre format (MP3, WAV, OGG).');
-    console.error('Audio decode error:', err);
+    console.error('Audio decode error:', err, 'Track:', playlist[index]?.name);
+    // Skip to next track instead of blocking with alert
+    if (playlist.length > 1 && index + 1 < playlist.length) {
+      loadingOverlay.classList.remove('visible');
+      const next = index + 1;
+      currentTrackIndex = next;
+      const bufferCopy2 = playlist[next].arrayBuffer.slice(0);
+      try {
+        audioBuffer = await audioCtx.decodeAudioData(bufferCopy2);
+        extractWaveformData(audioBuffer);
+        prescanTrackCriteria(audioBuffer);
+        detectedBPM = await detectBPM(audioBuffer);
+        resizeCanvases();
+        drawMiniWaveform();
+        pauseOffset = 0;
+        playAudio();
+      } catch (e2) {
+        console.error('Next track also failed:', e2);
+      }
+    }
   } finally {
     loadingOverlay.classList.remove('visible');
   }
@@ -1499,20 +1517,43 @@ async function fetchAndLoadQueue(type) {
     }
 
     if (type === 'upload') {
-      // Load all uploads into playlist
+      // Load uploads one at a time — start playing the first one immediately
       loadingOverlay.classList.add('visible');
+      let firstLoaded = false;
       for (const item of serverQueue) {
         try {
           const response = await fetch(item.file_path);
+          if (!response.ok) {
+            console.error('HTTP error loading:', item.title, response.status);
+            continue;
+          }
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('text/html')) {
+            console.error('Got HTML instead of audio for:', item.title, item.file_path);
+            continue;
+          }
           const arrayBuffer = await response.arrayBuffer();
+          if (arrayBuffer.byteLength < 1000) {
+            console.error('File too small, skipping:', item.title, arrayBuffer.byteLength);
+            continue;
+          }
           playlist.push({ name: item.title, arrayBuffer, queueItem: item });
+
+          // Start playing as soon as the first track is ready
+          if (!firstLoaded) {
+            firstLoaded = true;
+            loadingOverlay.classList.remove('visible');
+            updateTransportButtons();
+            updateQueueCounter();
+            await loadTrack(0);
+          }
         } catch (err) {
           console.error('Failed to load:', item.title, err);
         }
       }
       loadingOverlay.classList.remove('visible');
 
-      if (playlist.length > 0) {
+      if (playlist.length > 0 && !firstLoaded) {
         updateTransportButtons();
         updateQueueCounter();
         await loadTrack(0);
