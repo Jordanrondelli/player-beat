@@ -587,9 +587,9 @@ function drawWaveform(currentTime) {
     criteriaSmooth.loudness = smooth(criteriaSmooth.loudness, loudN, 0.25, 0.06);
 
     const s = criteriaSmooth;
-    // Weighted sum — Sub+Bass+Kick dominant (60%) for heavy low-end responsiveness
-    const base = s.sub * 0.25 + s.bass * 0.25 + s.kick * 0.20 +
-                 s.fullness * 0.15 + s.loudness * 0.15;
+    // Weighted sum — Sub+Bass heavy (40%) for 808/trap responsiveness
+    const base = s.sub * 0.20 + s.bass * 0.20 + s.kick * 0.15 +
+                 s.fullness * 0.20 + s.loudness * 0.25;
 
     // Convergence bonus reduced to 25% — prevents artificial inflation
     const minCore = Math.min(s.sub, s.bass, s.fullness, s.loudness);
