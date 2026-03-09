@@ -348,6 +348,9 @@
           </div>
         </div>
         <button class="save-btn" id="saveSettingsBtn">SAUVEGARDER</button>
+        <div style="margin-top:16px; padding-top:16px; border-top:1px solid rgba(255,255,255,.1);">
+          <button class="save-btn" id="resetVotesBtn" style="background:linear-gradient(135deg,#cc3300,#991100); width:auto; padding:10px 24px; font-size:13px;">&#128465; RESET TOUS LES VOTES</button>
+        </div>
       </div>
     </div>
 
@@ -538,6 +541,17 @@
       const btn = document.getElementById('saveSettingsBtn');
       btn.textContent = '\u2713 SAUVEGARD\u00c9';
       setTimeout(() => btn.textContent = 'SAUVEGARDER', 2000);
+    });
+
+    // ===== RESET VOTES =====
+    document.getElementById('resetVotesBtn').addEventListener('click', async () => {
+      if (!confirm('Remettre tous les votes à zéro ?')) return;
+      const res = await fetch('/api/votes', { method: 'DELETE' });
+      if (res.ok) {
+        const btn = document.getElementById('resetVotesBtn');
+        btn.textContent = '✅ Votes réinitialisés !';
+        setTimeout(() => btn.innerHTML = '&#128465; RESET TOUS LES VOTES', 2000);
+      }
     });
 
     // ===== LOGOUT =====

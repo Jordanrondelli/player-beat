@@ -335,6 +335,32 @@ app.post('/api/votes', async (req, res) => {
   res.json({ fire: 0, up: 0, down: 0 });
 });
 
+// Reset all votes (admin only)
+app.delete('/api/votes', requireAdmin, async (req, res) => {
+  await pool.query('UPDATE votes SET fire = 0, up = 0, down = 0');
+  await pool.query('DELETE FROM twitch_votes');
+  res.json({ success: true });
+});
+
+// ===== LEGEND WALL API =====
+app.get('/api/legend', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT q.title, q.artist, q.submitted_by, v.fire
+      FROM votes v JOIN queue q ON v.queue_id = q.id
+      WHERE v.fire > 0 AND q.status = 'played'
+      ORDER BY v.fire DESC LIMIT 1
+    `);
+    if (rows.length > 0) {
+      res.json(rows[0]);
+    } else {
+      res.json(null);
+    }
+  } catch (e) {
+    res.json(null);
+  }
+});
+
 // ===== SETTINGS API =====
 
 app.get('/api/settings', async (req, res) => {

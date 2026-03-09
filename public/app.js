@@ -1021,6 +1021,8 @@ function detectBPM(buffer) {
 
 // ===== HAMMER VISUALS =====
 function updateHammerVisuals(pct, kick) {
+  // Skip all hammer visuals if power block is disabled
+  if (playerSettings.power_block_enabled === 'false') return;
   const hPctEl = document.getElementById('hammerPct');
   if (!hPctEl) return;
 
@@ -1702,6 +1704,28 @@ setInterval(() => {
   loadVotesForCurrentTrack();
 }, 3000);
 
+// ===== MUR DES LÉGENDES =====
+async function loadLegend() {
+  try {
+    const res = await fetch('/api/legend');
+    const data = await res.json();
+    const card = document.getElementById('legendCard');
+    if (!card) return;
+    if (data && data.fire > 0) {
+      document.getElementById('legendUser').textContent = data.submitted_by || 'Anonyme';
+      document.getElementById('legendTrack').textContent = (data.title || 'Sans titre') + (data.artist ? ' — ' + data.artist : '');
+      document.getElementById('legendFire').textContent = '\uD83D\uDD25 ' + data.fire + ' FIRE';
+      card.style.display = '';
+    } else {
+      card.style.display = 'none';
+    }
+  } catch (e) {
+    // Silently fail
+  }
+}
+loadLegend();
+setInterval(loadLegend, 10000);
+
 // ===== EMOJI SPLASH EFFECT =====
 function showEmojiSplash(emoji, x, y) {
   const el = document.createElement('div');
@@ -1715,7 +1739,12 @@ function showEmojiSplash(emoji, x, y) {
 
 // Vote button listeners
 function skipToNext() {
-  if (playlist.length <= 1) return;
+  if (playlist.length === 0) return;
+  if (playlist.length === 1) {
+    // Only one track — reload it (will re-trigger from start)
+    loadTrack(0);
+    return;
+  }
   const next = (currentTrackIndex + 1) % playlist.length;
   loadTrack(next);
 }

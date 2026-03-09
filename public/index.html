@@ -103,14 +103,14 @@
             </div>
             <div class="transport-center">
               <button class="transport-btn" id="prevBtn" aria-label="Son précédent">
-                <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" transform="scale(-1,1) translate(-24,0)"/></svg>
+                <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6h2v12H6zm12 0l-9 6 9 6V6z"/></svg>
               </button>
               <button class="play-btn" id="playBtn" aria-label="Lecture / Pause">
                 <img src="play.png" alt="Play" class="play-img" id="playImg">
                 <img src="pause.png" alt="Pause" class="pause-img" id="pauseImg" style="display:none;">
               </button>
               <button class="transport-btn" id="nextBtn" aria-label="Son suivant">
-                <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><path d="M6 6l9 6-9 6V6zm10 0h2v12h-2V6z"/></svg>
               </button>
             </div>
           </div>
@@ -154,6 +154,15 @@
           <div class="chat-bar-bg"><div class="chat-bar-fill" id="chatBar3" style="width:14%"></div></div>
           <span class="chat-count" id="chatCount3">(111)</span>
         </div>
+      </div>
+
+      <!-- Mur des Légendes -->
+      <div class="legend-card" id="legendCard" style="display:none;">
+        <div class="legend-crown">&#128081;</div>
+        <div class="legend-title">MUR DES L&Eacute;GENDES</div>
+        <div class="legend-user" id="legendUser"></div>
+        <div class="legend-track" id="legendTrack"></div>
+        <div class="legend-fire" id="legendFire"></div>
       </div>
 
       <!-- Vote bar: pouce rouge | FIRE | pouce vert -->
