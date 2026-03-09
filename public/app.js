@@ -614,17 +614,17 @@ function drawWaveform(currentTime) {
     criteriaSmooth.lowHighRatio = smooth(criteriaSmooth.lowHighRatio, lowHighN, 0.45, 0.06);
 
     const s = criteriaSmooth;
-    // Weighted sum — sub/kick dominant, low/high ratio separates drops from buildups
-    const base = s.sub * 0.22 + s.bass * 0.18 + s.kick * 0.20 +
-                 s.fullness * 0.10 + s.loudness * 0.15 + s.lowHighRatio * 0.15;
+    // Weighted sum — heavily bass/sub/kick dominant to separate drops from buildups
+    const base = s.sub * 0.26 + s.bass * 0.22 + s.kick * 0.22 +
+                 s.fullness * 0.05 + s.loudness * 0.10 + s.lowHighRatio * 0.15;
 
-    // Convergence bonus reduced to 25% — prevents artificial inflation
+    // Convergence bonus reduced to 15% — prevents artificial inflation from balanced but weak sections
     const minCore = Math.min(s.sub, s.bass, s.fullness, s.loudness);
-    const score = base * 0.75 + minCore * 0.25;
+    const score = base * 0.85 + minCore * 0.15;
 
-    // Power curve — score^1.6 for easier overload access
-    // Quiet passage (score 0.5) → shaped 33%. Drop (score 0.9) → shaped 85%.
-    const shaped = Math.pow(Math.min(1, score), 1.6) * 100;
+    // Power curve — score^2.2 compresses mid-range aggressively
+    // Buildup (score 0.7) → shaped 46%. Drop (score 0.95) → shaped 89%.
+    const shaped = Math.pow(Math.min(1, score), 2.2) * 100;
 
     // Charge dynamics: instant rise, slow release (~2s) for momentum retention
     const diff = shaped - hammerCharge;
@@ -642,7 +642,7 @@ function drawWaveform(currentTime) {
     : (Math.abs(pctDiff) > 8 ? 0.1 : 0.05);
   displayedHammerPct += pctDiff * pctAlpha;
   const hammerPct = Math.round(displayedHammerPct);
-  updateHammerVisuals(hammerPct, kickDecay);
+  updateHammerVisuals(hammerPct, kickDecay, isKick);
 
 
 
@@ -902,7 +902,7 @@ function detectBPM(buffer) {
 }
 
 // ===== HAMMER VISUALS =====
-function updateHammerVisuals(pct, kick) {
+function updateHammerVisuals(pct, kick, isKick) {
   const hPctEl = document.getElementById('hammerPct');
   if (!hPctEl) return;
 
@@ -913,14 +913,42 @@ function updateHammerVisuals(pct, kick) {
   if (gaugeFill) gaugeFill.style.strokeDashoffset = offset;
   if (gaugeGlow) gaugeGlow.style.strokeDashoffset = offset;
 
-  // Scale hammer icon with percentage — bigger as power grows
+  // Hammer icon: continuous breathing + kick-reactive impacts
   const hammerIconWrap = document.getElementById('hammerIconWrap');
+  const pwr = pct / 100;
   if (hammerIconWrap) {
     const baseSize = 42;
-    const maxExtra = 14; // grows up to +14px at 100%
-    const size = baseSize + (pct / 100) * maxExtra;
+    const maxExtra = 14;
+    const size = baseSize + pwr * maxExtra;
     hammerIconWrap.style.width = size + 'px';
     hammerIconWrap.style.height = size + 'px';
+  }
+
+  // Breathing: gentle continuous scale pulse based on power (no BPM needed)
+  if (hammerIconEl && !hammerIconEl._kickActive) {
+    const breathScale = 1 + pwr * 0.08 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004));
+    const breathGlow = pwr > 0.3 ? `drop-shadow(0 0 ${pwr * 8}px rgba(255,${180 - pwr * 120},50,${pwr * 0.5}))` : 'none';
+    hammerIconEl.style.transition = 'transform 0.15s ease-out';
+    hammerIconEl.style.transform = `rotate(0deg) scale(${breathScale})`;
+    hammerIconEl.style.filter = breathGlow;
+  }
+
+  // Kick-reactive hammer strike — fires on real detected kicks only
+  if (isKick && hammerIconEl && pwr > 0.02) {
+    hammerIconEl._kickActive = true;
+    const intensity = Math.min(1, kick * 1.5);
+    const angle = -10 - intensity * 50;
+    const scl = 1 + intensity * 0.35;
+    hammerIconEl.style.transition = 'none';
+    hammerIconEl.style.transform = `rotate(${angle}deg) scale(${scl})`;
+
+    if (hammerHitTimeout) clearTimeout(hammerHitTimeout);
+    hammerHitTimeout = setTimeout(() => {
+      const returnMs = 100 + (1 - intensity) * 150;
+      hammerIconEl.style.transition = `transform ${returnMs}ms cubic-bezier(.15,1.4,.4,1)`;
+      hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
+      setTimeout(() => { hammerIconEl._kickActive = false; }, returnMs);
+    }, 16);
   }
 
   // Determine stage — follows current percentage dynamically
@@ -1029,44 +1057,9 @@ function triggerHammerActivation(stage) {
 }
 
 function startBeatSync() {
+  // Beat sync is now kick-reactive (handled in updateHammerVisuals)
+  // BPM detection is still used for other features but not for hammer animation
   stopBeatSync();
-  if (!detectedBPM || !hammerIconEl) return;
-  const beatSec = 60 / detectedBPM;
-
-  // Align first beat to audio clock
-  nextBeatTime = audioCtx.currentTime;
-
-  function beatLoop() {
-    if (!isPlaying) return;
-    beatSchedulerId = requestAnimationFrame(beatLoop);
-
-    const now = audioCtx.currentTime;
-    if (now < nextBeatTime) return;
-
-    // Fire the hit and advance to next beat
-    // Self-correcting: always based on absolute beat grid, never drifts
-    while (nextBeatTime <= now) nextBeatTime += beatSec;
-
-    const pwr = hammerCharge / 100;
-    if (pwr < 0.02) return;
-
-    // === HAMMER HIT ANIMATION ===
-    // Phase 1: snap down (instant)
-    const angle = -12 - pwr * 55;   // -12° to -67°
-    const scl = 1 + pwr * 0.4;      // 1x to 1.4x
-    hammerIconEl.style.transition = 'none';
-    hammerIconEl.style.transform = `rotate(${angle}deg) scale(${scl})`;
-
-    // Phase 2: bounce back (springy return)
-    if (hammerHitTimeout) clearTimeout(hammerHitTimeout);
-    hammerHitTimeout = setTimeout(() => {
-      const returnMs = 80 + (1 - pwr) * 120; // 80-200ms return depending on power
-      hammerIconEl.style.transition = `transform ${returnMs}ms cubic-bezier(.15,1.4,.4,1)`;
-      hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
-    }, 16); // 1 frame delay to ensure snap registers
-  }
-
-  beatLoop();
 }
 
 function stopBeatSync() {
