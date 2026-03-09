@@ -727,9 +727,14 @@ body {
 
 /* ===== MEILLEUR SON ===== */
 .legend-card {
-  position: absolute; bottom: -90px; right: 20px; z-index: 30;
-  width: 220px; padding: 14px 18px; border-radius: 18px;
-  background: url('Murlegende.png') center / 100% 100% no-repeat !important;
+  position: absolute; bottom: -120px; right: 20px; z-index: 30;
+  width: 200px;
+  aspect-ratio: 830 / 900;
+  box-sizing: border-box;
+  /* Crown takes ~15% top of image, text sits in the dark center area */
+  padding: 55px 30px 22px;
+  border-radius: 18px;
+  background: url('Murlegende.png') center / contain no-repeat !important;
   border: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -737,6 +742,8 @@ body {
   animation: floatLegend 7s ease-in-out infinite;
   transform-style: preserve-3d;
   overflow: hidden;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
 }
 .legend-card::before {
   content: '' !important; display: block !important;
@@ -763,16 +770,6 @@ body {
   33% { transform: rotateX(-0.5deg) rotateY(1deg) translateY(-6px) translateZ(12px); }
   66% { transform: rotateX(0.8deg) rotateY(-0.5deg) translateY(-3px) translateZ(9px); }
 }
-.legend-crown {
-  font-size: 32px; text-align: center; line-height: 1;
-  filter: drop-shadow(0 0 12px rgba(255, 200, 50, .6));
-  animation: crownBounce 2s ease-in-out infinite;
-  margin-bottom: 2px;
-}
-@keyframes crownBounce {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-4px) scale(1.08); }
-}
 .legend-title {
   font-family: 'Bangers', cursive; font-size: 15px; letter-spacing: 4px;
   text-align: center; color: rgba(255, 200, 80, .9);
@@ -780,14 +777,16 @@ body {
   margin: 0 0 2px;
 }
 .legend-user {
-  font-family: 'Bangers', cursive; font-size: 26px; text-align: center;
+  font-family: 'Bangers', cursive; font-size: 22px; text-align: center;
   color: #fff; letter-spacing: 1px;
   text-shadow: 0 0 15px rgba(255, 150, 0, .5), 0 2px 4px rgba(0, 0, 0, .5);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
 }
 .legend-track {
-  font-size: 12px; text-align: center; color: rgba(255, 255, 255, .55);
+  font-size: 11px; text-align: center; color: rgba(255, 255, 255, .55);
   margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
 }
 .legend-fire {
   font-family: 'Bangers', cursive; font-size: 22px; text-align: center;
