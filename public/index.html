@@ -23,6 +23,18 @@
     <div class="fire-overlay-embers" id="emberContainer"></div>
   </div>
 
+  <!-- Fire particle canvas (GPU accelerated) -->
+  <canvas id="fireParticleCanvas" style="position:fixed;inset:0;z-index:910;pointer-events:none;"></canvas>
+
+  <!-- Combo display -->
+  <div id="fireCombo" class="fire-combo">
+    <span class="fire-combo-x">x</span><span class="fire-combo-num" id="fireComboNum">1</span>
+    <span class="fire-combo-label">COMBO</span>
+  </div>
+
+  <!-- Shockwave ring -->
+  <div id="fireShockwave" class="fire-shockwave"></div>
+
   <!-- Loading overlay -->
   <div class="loading-overlay" id="loadingOverlay">
     <span class="loading-text">CHARGEMENT...</span>

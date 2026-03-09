@@ -891,6 +891,7 @@ body {
 /* ===== FIRE PANIC BUTTON ===== */
 .fire-wrap {
   display: flex; align-items: center; justify-content: center;
+  position: relative;
 }
 .fire-btn {
   width: 380px; height: 150px; border: none; cursor: pointer;
@@ -900,7 +901,8 @@ body {
     drop-shadow(0 0 10px rgba(255, 30, 0, .6))
     drop-shadow(0 0 20px rgba(255, 20, 0, .3));
   animation: panic 1.2s ease-in-out infinite alternate, floatFire 3.5s ease-in-out infinite;
-  transition: transform .05s, filter .05s;
+  transition: transform .08s cubic-bezier(.2,.8,.3,1.4), filter .08s;
+  will-change: transform, filter;
 }
 @keyframes floatFire {
   0%, 100% { transform: translateY(0) rotate(-.5deg) }
@@ -930,10 +932,106 @@ body {
   100% { filter: brightness(1.1) saturate(1.12); }
 }
 .fire-btn:hover { transform: translateY(-5px) scale(1.03) !important; }
-.fire-btn:active {
-  transform: translateY(6px) scale(.95) !important;
-  filter: drop-shadow(0 0 5px rgba(255, 40, 15, .5)) drop-shadow(0 0 12px rgba(255, 40, 15, .2)) !important;
-  animation: none !important; transition: transform .03s;
+
+/* Squish down on press — spring back handled by JS */
+.fire-btn.fire-squish {
+  transform: translateY(8px) scaleY(.75) scaleX(1.15) !important;
+  filter:
+    drop-shadow(0 0 15px rgba(255, 0, 0, 1))
+    drop-shadow(0 0 30px rgba(255, 40, 0, 1))
+    drop-shadow(0 0 60px rgba(255, 20, 0, .7)) !important;
+  animation: none !important;
+  transition: transform .04s cubic-bezier(.6,.04,.98,.335), filter .04s !important;
+}
+.fire-btn.fire-spring {
+  transform: translateY(-12px) scaleY(1.12) scaleX(.92) !important;
+  animation: none !important;
+  transition: transform .15s cubic-bezier(.175,.885,.32,1.275), filter .15s !important;
+}
+.fire-btn.fire-settle {
+  transform: translateY(0) scaleY(1) scaleX(1) !important;
+  transition: transform .3s cubic-bezier(.175,.885,.32,1.275) !important;
+}
+
+/* ===== FIRE COMBO DISPLAY ===== */
+.fire-combo {
+  position: fixed; z-index: 920; pointer-events: none;
+  display: flex; align-items: baseline; gap: 2px;
+  opacity: 0; transform: scale(.5); transition: opacity .15s, transform .15s;
+  text-shadow: 0 0 20px rgba(255, 60, 0, .8), 0 0 40px rgba(255, 30, 0, .5),
+               0 2px 4px rgba(0, 0, 0, .6);
+  font-family: 'Bangers', cursive;
+  /* Positioned by JS near button */
+  top: 50%; left: 50%;
+}
+.fire-combo.visible {
+  opacity: 1; transform: scale(1);
+  transition: opacity .1s, transform .2s cubic-bezier(.175,.885,.32,1.275);
+}
+.fire-combo.fire-combo-pop {
+  transform: scale(1.4) !important;
+  transition: transform .08s !important;
+}
+.fire-combo-x {
+  font-size: 28px; color: #ff8800; letter-spacing: -2px;
+}
+.fire-combo-num {
+  font-size: 72px; color: #fff;
+  background: linear-gradient(180deg, #fff 30%, #ff8800 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.fire-combo-label {
+  font-size: 18px; color: #ff6600; letter-spacing: 4px; margin-left: 6px;
+}
+/* Combo tiers */
+.fire-combo.tier-2 .fire-combo-num { font-size: 84px; }
+.fire-combo.tier-2 { text-shadow: 0 0 30px rgba(255, 60, 0, 1), 0 0 60px rgba(255, 30, 0, .7); }
+.fire-combo.tier-3 .fire-combo-num { font-size: 100px; }
+.fire-combo.tier-3 {
+  text-shadow: 0 0 40px rgba(255, 60, 0, 1), 0 0 80px rgba(255, 30, 0, .8),
+               0 0 120px rgba(255, 0, 0, .4);
+}
+
+/* ===== FIRE SHOCKWAVE ===== */
+.fire-shockwave {
+  position: fixed; z-index: 900; pointer-events: none;
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 3px solid rgba(255, 100, 0, .8);
+  box-shadow: 0 0 20px rgba(255, 60, 0, .6), inset 0 0 20px rgba(255, 60, 0, .3);
+  opacity: 0; transform: scale(0);
+}
+.fire-shockwave.active {
+  animation: shockwaveExpand .6s cubic-bezier(.2,.8,.3,1) forwards;
+}
+@keyframes shockwaveExpand {
+  0%   { transform: scale(0); opacity: 1; border-width: 4px; }
+  60%  { opacity: .6; border-width: 2px; }
+  100% { transform: scale(25); opacity: 0; border-width: 1px; }
+}
+
+/* ===== CHROMATIC ABERRATION (high combo) ===== */
+.chromatic-active {
+  animation: chromaticSplit .3s ease-out !important;
+}
+@keyframes chromaticSplit {
+  0%   { filter: none; }
+  15%  { filter: blur(0) drop-shadow(-3px 0 0 rgba(255,0,0,.5)) drop-shadow(3px 0 0 rgba(0,100,255,.5)); }
+  40%  { filter: blur(0) drop-shadow(-1px 0 0 rgba(255,0,0,.3)) drop-shadow(1px 0 0 rgba(0,100,255,.3)); }
+  100% { filter: none; }
+}
+
+/* ===== SCREEN FLASH (upgraded) ===== */
+.fire-flash {
+  position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+}
+.fire-flash-inner {
+  position: absolute; inset: 0;
+  animation: flashBang .35s ease-out forwards;
+}
+@keyframes flashBang {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 /* ===== SOURCE TOGGLE & WIPE (inside transport) ===== */

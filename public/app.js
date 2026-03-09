@@ -1699,10 +1699,255 @@ document.getElementById('btnUp').addEventListener('click', function () {
   skipToNext();
 });
 
-// ===== FIRE BUTTON =====
+// ===== FIRE BUTTON (COMBO SYSTEM + PARTICLES + SOUND) =====
 let fireTimeout = null;
 let fireFadeTimeout = null;
 
+// --- Combo state ---
+let fireCombo = 0;
+let fireComboTimer = null;
+let fireComboDecayTimer = null;
+const COMBO_WINDOW = 1200; // ms to keep combo alive
+const fireComboEl = document.getElementById('fireCombo');
+const fireComboNumEl = document.getElementById('fireComboNum');
+
+// --- Canvas particle system ---
+const fireParticleCanvas = document.getElementById('fireParticleCanvas');
+const fpCtx = fireParticleCanvas.getContext('2d');
+let fireParticles = [];
+let fireParticleRAF = null;
+
+function resizeFireCanvas() {
+  fireParticleCanvas.width = window.innerWidth * devicePixelRatio;
+  fireParticleCanvas.height = window.innerHeight * devicePixelRatio;
+  fireParticleCanvas.style.width = window.innerWidth + 'px';
+  fireParticleCanvas.style.height = window.innerHeight + 'px';
+  fpCtx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+}
+resizeFireCanvas();
+window.addEventListener('resize', resizeFireCanvas);
+
+function spawnFireParticles(cx, cy, count, intensity) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = (3 + Math.random() * 8) * intensity;
+    const size = 2 + Math.random() * 4 * intensity;
+    const life = 0.6 + Math.random() * 0.8;
+    // Color: orange → yellow → white based on intensity
+    const hue = 15 + Math.random() * 30; // 15-45 (red-orange-yellow)
+    const sat = 80 + Math.random() * 20;
+    const lum = 50 + Math.random() * 30 + intensity * 15;
+    fireParticles.push({
+      x: cx, y: cy,
+      vx: Math.cos(angle) * speed + (Math.random() - .5) * 2,
+      vy: Math.sin(angle) * speed - Math.random() * 3, // bias upward
+      size, life, maxLife: life,
+      hue, sat, lum,
+      gravity: 0.15 + Math.random() * 0.1,
+      friction: 0.97 + Math.random() * 0.02,
+      type: Math.random() < 0.3 ? 'spark' : 'ember',
+    });
+  }
+  if (!fireParticleRAF) tickFireParticles();
+}
+
+function spawnTrailParticles(cx, cy, count) {
+  // Upward trail particles (like embers rising)
+  for (let i = 0; i < count; i++) {
+    const delay = Math.random() * 500;
+    setTimeout(() => {
+      fireParticles.push({
+        x: cx + (Math.random() - .5) * 200,
+        y: cy + Math.random() * 50,
+        vx: (Math.random() - .5) * 1.5,
+        vy: -(2 + Math.random() * 4),
+        size: 1.5 + Math.random() * 3,
+        life: 1.5 + Math.random() * 2,
+        maxLife: 2.5,
+        hue: 20 + Math.random() * 25,
+        sat: 90, lum: 55 + Math.random() * 20,
+        gravity: -0.02, // float up
+        friction: 0.995,
+        type: 'trail',
+      });
+    }, delay);
+  }
+}
+
+function tickFireParticles() {
+  fpCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+  for (let i = fireParticles.length - 1; i >= 0; i--) {
+    const p = fireParticles[i];
+    p.life -= 0.016; // ~60fps
+    if (p.life <= 0) { fireParticles.splice(i, 1); continue; }
+
+    p.vy += p.gravity;
+    p.vx *= p.friction;
+    p.vy *= p.friction;
+    p.x += p.vx;
+    p.y += p.vy;
+
+    const alpha = Math.min(1, p.life / (p.maxLife * 0.3)); // fade in last 30%
+    const sizeNow = p.size * (0.3 + 0.7 * (p.life / p.maxLife));
+
+    if (p.type === 'spark') {
+      // Bright spark with motion trail
+      fpCtx.beginPath();
+      fpCtx.moveTo(p.x, p.y);
+      fpCtx.lineTo(p.x - p.vx * 2, p.y - p.vy * 2);
+      fpCtx.strokeStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha})`;
+      fpCtx.lineWidth = sizeNow * 0.7;
+      fpCtx.lineCap = 'round';
+      fpCtx.stroke();
+    } else {
+      // Glowing ember
+      fpCtx.beginPath();
+      fpCtx.arc(p.x, p.y, sizeNow, 0, Math.PI * 2);
+      fpCtx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha})`;
+      fpCtx.fill();
+      // Glow
+      fpCtx.beginPath();
+      fpCtx.arc(p.x, p.y, sizeNow * 2.5, 0, Math.PI * 2);
+      fpCtx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha * 0.15})`;
+      fpCtx.fill();
+    }
+  }
+
+  if (fireParticles.length > 0) {
+    fireParticleRAF = requestAnimationFrame(tickFireParticles);
+  } else {
+    fireParticleRAF = null;
+  }
+}
+
+// --- Procedural fire sound via Web Audio API ---
+function playFireSound(combo) {
+  const ctx = audioCtx;
+  const now = ctx.currentTime;
+  const intensity = Math.min(1, combo / 10);
+
+  // Noise burst (whoosh)
+  const bufSize = ctx.sampleRate * 0.15;
+  const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const noise = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) {
+    noise[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.3));
+  }
+  const noiseNode = ctx.createBufferSource();
+  noiseNode.buffer = noiseBuf;
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'bandpass';
+  noiseFilter.frequency.value = 800 + intensity * 1200;
+  noiseFilter.Q.value = 0.8;
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.15 + intensity * 0.15, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+  noiseNode.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
+  noiseNode.start(now);
+  noiseNode.stop(now + 0.2);
+
+  // Sub-bass thump
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(80 + intensity * 40, now);
+  osc.frequency.exponentialRampToValueAtTime(30, now + 0.15);
+  const oscGain = ctx.createGain();
+  oscGain.gain.setValueAtTime(0.25 + intensity * 0.2, now);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+  osc.connect(oscGain).connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.25);
+
+  // High-combo: add rising tone
+  if (combo >= 5) {
+    const riseOsc = ctx.createOscillator();
+    riseOsc.type = 'sawtooth';
+    riseOsc.frequency.setValueAtTime(200, now);
+    riseOsc.frequency.exponentialRampToValueAtTime(600 + combo * 50, now + 0.1);
+    const riseGain = ctx.createGain();
+    riseGain.gain.setValueAtTime(0.06, now);
+    riseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    riseOsc.connect(riseGain).connect(ctx.destination);
+    riseOsc.start(now);
+    riseOsc.stop(now + 0.15);
+  }
+}
+
+// --- Shockwave effect ---
+function triggerShockwave(cx, cy, combo) {
+  const el = document.getElementById('fireShockwave');
+  el.classList.remove('active');
+  el.style.left = (cx - 20) + 'px';
+  el.style.top = (cy - 20) + 'px';
+  // Scale shockwave with combo
+  const scale = 1 + Math.min(combo, 10) * 0.15;
+  el.style.setProperty('--sw-scale', scale);
+  const borderColor = combo >= 5 ? 'rgba(255, 200, 50, .9)' : 'rgba(255, 100, 0, .8)';
+  el.style.borderColor = borderColor;
+  void el.offsetWidth;
+  el.classList.add('active');
+  setTimeout(() => el.classList.remove('active'), 700);
+}
+
+// --- Button squish animation ---
+function squishButton(btn) {
+  btn.classList.remove('fire-spring', 'fire-settle');
+  btn.classList.add('fire-squish');
+  setTimeout(() => {
+    btn.classList.remove('fire-squish');
+    btn.classList.add('fire-spring');
+    setTimeout(() => {
+      btn.classList.remove('fire-spring');
+      btn.classList.add('fire-settle');
+      setTimeout(() => btn.classList.remove('fire-settle'), 300);
+    }, 150);
+  }, 50);
+}
+
+// --- Combo display ---
+function updateComboDisplay(cx, cy) {
+  fireComboNumEl.textContent = fireCombo;
+  // Position near button
+  fireComboEl.style.left = (cx + 60) + 'px';
+  fireComboEl.style.top = (cy - 60) + 'px';
+
+  // Tier classes
+  fireComboEl.classList.remove('tier-2', 'tier-3');
+  if (fireCombo >= 10) fireComboEl.classList.add('tier-3');
+  else if (fireCombo >= 5) fireComboEl.classList.add('tier-2');
+
+  // Show with pop
+  fireComboEl.classList.add('visible');
+  fireComboEl.classList.add('fire-combo-pop');
+  setTimeout(() => fireComboEl.classList.remove('fire-combo-pop'), 100);
+}
+
+function hideCombo() {
+  fireComboEl.classList.remove('visible', 'tier-2', 'tier-3');
+  fireCombo = 0;
+}
+
+// --- Screen flash (combo-aware) ---
+function triggerFlash(combo) {
+  const flash = document.createElement('div');
+  flash.className = 'fire-flash';
+  const intensity = Math.min(1, combo / 8);
+  const inner = document.createElement('div');
+  inner.className = 'fire-flash-inner';
+  inner.style.background = `radial-gradient(ellipse at center,
+    rgba(255, ${200 - intensity * 100}, ${150 - intensity * 100}, ${0.4 + intensity * 0.3}) 0%,
+    rgba(255, 60, 0, ${0.2 + intensity * 0.2}) 40%,
+    transparent 70%)`;
+  flash.appendChild(inner);
+  document.body.appendChild(flash);
+  inner.addEventListener('animationend', () => flash.remove());
+}
+
+// --- Fire overlay (flames + embers) ---
 function triggerFire() {
   const overlay = document.getElementById('fireOverlay');
   const flameBottom = document.getElementById('flameBottom');
@@ -1717,16 +1962,17 @@ function triggerFire() {
   flameTop.innerHTML = '';
   emberContainer.innerHTML = '';
 
-  // Set BPM-synced pulse speed
   const bpm = detectedBPM || 120;
-  const beatDur = (60 / bpm) + 's';
-  overlay.style.setProperty('--beat-dur', beatDur);
+  overlay.style.setProperty('--beat-dur', (60 / bpm) + 's');
 
-  createFlames(flameBottom, 45, 90, 300, 45, 170);
-  createFlames(flameTop, 20, 55, 170, 35, 110);
+  // Scale flame count with combo
+  const comboMult = Math.min(2, 1 + fireCombo * 0.08);
+  createFlames(flameBottom, Math.floor(45 * comboMult), 90, 300, 45, 170);
+  createFlames(flameTop, Math.floor(20 * comboMult), 55, 170, 35, 110);
 
   const types = ['ember-orange', 'ember-red', 'ember-yellow'];
-  for (let i = 0; i < 100; i++) {
+  const emberCount = Math.floor(100 * comboMult);
+  for (let i = 0; i < emberCount; i++) {
     const ember = document.createElement('div');
     ember.className = 'ember ' + types[Math.floor(Math.random() * 3)];
     ember.style.left = Math.random() * 100 + '%';
@@ -1742,49 +1988,95 @@ function triggerFire() {
   overlay.style.transition = 'opacity .3s';
   overlay.style.opacity = '';
   overlay.classList.remove('on');
-  // Force reflow to restart animation
   void overlay.offsetWidth;
   overlay.classList.add('on');
-  wrapper.classList.add('shaking');
 
+  // Screen shake (intensity scales with combo)
+  const shakeIntensity = Math.min(2, 1 + fireCombo * 0.1);
+  wrapper.style.setProperty('--shake-i', shakeIntensity);
+  wrapper.classList.add('shaking');
   setTimeout(() => wrapper.classList.remove('shaking'), 600);
 
-  // Progressive fade-out: start dimming at 5s, fully gone at 8s
+  // Duration scales with combo
+  const fireDuration = 5000 + Math.min(fireCombo * 500, 5000);
   fireFadeTimeout = setTimeout(() => {
     overlay.style.transition = 'opacity 3s ease-out';
     overlay.style.opacity = '0';
-  }, 5000);
+  }, fireDuration);
 
   fireTimeout = setTimeout(() => {
     overlay.classList.remove('on');
     overlay.style.opacity = '';
     overlay.style.transition = '';
-  }, 8000);
+  }, fireDuration + 3000);
 }
 
+// --- Main fire click handler ---
 document.getElementById('btnFire').addEventListener('click', function () {
   sendVote('fire');
-  triggerFire();
+
+  // Combo tracking
+  fireCombo++;
+  clearTimeout(fireComboTimer);
+  clearTimeout(fireComboDecayTimer);
+  fireComboTimer = setTimeout(() => {
+    // Combo decay: fade out after inactivity
+    fireComboDecayTimer = setTimeout(hideCombo, 300);
+  }, COMBO_WINDOW);
+
   const r = this.getBoundingClientRect();
   const cx = r.left + r.width / 2;
   const cy = r.top + r.height / 2;
 
-  // Flash bang
-  const flash = document.createElement('div');
-  flash.className = 'fire-flash';
-  document.body.appendChild(flash);
-  flash.addEventListener('animationend', () => flash.remove());
+  // 1. Instant button squish
+  squishButton(this);
 
-  // Emoji explosion
-  for (let i = 0; i < 20; i++) {
-    setTimeout(() => {
-      showEmojiSplash('\uD83D\uDD25',
-        cx - 30 + (Math.random() - .5) * 300,
-        cy - 20 + (Math.random() - .5) * 200
-      );
-    }, i * 60);
+  // 2. Procedural sound
+  playFireSound(fireCombo);
+
+  // 3. Canvas particle explosion (scales with combo)
+  const particleCount = Math.min(300, 30 + fireCombo * 25);
+  const intensity = Math.min(2, 0.8 + fireCombo * 0.12);
+  spawnFireParticles(cx, cy, particleCount, intensity);
+
+  // 4. Trailing embers (high combo)
+  if (fireCombo >= 3) {
+    spawnTrailParticles(cx, cy - 50, Math.min(50, fireCombo * 8));
   }
 
+  // 5. Shockwave
+  triggerShockwave(cx, cy, fireCombo);
+
+  // 6. Flash
+  triggerFlash(fireCombo);
+
+  // 7. Fire overlay
+  triggerFire();
+
+  // 8. Combo display
+  if (fireCombo >= 2) {
+    updateComboDisplay(cx, cy);
+  }
+
+  // 9. Chromatic aberration on high combo
+  if (fireCombo >= 5) {
+    const wrapper = document.getElementById('wrapper');
+    wrapper.classList.remove('chromatic-active');
+    void wrapper.offsetWidth;
+    wrapper.classList.add('chromatic-active');
+    setTimeout(() => wrapper.classList.remove('chromatic-active'), 300);
+  }
+
+  // 10. Emoji explosion (scales with combo)
+  const emojiCount = Math.min(40, 10 + fireCombo * 3);
+  for (let i = 0; i < emojiCount; i++) {
+    setTimeout(() => {
+      showEmojiSplash('\uD83D\uDD25',
+        cx - 30 + (Math.random() - .5) * (200 + fireCombo * 20),
+        cy - 20 + (Math.random() - .5) * (150 + fireCombo * 15)
+      );
+    }, i * Math.max(20, 60 - fireCombo * 4));
+  }
 });
 
 // ===== COMMUNITY QUEUE =====
