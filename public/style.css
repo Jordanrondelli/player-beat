@@ -530,7 +530,15 @@ body {
   100% { width: 200px; height: 200px; opacity: 0; border-width: 0.5px; }
 }
 
-/* Stage: COOL (0-40%) — cold blue */
+/* Stage: CHILL (0-15%) — muted violet, relaxed */
+.hammer-card[data-stage="chill"] { border-color: rgba(160,140,220,.15); box-shadow: 0 6px 30px rgba(0,0,0,.4), 0 0 10px rgba(140,120,200,.04); }
+.hammer-card[data-stage="chill"] .gauge-fill { stroke: rgba(160,140,220,.45); }
+.hammer-card[data-stage="chill"] .gauge-glow { stroke: rgba(160,140,220,.12); }
+.hammer-card[data-stage="chill"] .hammer-pct { color: rgba(180,170,220,.55); }
+.hammer-card[data-stage="chill"] .hammer-label { color: rgba(180,170,220,.3); }
+.hammer-card[data-stage="chill"] .hammer-stage { color: rgba(180,170,220,.5); text-shadow: none; }
+
+/* Stage: COOL (15-40%) — cold blue */
 .hammer-card[data-stage="cool"] { border-color: rgba(100,180,255,.2); box-shadow: 0 6px 30px rgba(0,0,0,.45), 0 0 15px rgba(100,180,255,.06); }
 .hammer-card[data-stage="cool"] .gauge-fill { stroke: rgba(100,180,255,.6); }
 .hammer-card[data-stage="cool"] .gauge-glow { stroke: rgba(100,180,255,.2); }

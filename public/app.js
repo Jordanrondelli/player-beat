@@ -235,6 +235,7 @@ const hammerShockwave = document.getElementById('hammerShockwave');
 const hammerStageEl = document.getElementById('hammerStage');
 let currentHammerStage = 'cool';
 let hammerCharge = 0;
+let displayedHammerPct = 0;
 let hammerPeakStage = 'cool';
 let hammerCooldownStart = 0; // timestamp when we dropped below 75%
 // Multi-criteria power scoring state
@@ -577,13 +578,13 @@ function drawWaveform(currentTime) {
     const fullN = norm(fullnessRaw, criteriaMax.fullness);
     const loudN = norm(aLoudRaw, criteriaMax.loudness);
 
-    // Smoothing with separate rise/fall alphas — fast attack, faster decay
+    // Smoothing with separate rise/fall alphas — fast attack, slow release for momentum
     const smooth = (cur, target, up, down) => cur + (target - cur) * (target > cur ? up : down);
-    criteriaSmooth.sub = smooth(criteriaSmooth.sub, subN, 0.25, 0.15);
-    criteriaSmooth.bass = smooth(criteriaSmooth.bass, bassN, 0.25, 0.15);
-    criteriaSmooth.kick = smooth(criteriaSmooth.kick, punchN, 0.30, 0.20);
-    criteriaSmooth.fullness = smooth(criteriaSmooth.fullness, fullN, 0.15, 0.12);
-    criteriaSmooth.loudness = smooth(criteriaSmooth.loudness, loudN, 0.25, 0.15);
+    criteriaSmooth.sub = smooth(criteriaSmooth.sub, subN, 0.25, 0.06);
+    criteriaSmooth.bass = smooth(criteriaSmooth.bass, bassN, 0.25, 0.06);
+    criteriaSmooth.kick = smooth(criteriaSmooth.kick, punchN, 0.30, 0.08);
+    criteriaSmooth.fullness = smooth(criteriaSmooth.fullness, fullN, 0.15, 0.05);
+    criteriaSmooth.loudness = smooth(criteriaSmooth.loudness, loudN, 0.25, 0.06);
 
     const s = criteriaSmooth;
     // Weighted sum — Sub+Bass heavy (40%) for 808/trap responsiveness
@@ -594,17 +595,21 @@ function drawWaveform(currentTime) {
     const minCore = Math.min(s.sub, s.bass, s.fullness, s.loudness);
     const score = base * 0.75 + minCore * 0.25;
 
-    // Aggressive curve — score^2.0 gives massive separation
-    // Quiet passage (score 0.5) → shaped 25%. Drop (score 0.9) → shaped 81%.
-    const shaped = Math.pow(Math.min(1, score), 2.0) * 100;
+    // Power curve — score^1.6 for easier overload access
+    // Quiet passage (score 0.5) → shaped 33%. Drop (score 0.9) → shaped 85%.
+    const shaped = Math.pow(Math.min(1, score), 1.6) * 100;
 
-    // Charge dynamics: fast rise (~0.3s), much faster fall (~0.5s)
+    // Charge dynamics: fast rise (~0.3s), slow release (~2s) for momentum retention
     const diff = shaped - hammerCharge;
-    hammerCharge += diff * (diff > 0 ? 0.14 : 0.10);
+    hammerCharge += diff * (diff > 0 ? 0.14 : 0.035);
     hammerCharge = Math.max(0, Math.min(100, hammerCharge));
   }
 
-  const hammerPct = Math.round(hammerCharge);
+  // Smooth displayed percentage to avoid jittery numbers
+  const targetPct = hammerCharge;
+  const pctDiff = targetPct - displayedHammerPct;
+  displayedHammerPct += pctDiff * (Math.abs(pctDiff) > 8 ? 0.15 : 0.06);
+  const hammerPct = Math.round(displayedHammerPct);
   updateHammerVisuals(hammerPct, kickDecay);
 
 
@@ -887,12 +892,13 @@ function updateHammerVisuals(pct, kick) {
   }
 
   // Determine stage — follows current percentage dynamically
-  const stageOrder = ['cool', 'chaud', 'enfeu', 'lourd', 'overload'];
-  let newStage = 'cool';
+  const stageOrder = ['chill', 'cool', 'chaud', 'enfeu', 'lourd', 'overload'];
+  let newStage = 'chill';
   if (pct >= 100) { newStage = 'overload'; }
   else if (pct >= 80) { newStage = 'lourd'; }
   else if (pct >= 60) { newStage = 'enfeu'; }
   else if (pct >= 40) { newStage = 'chaud'; }
+  else if (pct >= 15) { newStage = 'cool'; }
 
   // Cooldown: if below 75% for 5 continuous seconds, reset peak so animations can retrigger
   const now = performance.now();
@@ -919,7 +925,7 @@ function updateHammerVisuals(pct, kick) {
   if (newStage !== currentHammerStage) {
     currentHammerStage = newStage;
     if (hammerCard) hammerCard.setAttribute('data-stage', newStage);
-    const labels = { cool: '', chaud: 'CHAUD', enfeu: 'EN FEU', lourd: 'TRÈS LOURD', overload: 'OVERLOAD' };
+    const labels = { chill: 'CHILL', cool: 'COOL', chaud: 'CHAUD', enfeu: 'EN FEU', lourd: 'TRÈS LOURD', overload: 'OVERLOAD' };
     if (hammerStageEl) hammerStageEl.textContent = labels[newStage];
   }
 }
