@@ -212,8 +212,8 @@ function drawMiniWaveform() {
 
 // ===== LOUDNESS ANALYSER =====
 const loudnessAnalyser = audioCtx.createAnalyser();
-loudnessAnalyser.fftSize = 2048;
-loudnessAnalyser.smoothingTimeConstant = 0.15;
+loudnessAnalyser.fftSize = 1024;           // 1024 → ~23ms latency (was 2048 → ~46ms)
+loudnessAnalyser.smoothingTimeConstant = 0.05; // near-zero WebAudio smoothing for instant response
 const loudnessTimeData = new Uint8Array(loudnessAnalyser.fftSize);
 gainNode.connect(loudnessAnalyser);
 
@@ -226,6 +226,8 @@ let lastKickTime = 0;
 let hammerSmooth = 0;
 let loudnessSmooth = 0;
 let hammerHitTimeout = null;
+let nextBeatTime = 0;       // audioCtx time of next beat
+let beatSchedulerId = null;  // rAF id for beat scheduler
 const hammerIconEl = document.getElementById('hammerIcon');
 const hammerCard = document.getElementById('hammerMeter');
 const gaugeFill = document.getElementById('gaugeFill');
@@ -601,14 +603,14 @@ function drawWaveform(currentTime) {
     const loudN = norm(aLoudRaw, criteriaMax.loudness);
     const lowHighN = norm(lowHighRaw, criteriaMax.lowHighRatio);
 
-    // Smoothing with separate rise/fall alphas — fast attack, slow release for momentum
+    // Smoothing — very fast attack (near-instant), slow release for momentum
     const smooth = (cur, target, up, down) => cur + (target - cur) * (target > cur ? up : down);
-    criteriaSmooth.sub = smooth(criteriaSmooth.sub, subN, 0.25, 0.06);
-    criteriaSmooth.bass = smooth(criteriaSmooth.bass, bassN, 0.25, 0.06);
-    criteriaSmooth.kick = smooth(criteriaSmooth.kick, punchN, 0.30, 0.08);
-    criteriaSmooth.fullness = smooth(criteriaSmooth.fullness, fullN, 0.15, 0.05);
-    criteriaSmooth.loudness = smooth(criteriaSmooth.loudness, loudN, 0.25, 0.06);
-    criteriaSmooth.lowHighRatio = smooth(criteriaSmooth.lowHighRatio, lowHighN, 0.20, 0.06);
+    criteriaSmooth.sub = smooth(criteriaSmooth.sub, subN, 0.55, 0.06);
+    criteriaSmooth.bass = smooth(criteriaSmooth.bass, bassN, 0.55, 0.06);
+    criteriaSmooth.kick = smooth(criteriaSmooth.kick, punchN, 0.65, 0.08);
+    criteriaSmooth.fullness = smooth(criteriaSmooth.fullness, fullN, 0.40, 0.05);
+    criteriaSmooth.loudness = smooth(criteriaSmooth.loudness, loudN, 0.55, 0.06);
+    criteriaSmooth.lowHighRatio = smooth(criteriaSmooth.lowHighRatio, lowHighN, 0.45, 0.06);
 
     const s = criteriaSmooth;
     // Weighted sum — sub/kick dominant, low/high ratio separates drops from buildups
@@ -623,16 +625,21 @@ function drawWaveform(currentTime) {
     // Quiet passage (score 0.5) → shaped 33%. Drop (score 0.9) → shaped 85%.
     const shaped = Math.pow(Math.min(1, score), 1.6) * 100;
 
-    // Charge dynamics: fast rise (~0.3s), slow release (~2s) for momentum retention
+    // Charge dynamics: instant rise, slow release (~2s) for momentum retention
     const diff = shaped - hammerCharge;
-    hammerCharge += diff * (diff > 0 ? 0.14 : 0.035);
+    hammerCharge += diff * (diff > 0 ? 0.45 : 0.035);
     hammerCharge = Math.max(0, Math.min(100, hammerCharge));
   }
 
-  // Smooth displayed percentage to avoid jittery numbers
+  // Smooth displayed percentage — fast rise, gentle stabilization on fall
   const targetPct = hammerCharge;
   const pctDiff = targetPct - displayedHammerPct;
-  displayedHammerPct += pctDiff * (Math.abs(pctDiff) > 8 ? 0.15 : 0.06);
+  const isRising = pctDiff > 0;
+  // Rise: near-instant for big jumps, smooth for small ones. Fall: always gentle.
+  const pctAlpha = isRising
+    ? (pctDiff > 10 ? 0.5 : 0.2)
+    : (Math.abs(pctDiff) > 8 ? 0.1 : 0.05);
+  displayedHammerPct += pctDiff * pctAlpha;
   const hammerPct = Math.round(displayedHammerPct);
   updateHammerVisuals(hammerPct, kickDecay);
 
@@ -1023,46 +1030,63 @@ function triggerHammerActivation(stage) {
 function startBeatSync() {
   stopBeatSync();
   if (!detectedBPM || !hammerIconEl) return;
-  const ms = 60000 / detectedBPM;
-  function hammerHit() {
+  const beatSec = 60 / detectedBPM;
+
+  // Align first beat to audio clock
+  nextBeatTime = audioCtx.currentTime;
+
+  function beatLoop() {
     if (!isPlaying) return;
-    // Use hammerCharge (0-100) as power basis — this is the real "puissance"
-    const pwr = hammerCharge / 100; // 0 to 1
-    if (pwr < 0.02) return; // skip if charge is near-zero
+    beatSchedulerId = requestAnimationFrame(beatLoop);
 
-    // Hit intensity: always visible, scales with charge
-    // At 10% charge: gentle tap. At 100%: massive slam.
-    const angle = -10 - pwr * 50;  // -10° to -60°
-    const scl = 1 + pwr * 0.35;    // 1x to 1.35x
+    const now = audioCtx.currentTime;
+    if (now < nextBeatTime) return;
 
+    // Fire the hit and advance to next beat
+    // Self-correcting: always based on absolute beat grid, never drifts
+    while (nextBeatTime <= now) nextBeatTime += beatSec;
+
+    const pwr = hammerCharge / 100;
+    if (pwr < 0.02) return;
+
+    // === HAMMER HIT ANIMATION ===
+    // Phase 1: snap down (instant)
+    const angle = -12 - pwr * 55;   // -12° to -67°
+    const scl = 1 + pwr * 0.4;      // 1x to 1.4x
+    hammerIconEl.style.transition = 'none';
     hammerIconEl.style.transform = `rotate(${angle}deg) scale(${scl})`;
-    hammerIconEl.style.transition = 'transform .04s ease-out';
 
+    // Phase 2: bounce back (springy return)
     if (hammerHitTimeout) clearTimeout(hammerHitTimeout);
     hammerHitTimeout = setTimeout(() => {
+      const returnMs = 80 + (1 - pwr) * 120; // 80-200ms return depending on power
+      hammerIconEl.style.transition = `transform ${returnMs}ms cubic-bezier(.15,1.4,.4,1)`;
       hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
-      hammerIconEl.style.transition = 'transform .15s cubic-bezier(.1,.9,.3,1)';
-    }, 50 + pwr * 90);
+    }, 16); // 1 frame delay to ensure snap registers
   }
-  hammerHit();
-  beatIntervalId = setInterval(hammerHit, ms);
+
+  beatLoop();
 }
 
 function stopBeatSync() {
+  if (beatSchedulerId) { cancelAnimationFrame(beatSchedulerId); beatSchedulerId = null; }
   if (beatIntervalId) { clearInterval(beatIntervalId); beatIntervalId = null; }
+  nextBeatTime = 0;
   if (hammerIconEl) {
+    hammerIconEl.style.transition = 'transform .15s ease-out';
     hammerIconEl.style.transform = 'rotate(0deg) scale(1)';
   }
   // Reset hammer charge and stage (but NOT criteriaMax if prescan ran — keeps seek stable)
   hammerCharge = 0;
+  displayedHammerPct = 0;
   hammerPeakStage = 'cool';
   currentHammerStage = 'cool';
   hammerCooldownStart = 0;
   hammerKickSmooth = 0;
   if (!prescanDone) {
-    criteriaMax = { sub: 0.001, bass: 0.001, kick: 0.001, fullness: 0.001, loudness: 0.001 };
+    criteriaMax = { sub: 0.001, bass: 0.001, kick: 0.001, fullness: 0.001, loudness: 0.001, lowHighRatio: 0.001 };
   }
-  criteriaSmooth = { sub: 0, bass: 0, kick: 0, fullness: 0, loudness: 0 };
+  criteriaSmooth = { sub: 0, bass: 0, kick: 0, fullness: 0, loudness: 0, lowHighRatio: 0 };
   if (hammerCard) hammerCard.setAttribute('data-stage', 'cold');
   if (hammerStageEl) hammerStageEl.textContent = '';
   if (gaugeFill) gaugeFill.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
