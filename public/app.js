@@ -604,24 +604,25 @@ function drawWaveform(currentTime) {
       window._hDbg = { n: 0, sum: 0, min: 999, max: 0, wfSum: 0, bassSum: 0, kickSum: 0 };
     }
 
-    // Charge dynamics: instant rise on big jumps, very slow release
+    // Charge dynamics: fast but filtered rise, very slow release
     const diff = shaped - hammerCharge;
     if (diff > 0) {
-      // Jump instantly to new highs — the first impact must HIT
-      hammerCharge = shaped;
+      // Fast rise (0.35) — responds quickly to sustained energy
+      // but filters out single-frame spikes that would push to 100%
+      hammerCharge += diff * 0.35;
     } else {
-      // Slow decay: score holds its peak for several seconds
+      // Slow decay: score holds near its peak for several seconds
       hammerCharge += diff * 0.006;
     }
     hammerCharge = Math.max(0, Math.min(100, hammerCharge));
   }
 
-  // Smooth displayed percentage — instant rise, very slow fall
+  // Smooth displayed percentage — fast rise, very slow fall
   const targetPct = hammerCharge;
   const pctDiff = targetPct - displayedHammerPct;
   if (pctDiff > 0) {
-    // Instant rise — score snaps to new peaks
-    displayedHammerPct = targetPct;
+    // Fast rise — big jumps are near-instant, small ones smooth
+    displayedHammerPct += pctDiff * (pctDiff > 15 ? 0.6 : 0.3);
   } else {
     // Very slow descent
     displayedHammerPct += pctDiff * 0.015;
