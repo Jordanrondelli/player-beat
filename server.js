@@ -242,9 +242,9 @@ app.get('/on-ecoute/submit', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'on-ecoute-submit.html'));
 });
 
-// "On Écoute" admin page
+// "On Écoute" admin page — redirect to main admin (On Écoute is a tab there)
 app.get('/on-ecoute/admin', requireAdmin, (req, res) => {
-  res.sendFile(path.join(__dirname, 'views', 'on-ecoute-admin.html'));
+  res.redirect('/admin');
 });
 
 // Admin page (admin only)
