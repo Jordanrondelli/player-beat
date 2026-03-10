@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════
    ON ÉCOUTE — Broadcast Overlay
-   Metallic judge buttons, dark capsule player bar with waveform
-   2K canvas (2560×1440) — scaled up 15%
+   Font: Montserrat (900 Black for impact)
+   2K canvas (2560×1440)
    ═══════════════════════════════════════════════════════════ */
 
 :root {
@@ -9,11 +9,9 @@
   --gold-light: #e8b94a;
   --gold-dark: #8a6420;
   --bronze-bg: linear-gradient(145deg, #5a4a2e 0%, #3a2e18 40%, #2a1e10 100%);
-  --bronze-border: linear-gradient(145deg, #d4a84a 0%, #a07830 50%, #6a5020 100%);
-  --bar-bg: rgba(10, 8, 5, 0.85);
+  --bar-bg: rgba(10, 8, 5, 0.88);
   --orange-wave: #e8762a;
-  --red-wave: #c0392b;
-  --font: 'Inter', -apple-system, sans-serif;
+  --font: 'Montserrat', -apple-system, sans-serif;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -48,20 +46,20 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
 .judge-name {
-  font-family: 'Bebas Neue', 'Inter', sans-serif;
-  font-size: 26px;
-  letter-spacing: 3px;
+  font-family: var(--font);
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 4px;
   color: var(--gold-light);
-  text-shadow: 0 0 20px rgba(200,148,62,0.4), 0 2px 6px rgba(0,0,0,0.8);
+  text-shadow: 0 0 30px rgba(200,148,62,0.5), 0 2px 6px rgba(0,0,0,0.9);
   text-transform: uppercase;
   text-align: center;
-  min-height: 30px;
-  opacity: 0.9;
+  min-height: 34px;
 }
 
 /* ═══════ JUDGE PANELS ═══════ */
@@ -73,13 +71,13 @@ body {
   flex-shrink: 0;
 }
 
-/* ═══════ JUDGE BUTTONS — Metallic bronze style (scaled up) ═══════ */
+/* ═══════ JUDGE BUTTONS ═══════ */
 
 .judge-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   background: none;
   border: none;
   cursor: pointer;
@@ -89,182 +87,159 @@ body {
 .judge-btn-inner {
   width: 92px;
   height: 92px;
-  border-radius: 16px;
+  border-radius: 18px;
   background: var(--bronze-bg);
-  border: 2.5px solid var(--gold-dark);
+  border: 3px solid var(--gold-dark);
   box-shadow:
     inset 0 1px 0 rgba(255, 200, 100, 0.15),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.5),
-    0 4px 16px rgba(0, 0, 0, 0.6),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.5),
+    0 6px 20px rgba(0, 0, 0, 0.7),
     0 0 0 1px rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  overflow: hidden;
-  transition: all 0.2s ease;
+  overflow: visible;
+  transition: all 0.15s ease;
 }
 
-/* Metallic sheen overlay */
+/* Metallic sheen */
 .judge-btn-inner::before {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 14px;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 210, 120, 0.12) 0%,
-    transparent 40%,
-    transparent 60%,
-    rgba(0, 0, 0, 0.15) 100%
-  );
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255,210,120,0.12) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.15) 100%);
   pointer-events: none;
 }
 
 .judge-emoji {
-  font-size: 42px;
+  font-size: 44px;
   line-height: 1;
   pointer-events: none;
-  transition: transform 0.2s;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+  transition: transform 0.15s;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
 }
 
 .judge-btn-label {
+  font-family: var(--font);
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 1.5px;
-  color: rgba(255, 220, 160, 0.7);
-  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  letter-spacing: 2px;
+  color: rgba(255, 220, 160, 0.75);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
   text-transform: uppercase;
   white-space: nowrap;
 }
 
-/* Hover — subtle gold glow */
-.judge-btn:hover .judge-btn-inner {
-  border-color: var(--gold);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 200, 100, 0.2),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.5),
-    0 4px 16px rgba(0, 0, 0, 0.6),
-    0 0 20px rgba(200, 148, 62, 0.25),
-    0 0 0 1px rgba(200, 148, 62, 0.3);
+/* ═══ BURST — VERY dramatic per type ═══ */
+
+/* FIRE burst */
+.judge-btn.burst[data-vote="fire"] .judge-btn-inner {
+  animation: burstFire 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.judge-btn:hover .judge-emoji {
-  transform: scale(1.08);
+.judge-btn.burst[data-vote="fire"] .judge-emoji {
+  animation: emojiBurstFire 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Active press */
-.judge-btn:active .judge-btn-inner {
-  transform: scale(0.92);
-  box-shadow:
-    inset 0 2px 8px rgba(0, 0, 0, 0.6),
-    0 2px 8px rgba(0, 0, 0, 0.5);
-}
-
-/* ═══ BURST ANIMATION — much more dramatic ═══ */
-.judge-btn.burst .judge-btn-inner {
-  animation: btnBurst 0.7s ease-out;
-}
-.judge-btn.burst .judge-emoji {
-  animation: emojiBounce 0.7s ease-out;
-}
-
-@keyframes btnBurst {
-  0%   { transform: scale(0.85); }
-  15%  { transform: scale(1.25);
-         border-color: var(--gold-light);
+@keyframes burstFire {
+  0%   { transform: scale(0.8); }
+  12%  { transform: scale(1.35);
+         border-color: #ff6a00;
          box-shadow:
-           inset 0 1px 0 rgba(255,200,100,0.4),
-           0 0 50px rgba(200,148,62,0.6),
-           0 0 100px rgba(200,148,62,0.25),
-           0 0 0 3px rgba(232,185,74,0.3); }
-  40%  { transform: scale(0.95);
-         box-shadow:
-           inset 0 1px 0 rgba(255,200,100,0.2),
-           0 0 25px rgba(200,148,62,0.3); }
+           0 0 60px rgba(255,100,0,0.8),
+           0 0 120px rgba(255,60,0,0.4),
+           0 0 200px rgba(255,40,0,0.15),
+           inset 0 0 30px rgba(255,100,0,0.3); }
+  30%  { transform: scale(0.95); }
+  50%  { transform: scale(1.08);
+         box-shadow: 0 0 40px rgba(255,100,0,0.3); }
   100% { transform: scale(1);
          border-color: var(--gold-dark);
-         box-shadow:
-           inset 0 1px 0 rgba(255,200,100,0.15),
-           inset 0 -2px 4px rgba(0,0,0,0.5),
-           0 4px 16px rgba(0,0,0,0.6); }
+         box-shadow: inset 0 1px 0 rgba(255,200,100,0.15), inset 0 -3px 6px rgba(0,0,0,0.5), 0 6px 20px rgba(0,0,0,0.7); }
 }
 
-@keyframes emojiBounce {
-  0%   { transform: scale(0.7) rotate(-10deg); }
-  15%  { transform: scale(1.5) rotate(5deg); }
-  35%  { transform: scale(0.9) rotate(-3deg); }
-  55%  { transform: scale(1.15) rotate(0deg); }
+@keyframes emojiBurstFire {
+  0%   { transform: scale(0.5) rotate(-15deg); }
+  12%  { transform: scale(1.8) rotate(8deg); }
+  30%  { transform: scale(0.85) rotate(-5deg); }
+  50%  { transform: scale(1.15) rotate(2deg); }
   100% { transform: scale(1) rotate(0deg); }
 }
 
-/* Fire-specific glow */
-.judge-btn.burst[data-vote="fire"] .judge-btn-inner {
-  animation: btnBurstFire 0.7s ease-out;
+/* UP burst */
+.judge-btn.burst[data-vote="up"] .judge-btn-inner {
+  animation: burstUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-@keyframes btnBurstFire {
-  0%   { transform: scale(0.85); }
-  15%  { transform: scale(1.25);
-         border-color: #ff6a00;
-         box-shadow:
-           inset 0 1px 0 rgba(255,150,50,0.5),
-           0 0 60px rgba(255,100,0,0.6),
-           0 0 120px rgba(255,60,0,0.2),
-           0 0 0 3px rgba(255,100,0,0.3); }
-  40%  { transform: scale(0.95); }
-  100% { transform: scale(1);
-         border-color: var(--gold-dark);
-         box-shadow:
-           inset 0 1px 0 rgba(255,200,100,0.15),
-           inset 0 -2px 4px rgba(0,0,0,0.5),
-           0 4px 16px rgba(0,0,0,0.6); }
+.judge-btn.burst[data-vote="up"] .judge-emoji {
+  animation: emojiBurstUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Up-specific glow */
-.judge-btn.burst[data-vote="up"] .judge-btn-inner {
-  animation: btnBurstUp 0.7s ease-out;
-}
-@keyframes btnBurstUp {
-  0%   { transform: scale(0.85); }
-  15%  { transform: scale(1.25);
+@keyframes burstUp {
+  0%   { transform: scale(0.8); }
+  12%  { transform: scale(1.35);
          border-color: #2ecc71;
          box-shadow:
-           inset 0 1px 0 rgba(100,255,150,0.3),
-           0 0 50px rgba(46,204,113,0.5),
-           0 0 100px rgba(46,204,113,0.15),
-           0 0 0 3px rgba(46,204,113,0.3); }
-  40%  { transform: scale(0.95); }
+           0 0 60px rgba(46,204,113,0.7),
+           0 0 120px rgba(46,204,113,0.3),
+           0 0 200px rgba(46,204,113,0.1),
+           inset 0 0 30px rgba(46,204,113,0.2); }
+  30%  { transform: scale(0.95); }
+  50%  { transform: scale(1.08); }
   100% { transform: scale(1);
          border-color: var(--gold-dark);
-         box-shadow:
-           inset 0 1px 0 rgba(255,200,100,0.15),
-           inset 0 -2px 4px rgba(0,0,0,0.5),
-           0 4px 16px rgba(0,0,0,0.6); }
+         box-shadow: inset 0 1px 0 rgba(255,200,100,0.15), inset 0 -3px 6px rgba(0,0,0,0.5), 0 6px 20px rgba(0,0,0,0.7); }
 }
 
-/* Down-specific glow */
-.judge-btn.burst[data-vote="down"] .judge-btn-inner {
-  animation: btnBurstDown 0.7s ease-out;
+@keyframes emojiBurstUp {
+  0%   { transform: scale(0.5) rotate(10deg); }
+  12%  { transform: scale(1.7) rotate(-5deg); }
+  30%  { transform: scale(0.85) rotate(3deg); }
+  50%  { transform: scale(1.15) rotate(0deg); }
+  100% { transform: scale(1) rotate(0deg); }
 }
-@keyframes btnBurstDown {
-  0%   { transform: scale(0.85); }
-  15%  { transform: scale(1.25);
+
+/* DOWN burst */
+.judge-btn.burst[data-vote="down"] .judge-btn-inner {
+  animation: burstDown 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.judge-btn.burst[data-vote="down"] .judge-emoji {
+  animation: emojiBurstDown 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes burstDown {
+  0%   { transform: scale(0.8); }
+  12%  { transform: scale(1.35);
          border-color: #e74c3c;
          box-shadow:
-           inset 0 1px 0 rgba(255,100,100,0.3),
-           0 0 50px rgba(231,76,60,0.5),
-           0 0 100px rgba(231,76,60,0.15),
-           0 0 0 3px rgba(231,76,60,0.3); }
-  40%  { transform: scale(0.95); }
+           0 0 60px rgba(231,76,60,0.7),
+           0 0 120px rgba(231,76,60,0.3),
+           0 0 200px rgba(231,76,60,0.1),
+           inset 0 0 30px rgba(231,76,60,0.2); }
+  30%  { transform: scale(0.95) rotate(-2deg); }
+  50%  { transform: scale(1.08); }
   100% { transform: scale(1);
          border-color: var(--gold-dark);
-         box-shadow:
-           inset 0 1px 0 rgba(255,200,100,0.15),
-           inset 0 -2px 4px rgba(0,0,0,0.5),
-           0 4px 16px rgba(0,0,0,0.6); }
+         box-shadow: inset 0 1px 0 rgba(255,200,100,0.15), inset 0 -3px 6px rgba(0,0,0,0.5), 0 6px 20px rgba(0,0,0,0.7); }
 }
 
-/* ═══════ PLAYER BAR (dark capsule — 15% bigger) ═══════ */
+@keyframes emojiBurstDown {
+  0%   { transform: scale(0.5) rotate(-10deg); }
+  12%  { transform: scale(1.7) rotate(8deg); }
+  30%  { transform: scale(0.85) rotate(-3deg); }
+  50%  { transform: scale(1.15) rotate(0deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Fallback burst for unspecified type */
+.judge-btn.burst .judge-btn-inner {
+  animation: burstFire 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.judge-btn.burst .judge-emoji {
+  animation: emojiBurstFire 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ═══════ PLAYER BAR (dark capsule) ═══════ */
 
 .player-bar {
   display: flex;
@@ -284,7 +259,6 @@ body {
   height: 80px;
 }
 
-/* Play button inside capsule */
 .play-btn {
   width: 58px;
   height: 58px;
@@ -297,16 +271,11 @@ body {
   cursor: pointer;
   flex-shrink: 0;
   transition: all 0.2s;
-  box-shadow:
-    inset 0 1px 0 rgba(255,200,100,0.1),
-    0 2px 8px rgba(0,0,0,0.4);
+  box-shadow: inset 0 1px 0 rgba(255,200,100,0.1), 0 2px 8px rgba(0,0,0,0.4);
 }
-
 .play-btn:hover {
   border-color: var(--gold);
-  box-shadow:
-    inset 0 1px 0 rgba(255,200,100,0.15),
-    0 0 15px rgba(200,148,62,0.2);
+  box-shadow: inset 0 1px 0 rgba(255,200,100,0.15), 0 0 15px rgba(200,148,62,0.2);
 }
 
 .play-icon {
@@ -316,7 +285,6 @@ body {
   filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
 }
 
-/* Waveform area inside capsule */
 .waveform-wrap {
   flex: 1;
   height: 58px;
@@ -325,77 +293,89 @@ body {
   overflow: hidden;
   border-radius: 8px;
 }
-
 #waveformCanvas {
   width: 100%;
   height: 100%;
   display: block;
 }
 
-/* ═══════ TRACK INFO BAR (scaled up) ═══════ */
+/* ═══════ TRACK INFO BOX — large, readable ═══════ */
 
-.track-info-bar {
+.track-info-box {
   position: absolute;
-  top: 116px;
+  top: 120px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 90;
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  pointer-events: none;
-  opacity: 0.8;
+  background: rgba(8, 6, 3, 0.8);
+  border: 1.5px solid rgba(200, 148, 62, 0.15);
+  border-radius: 16px;
+  padding: 18px 36px 14px;
+  min-width: 500px;
+  max-width: 900px;
+  text-align: center;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
 }
 
 .track-title {
-  font-weight: 800;
-  font-size: 19px;
-  color: rgba(255,255,255,0.9);
-  text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+  font-family: var(--font);
+  font-weight: 900;
+  font-size: 28px;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.8);
   white-space: nowrap;
-  max-width: 600px;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: 0.5px;
+}
+
+.track-details {
+  margin-top: 6px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
 }
 
 .track-artist {
-  font-weight: 600;
-  font-size: 16px;
-  color: rgba(255,220,160,0.65);
-  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 20px;
+  color: var(--gold-light);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.8);
 }
 
-.track-sep { margin: 0 4px; opacity: 0.3; color: #fff; }
+.track-sep {
+  font-size: 18px;
+  opacity: 0.3;
+  color: #fff;
+}
+
 .track-submitter {
-  font-size: 15px;
+  font-family: var(--font);
+  font-weight: 600;
+  font-size: 17px;
   font-style: italic;
-  color: rgba(255,255,255,0.45);
+  color: rgba(255,255,255,0.5);
   text-shadow: 0 1px 4px rgba(0,0,0,0.8);
 }
 
-.track-time {
-  font-size: 14px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: rgba(255,255,255,0.4);
-  margin-left: 12px;
+.track-time-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
 }
 
-.time-slash { margin: 0 2px; opacity: 0.3; }
-
-/* ═══════ PROGRESS BAR (wider) ═══════ */
-
-.progress-bar {
-  position: absolute;
-  top: 108px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 805px;
-  height: 3px;
-  background: rgba(255,255,255,0.05);
+.progress-bar-inline {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.08);
   border-radius: 2px;
-  z-index: 90;
   cursor: pointer;
+  overflow: hidden;
 }
 
 .progress-fill {
@@ -407,60 +387,83 @@ body {
   transition: width 0.3s linear;
 }
 
-/* ═══════ REACTIONS (taller zone) ═══════ */
+.track-time {
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,0.45);
+  flex-shrink: 0;
+}
+.time-slash { margin: 0 2px; opacity: 0.3; }
+
+/* ═══════ REACTIONS — full-height rain columns ═══════ */
 
 .reaction-zone {
   position: absolute;
-  top: 120px;
-  width: 360px;
-  height: 350px;
+  top: 0;
+  width: 600px;
+  height: 1440px;
   pointer-events: none;
   z-index: 200;
+  overflow: hidden;
 }
 
-.host-reactions { left: 40px; }
-.guest-reactions { right: 40px; }
+.host-reactions { left: 0; }
+.guest-reactions { right: 0; }
 
 .reaction-float {
   position: absolute;
-  bottom: 0;
-  animation: reactUp 2.8s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+  top: -80px;
   pointer-events: none;
+  will-change: transform, opacity;
 }
 
 .reaction-float .react-emoji {
-  font-size: 56px;
+  font-size: 60px;
   line-height: 1;
 }
 
 .reaction-float.react-fire .react-emoji {
-  filter: drop-shadow(0 0 16px rgba(255,100,0,0.6));
+  filter: drop-shadow(0 0 18px rgba(255,100,0,0.7));
 }
 .reaction-float.react-up .react-emoji {
-  filter: drop-shadow(0 0 14px rgba(46,204,113,0.5));
+  filter: drop-shadow(0 0 16px rgba(46,204,113,0.6));
 }
 .reaction-float.react-down .react-emoji {
-  filter: drop-shadow(0 0 14px rgba(230,57,70,0.5));
+  filter: drop-shadow(0 0 16px rgba(230,57,70,0.6));
 }
 
-@keyframes reactUp {
-  0%   { opacity: 0; transform: translateY(0) scale(0.4) rotate(0deg); }
-  8%   { opacity: 1; transform: translateY(5px) scale(1.2) rotate(-5deg); }
-  20%  { opacity: 1; transform: translateY(-15px) scale(1) rotate(3deg); }
-  50%  { opacity: 0.85; transform: translateY(-100px) scale(0.9) rotate(-2deg); }
-  100% { opacity: 0; transform: translateY(-280px) scale(0.4) rotate(5deg); }
+/* Multiple rain animations at different speeds/paths */
+@keyframes rainFall1 {
+  0%   { transform: translateY(-80px) translateX(0px) scale(0.5) rotate(0deg); opacity: 0; }
+  5%   { opacity: 1; transform: translateY(0px) translateX(5px) scale(1.1) rotate(-3deg); }
+  50%  { opacity: 0.9; transform: translateY(700px) translateX(-15px) scale(0.95) rotate(5deg); }
+  100% { opacity: 0; transform: translateY(1500px) translateX(10px) scale(0.6) rotate(-8deg); }
+}
+@keyframes rainFall2 {
+  0%   { transform: translateY(-80px) translateX(0px) scale(0.4) rotate(5deg); opacity: 0; }
+  8%   { opacity: 1; transform: translateY(20px) translateX(-10px) scale(1.15) rotate(-5deg); }
+  55%  { opacity: 0.85; transform: translateY(750px) translateX(20px) scale(0.9) rotate(8deg); }
+  100% { opacity: 0; transform: translateY(1520px) translateX(-5px) scale(0.5) rotate(-10deg); }
+}
+@keyframes rainFall3 {
+  0%   { transform: translateY(-80px) translateX(0) scale(0.6) rotate(-8deg); opacity: 0; }
+  6%   { opacity: 1; transform: translateY(10px) translateX(12px) scale(1.05) rotate(3deg); }
+  45%  { opacity: 0.9; transform: translateY(650px) translateX(-8px) scale(1) rotate(-4deg); }
+  100% { opacity: 0; transform: translateY(1480px) translateX(15px) scale(0.55) rotate(6deg); }
 }
 
-/* ═══════ LEGEND CARD (Meilleur Son) ═══════ */
+/* ═══════ LEGEND CARD ═══════ */
 
 .legend-card {
   position: absolute;
   bottom: 40px;
   right: 40px;
-  width: 230px;
-  padding: 18px 20px;
-  border-radius: 14px;
-  background: rgba(10, 8, 5, 0.75);
+  width: 250px;
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: rgba(10, 8, 5, 0.8);
   border: 1.5px solid rgba(200, 148, 62, 0.2);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -469,17 +472,19 @@ body {
 }
 
 .legend-badge {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 3px;
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 4px;
   color: var(--gold);
   text-align: center;
   margin-bottom: 10px;
 }
 
 .legend-user {
-  font-size: 20px;
-  font-weight: 800;
+  font-family: var(--font);
+  font-size: 22px;
+  font-weight: 900;
   text-align: center;
   color: white;
   white-space: nowrap;
@@ -489,7 +494,9 @@ body {
 }
 
 .legend-track {
-  font-size: 12px;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
   text-align: center;
   color: rgba(255,255,255,0.5);
   margin-top: 4px;
@@ -499,8 +506,9 @@ body {
 }
 
 .legend-fire {
-  font-size: 20px;
-  font-weight: 800;
+  font-family: var(--font);
+  font-size: 22px;
+  font-weight: 900;
   text-align: center;
   color: var(--gold-light);
   margin-top: 8px;
@@ -517,16 +525,16 @@ body {
   100% { transform: scale(1); box-shadow: 0 8px 40px rgba(0,0,0,0.5); border-color: rgba(200,148,62,0.2); }
 }
 
-/* ═══════ L'AVIS DU CHAT (bottom-left) ═══════ */
+/* ═══════ L'AVIS DU CHAT ═══════ */
 
 .oe-chat-card {
   position: absolute;
   bottom: 40px;
   left: 40px;
-  width: 240px;
-  padding: 18px 20px;
-  border-radius: 14px;
-  background: rgba(10, 8, 5, 0.75);
+  width: 260px;
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: rgba(10, 8, 5, 0.8);
   border: 1.5px solid rgba(200, 148, 62, 0.2);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -535,28 +543,29 @@ body {
 }
 
 .oe-chat-title {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 3px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 4px;
   color: var(--gold);
   text-align: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .oe-chat-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-  font-size: 13px;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-family: var(--font);
 }
 
-.oe-chat-label { width: 22px; text-align: center; font-size: 16px; }
+.oe-chat-label { width: 24px; text-align: center; font-size: 18px; }
 
 .oe-chat-pct {
-  font-weight: 800;
-  font-size: 14px;
-  width: 38px;
+  font-weight: 900;
+  font-size: 15px;
+  width: 42px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -577,9 +586,9 @@ body {
 
 .oe-chat-count {
   font-weight: 700;
-  font-size: 11px;
+  font-size: 12px;
   color: rgba(255, 255, 255, .35);
-  width: 40px;
+  width: 44px;
   text-align: right;
 }
 

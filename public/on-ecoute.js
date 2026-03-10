@@ -443,7 +443,9 @@ async function loadJudgeNames() {
 loadJudgeNames();
 setInterval(loadJudgeNames, 10000);
 
-// ===== REACTIONS SYSTEM (emoji burst) =====
+// ===== REACTIONS SYSTEM (emoji rain — diffuse across full column) =====
+const rainAnimations = ['rainFall1', 'rainFall2', 'rainFall3'];
+
 function spawnReaction(judge, type) {
   const containerId = judge === 'host' ? 'hostReaction' : 'guestReaction';
   const container = document.getElementById(containerId);
@@ -454,22 +456,30 @@ function spawnReaction(judge, type) {
 
   const el = document.createElement('div');
   el.className = `reaction-float ${classMap[type] || ''}`;
-  el.style.left = `${20 + Math.random() * 260}px`;
+  // Spread across the full 600px width of the zone
+  el.style.left = `${30 + Math.random() * 520}px`;
+  // Random size variation
+  const scale = 0.6 + Math.random() * 0.7;
+  // Pick random animation + random duration
+  const anim = rainAnimations[Math.floor(Math.random() * rainAnimations.length)];
+  const dur = 2.5 + Math.random() * 2;
+  el.style.animation = `${anim} ${dur}s ease-out forwards`;
 
   const span = document.createElement('span');
   span.className = 'react-emoji';
+  span.style.fontSize = `${Math.round(60 * scale)}px`;
   span.textContent = emojiMap[type] || '\u{1F525}';
   el.appendChild(span);
   container.appendChild(el);
 
-  setTimeout(() => el.remove(), 3000);
+  setTimeout(() => el.remove(), (dur + 0.5) * 1000);
 }
 
-// Spawn a burst of emojis (8-12 staggered for fluid flow)
+// Spawn a burst of emojis — diffuse rain effect (12-18 staggered)
 function spawnReactionBurst(judge, type) {
-  const count = 8 + Math.floor(Math.random() * 5); // 8-12
+  const count = 12 + Math.floor(Math.random() * 7); // 12-18
   for (let i = 0; i < count; i++) {
-    setTimeout(() => spawnReaction(judge, type), i * 80 + Math.random() * 60);
+    setTimeout(() => spawnReaction(judge, type), i * 60 + Math.random() * 100);
   }
 }
 
@@ -488,24 +498,8 @@ document.querySelectorAll('.judge-btn').forEach(btn => {
     // Spawn reaction burst
     spawnReactionBurst(judge, vote);
 
-    // Send vote to server (On Écoute API) — only from direct overlay clicks (keyboard shortcuts)
-    const subId = (playlist[currentTrackIndex] && playlist[currentTrackIndex].submission)
-      ? playlist[currentTrackIndex].submission.id : undefined;
-    if (subId) {
-      fetch('/api/on-ecoute/votes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submission_id: subId, type: vote }),
-      }).catch(() => {});
-    }
-
-    // Down = skip to next
-    if (vote === 'down') {
-      const bar = document.getElementById('topBar');
-      bar.classList.add('skip-flash');
-      setTimeout(() => bar.classList.remove('skip-flash'), 500);
-      setTimeout(() => skipToNext(), 300);
-    }
+    // Overlay button clicks are visual only — no votes, no skip
+    // Votes come only from Twitch chat, playback controlled only by admin
   });
 });
 
@@ -527,20 +521,23 @@ if (nextBtn) nextBtn.addEventListener('click', () => {
   skipToNext();
 });
 
-// Progress bar seek
-document.getElementById('progressBar').addEventListener('click', (e) => {
-  const rect = e.currentTarget.getBoundingClientRect();
-  const pct = (e.clientX - rect.left) / rect.width;
-  const duration = getDuration();
-  if (!duration || !audioBuffer) return;
-  const wasPlaying = isPlaying;
-  if (isPlaying) {
-    sourceNode.stop();
-    sourceNode.disconnect();
-  }
-  pauseOffset = pct * audioBuffer.duration;
-  if (wasPlaying) playAudio();
-});
+// Progress bar seek (works with both .progress-bar and .progress-bar-inline)
+const progressBarEl = document.getElementById('progressBar');
+if (progressBarEl) {
+  progressBarEl.addEventListener('click', (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    const duration = getDuration();
+    if (!duration || !audioBuffer) return;
+    const wasPlaying = isPlaying;
+    if (isPlaying) {
+      sourceNode.stop();
+      sourceNode.disconnect();
+    }
+    pauseOffset = pct * audioBuffer.duration;
+    if (wasPlaying) playAudio();
+  });
+}
 
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
@@ -570,9 +567,6 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'KeyE':
       spawnReactionBurst('host', 'down');
-      document.getElementById('topBar').classList.add('skip-flash');
-      setTimeout(() => document.getElementById('topBar').classList.remove('skip-flash'), 500);
-      setTimeout(() => skipToNext(), 300);
       break;
     case 'KeyI':
       spawnReactionBurst('guest', 'fire');
@@ -582,9 +576,6 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'KeyP':
       spawnReactionBurst('guest', 'down');
-      document.getElementById('topBar').classList.add('skip-flash');
-      setTimeout(() => document.getElementById('topBar').classList.remove('skip-flash'), 500);
-      setTimeout(() => skipToNext(), 300);
       break;
   }
 });

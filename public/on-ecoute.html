@@ -4,9 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=2560, initial-scale=1">
   <title>ON ÉCOUTE — Overlay</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="on-ecoute.css?v=8">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="on-ecoute.css?v=10">
 </head>
 <body>
 
@@ -20,13 +19,13 @@
           <div class="judge-btn-inner"><span class="judge-emoji">&#x1F525;</span></div>
           <span class="judge-btn-label">FIRE</span>
         </button>
-        <button class="judge-btn" data-judge="host" data-vote="down">
-          <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44E;</span></div>
-          <span class="judge-btn-label">THUMBS DOWN</span>
-        </button>
         <button class="judge-btn" data-judge="host" data-vote="up">
           <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44D;</span></div>
-          <span class="judge-btn-label">THUMBS UP</span>
+          <span class="judge-btn-label">J'AIME BIEN</span>
+        </button>
+        <button class="judge-btn" data-judge="host" data-vote="down">
+          <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44E;</span></div>
+          <span class="judge-btn-label">PAS FAN</span>
         </button>
       </div>
       <div class="judge-name" id="hostName"></div>
@@ -50,13 +49,13 @@
           <div class="judge-btn-inner"><span class="judge-emoji">&#x1F525;</span></div>
           <span class="judge-btn-label">FIRE</span>
         </button>
-        <button class="judge-btn" data-judge="guest" data-vote="down">
-          <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44E;</span></div>
-          <span class="judge-btn-label">THUMBS DOWN</span>
-        </button>
         <button class="judge-btn" data-judge="guest" data-vote="up">
           <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44D;</span></div>
-          <span class="judge-btn-label">THUMBS UP</span>
+          <span class="judge-btn-label">J'AIME BIEN</span>
+        </button>
+        <button class="judge-btn" data-judge="guest" data-vote="down">
+          <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44E;</span></div>
+          <span class="judge-btn-label">PAS FAN</span>
         </button>
       </div>
       <div class="judge-name" id="guestName"></div>
@@ -64,26 +63,28 @@
 
   </div>
 
-  <!-- Reaction containers -->
+  <!-- Reaction rain zones (full height columns) -->
   <div class="reaction-zone host-reactions" id="hostReaction"></div>
   <div class="reaction-zone guest-reactions" id="guestReaction"></div>
 
-  <!-- Track info (subtle, below player bar) -->
-  <div class="track-info-bar">
-    <span class="track-title" id="trackTitle">En attente...</span>
-    <span class="track-artist" id="trackArtist"></span>
-    <span class="track-sep" id="trackSep"></span>
-    <span class="track-submitter" id="trackSubmitter"></span>
-    <span class="track-time">
-      <span id="currentTime">0:00</span>
-      <span class="time-slash">/</span>
-      <span id="totalTime">0:00</span>
-    </span>
-  </div>
-
-  <!-- Progress bar (thin, below top bar) -->
-  <div class="progress-bar" id="progressBar">
-    <div class="progress-fill" id="progressFill"></div>
+  <!-- Track info box (large, below player bar) -->
+  <div class="track-info-box" id="trackInfoBox">
+    <div class="track-title" id="trackTitle">En attente...</div>
+    <div class="track-details">
+      <span class="track-artist" id="trackArtist"></span>
+      <span class="track-sep" id="trackSep"></span>
+      <span class="track-submitter" id="trackSubmitter"></span>
+    </div>
+    <div class="track-time-row">
+      <div class="progress-bar-inline" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <span class="track-time">
+        <span id="currentTime">0:00</span>
+        <span class="time-slash">/</span>
+        <span id="totalTime">0:00</span>
+      </span>
+    </div>
   </div>
 
   <!-- Hidden nav (keyboard controlled) -->
@@ -129,6 +130,6 @@
     <div class="loading-spinner"></div>
   </div>
 
-  <script src="on-ecoute.js?v=8"></script>
+  <script src="on-ecoute.js?v=10"></script>
 </body>
 </html>
