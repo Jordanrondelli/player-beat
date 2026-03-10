@@ -132,6 +132,33 @@ body {
   white-space: nowrap;
 }
 
+/* ═══ FLOATING — subtle idle movement per button ═══ */
+
+.judge-btn:nth-child(1) {
+  animation: floatBtn1 4s ease-in-out infinite;
+}
+.judge-btn:nth-child(2) {
+  animation: floatBtn2 4.6s ease-in-out infinite;
+}
+.judge-btn:nth-child(3) {
+  animation: floatBtn3 5.2s ease-in-out infinite;
+}
+
+@keyframes floatBtn1 {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50%      { transform: translateY(-6px) rotate(0.8deg); }
+}
+@keyframes floatBtn2 {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  35%      { transform: translateY(-5px) rotate(-0.6deg); }
+  70%      { transform: translateY(-2px) rotate(0.4deg); }
+}
+@keyframes floatBtn3 {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  40%      { transform: translateY(-4px) rotate(0.5deg); }
+  80%      { transform: translateY(-7px) rotate(-0.7deg); }
+}
+
 /* ═══ BURST — VERY dramatic per type ═══ */
 
 /* FIRE burst */
@@ -307,9 +334,7 @@ body {
   left: 50%;
   transform: translateX(-50%);
   z-index: 90;
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
   padding: 18px 36px 14px;
@@ -471,8 +496,8 @@ body {
   width: 320px;
   padding: 24px 28px;
   border-radius: 16px;
-  background: transparent;
-  border: none;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .legend-badge {
@@ -535,8 +560,8 @@ body {
   width: 320px;
   padding: 24px 28px;
   border-radius: 16px;
-  background: transparent;
-  border: none;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .oe-chat-title {
