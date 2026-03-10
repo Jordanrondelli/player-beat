@@ -191,8 +191,8 @@ app.get('/player', requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// "On Écoute" overlay page (admin only)
-app.get('/on-ecoute', requireAdmin, (req, res) => {
+// "On Écoute" overlay page (public — needs to be accessible from OBS browser source)
+app.get('/on-ecoute', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'on-ecoute.html'));
 });
 
