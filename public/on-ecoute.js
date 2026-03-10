@@ -541,37 +541,37 @@ fetchAndLoadQueue();
 
 // ===== REMOTE CONTROL (admin → overlay) =====
 let lastCommandTs = 0;
-let loadingSubmissionId = null;
 
 async function loadSubmissionById(submissionId, autoPlay) {
-  // Check if already in playlist
+  // Check if already loaded as current track
+  if (playlist[currentTrackIndex] && playlist[currentTrackIndex].submission?.id === submissionId) {
+    if (autoPlay && !isPlaying) {
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+      playAudio();
+    }
+    return;
+  }
+  // Check if in playlist
   const existing = playlist.findIndex(p => p.submission && p.submission.id === submissionId);
   if (existing >= 0) {
     await loadTrack(existing, autoPlay);
     return;
   }
-  // Fetch submission info
+  // Load audio from server
   try {
-    const infoRes = await fetch(`/api/on-ecoute/playlist`);
-    const submissions = await infoRes.json();
-    const item = submissions.find(s => s.id === submissionId);
-    if (!item) {
-      // Not in playlist yet, try loading audio directly
-      const audioRes = await fetch(`/api/on-ecoute/audio/${submissionId}`);
-      if (!audioRes.ok) return;
-      const arrayBuffer = await audioRes.arrayBuffer();
-      if (arrayBuffer.byteLength < 1000) return;
-      // Create a minimal submission object
-      playlist.push({ name: 'Track', arrayBuffer, submission: { id: submissionId, title: 'Chargement...', artist: '', submitted_by: '' } });
-      await loadTrack(playlist.length - 1, autoPlay);
-      return;
-    }
-    // Load audio
     const audioRes = await fetch(`/api/on-ecoute/audio/${submissionId}`);
     if (!audioRes.ok) return;
     const arrayBuffer = await audioRes.arrayBuffer();
     if (arrayBuffer.byteLength < 1000) return;
-    playlist.push({ name: item.title, arrayBuffer, submission: item });
+    // Fetch submission metadata
+    let sub = { id: submissionId, title: 'Sans titre', artist: '', submitted_by: '' };
+    try {
+      const infoRes = await fetch(`/api/on-ecoute/playlist`);
+      const submissions = await infoRes.json();
+      const found = submissions.find(s => s.id === submissionId);
+      if (found) sub = found;
+    } catch {}
+    playlist.push({ name: sub.title, arrayBuffer, submission: sub });
     updateQueueCounter();
     await loadTrack(playlist.length - 1, autoPlay);
   } catch (err) {
@@ -579,7 +579,20 @@ async function loadSubmissionById(submissionId, autoPlay) {
   }
 }
 
-// Poll for admin commands every 500ms
+// Report playback state to server (so admin can display waveform position)
+setInterval(() => {
+  const subId = playlist[currentTrackIndex]?.submission?.id;
+  if (!subId) return;
+  const currentTime = isPlaying ? (pauseOffset + audioCtx.currentTime - startTime) : pauseOffset;
+  const duration = audioBuffer ? audioBuffer.duration : 0;
+  fetch('/api/on-ecoute/playback-state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currentTime, duration, isPlaying, submissionId: subId }),
+  }).catch(() => {});
+}, 300);
+
+// Poll for admin commands every 400ms
 setInterval(async () => {
   try {
     const res = await fetch(`/api/on-ecoute/command?since=${lastCommandTs}`);
@@ -589,14 +602,9 @@ setInterval(async () => {
     lastCommandTs = cmd.ts;
 
     switch (cmd.action) {
-      case 'load':
-        if (cmd.submissionId) {
-          loadingSubmissionId = cmd.submissionId;
-          await loadSubmissionById(cmd.submissionId, false);
-        }
-        break;
       case 'play':
-        if (cmd.submissionId && (!playlist[currentTrackIndex] || playlist[currentTrackIndex].submission?.id !== cmd.submissionId)) {
+        if (cmd.submissionId) {
+          // Approve first so playlist endpoint returns it
           await loadSubmissionById(cmd.submissionId, true);
         } else {
           if (audioCtx.state === 'suspended') await audioCtx.resume();
@@ -606,9 +614,21 @@ setInterval(async () => {
       case 'pause':
         if (isPlaying) pauseAudio();
         break;
-      case 'skip':
-        skipToNext();
+      case 'stop':
+        stopAudio();
+        updateTrackInfo(null);
+        break;
+      case 'seek':
+        if (cmd.seekTo != null && audioBuffer) {
+          const wasPlaying = isPlaying;
+          if (isPlaying) {
+            sourceNode.stop();
+            sourceNode.disconnect();
+          }
+          pauseOffset = Math.max(0, Math.min(cmd.seekTo, audioBuffer.duration));
+          if (wasPlaying) playAudio();
+        }
         break;
     }
   } catch {}
-}, 500);
+}, 400);

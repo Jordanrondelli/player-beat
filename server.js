@@ -1199,15 +1199,20 @@ app.get('/api/on-ecoute/legend', async (req, res) => {
 
 // ===== ON ÉCOUTE REMOTE CONTROL (admin → overlay) =====
 // In-memory command buffer — overlay polls this
-let onEcouteCommand = { action: null, submissionId: null, ts: 0 };
+let onEcouteCommand = { action: null, submissionId: null, seekTo: null, ts: 0 };
 
 // Admin sends a command to the overlay
 app.post('/api/on-ecoute/command', requireAdmin, (req, res) => {
-  const { action, submissionId } = req.body;
-  if (!['play', 'pause', 'skip', 'load'].includes(action)) {
+  const { action, submissionId, seekTo } = req.body;
+  if (!['play', 'pause', 'stop', 'seek'].includes(action)) {
     return res.status(400).json({ error: 'Action invalide' });
   }
-  onEcouteCommand = { action, submissionId: submissionId || null, ts: Date.now() };
+  onEcouteCommand = {
+    action,
+    submissionId: submissionId || null,
+    seekTo: typeof seekTo === 'number' ? seekTo : null,
+    ts: Date.now(),
+  };
   res.json({ success: true });
 });
 
@@ -1219,6 +1224,25 @@ app.get('/api/on-ecoute/command', (req, res) => {
   } else {
     res.json({ action: null, ts: onEcouteCommand.ts });
   }
+});
+
+// Overlay reports playback state (time, duration, playing) for admin to display
+let onEcoutePlaybackState = { currentTime: 0, duration: 0, isPlaying: false, submissionId: null, ts: 0 };
+
+app.post('/api/on-ecoute/playback-state', (req, res) => {
+  const { currentTime, duration, isPlaying, submissionId } = req.body;
+  onEcoutePlaybackState = {
+    currentTime: currentTime || 0,
+    duration: duration || 0,
+    isPlaying: !!isPlaying,
+    submissionId: submissionId || null,
+    ts: Date.now(),
+  };
+  res.json({ success: true });
+});
+
+app.get('/api/on-ecoute/playback-state', requireAdmin, (req, res) => {
+  res.json(onEcoutePlaybackState);
 });
 
 // ===== SKINS API =====

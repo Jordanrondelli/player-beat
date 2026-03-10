@@ -483,22 +483,30 @@
 
         <!-- Genre filter -->
         <div style="display:flex; gap:10px; align-items:center; margin-bottom:20px; flex-wrap:wrap">
-          <label style="font-size:11px; font-weight:700; color:rgba(255,255,255,.4); text-transform:uppercase; letter-spacing:1.5px">Filtrer par genre :</label>
+          <label style="font-size:11px; font-weight:700; color:rgba(255,255,255,.4); text-transform:uppercase; letter-spacing:1.5px">Genre :</label>
           <select id="oeGenreFilter" class="setting-input" style="flex:1; min-width:180px; max-width:300px">
             <option value="">Tous les genres</option>
           </select>
-          <a href="/on-ecoute/admin" target="_blank" class="q-btn" style="text-decoration:none; font-size:11px">Voir admin complet</a>
+          <a href="/on-ecoute/admin" target="_blank" class="q-btn" style="text-decoration:none; font-size:11px">Admin complet</a>
         </div>
 
-        <!-- Current random submission card -->
-        <div id="oeCurrentCard" style="min-height:200px">
+        <!-- Current submission info -->
+        <div id="oeCurrentCard" style="min-height:80px">
           <div class="queue-empty">Chargement...</div>
         </div>
 
+        <!-- Waveform (admin mirror — shows playback position from overlay) -->
+        <div id="oeWaveformWrap" style="display:none; margin-top:16px; position:relative; height:64px; border-radius:10px; background:rgba(0,0,0,.3); overflow:hidden; cursor:pointer">
+          <canvas id="oeWaveformCanvas" style="width:100%; height:100%"></canvas>
+          <div id="oePlayhead" style="position:absolute; top:0; bottom:0; left:0; width:2px; background:linear-gradient(180deg,#e8b94a,#c8943e); pointer-events:none; transition:left 0.3s linear"></div>
+          <div id="oeTimeDisplay" style="position:absolute; bottom:4px; right:8px; font-size:11px; color:rgba(255,255,255,.4); pointer-events:none">0:00 / 0:00</div>
+        </div>
+
         <!-- Transport controls -->
-        <div style="display:flex; gap:10px; margin-top:16px">
+        <div style="display:flex; gap:10px; margin-top:14px">
           <button class="save-btn" id="oePlayBtn" style="flex:1">&#9654; PLAY</button>
           <button class="save-btn" id="oePauseBtn" style="flex:1; background:linear-gradient(135deg,rgba(255,255,255,.15),rgba(255,255,255,.06)); box-shadow:none; color:rgba(255,255,255,.7)">&#9208; PAUSE</button>
+          <button class="save-btn" id="oeStopBtn" style="flex:0 0 auto; padding:10px 20px; background:linear-gradient(135deg,rgba(231,76,60,.2),rgba(231,76,60,.1)); box-shadow:none; color:#e74c3c">&#9724; STOP</button>
         </div>
         <div style="display:flex; gap:10px; margin-top:8px">
           <button class="save-btn" id="oeSkipBtn" style="flex:1; background:linear-gradient(135deg,rgba(255,255,255,.1),rgba(255,255,255,.06)); box-shadow:none; color:rgba(255,255,255,.7)">&#x23ED; SUIVANT</button>
@@ -995,9 +1003,8 @@
 
     // ===== ON ÉCOUTE (remote control) =====
     let oeCurrentSubmission = null;
-    let oePreviewAudio = new Audio();
-    let oePreviewing = false;
-    let oePlaying = false; // tracks if we sent play to overlay
+    let oePlaying = false;
+    let oeWaveformData = []; // for drawing the waveform in admin
 
     async function oeLoadGenres() {
       try {
@@ -1022,8 +1029,11 @@
         const item = await res.json();
         oeCurrentSubmission = item;
         oePlaying = false;
+        oeWaveformData = [];
         oeRenderCard(item);
-        oeUpdateButtons();
+        document.getElementById('oeWaveformWrap').style.display = 'none';
+        // Load waveform data from the audio file (silent, just for display)
+        if (item && item.id) oeLoadWaveform(item.id);
         const countRes = await fetch('/api/on-ecoute/count');
         const countData = await countRes.json();
         document.getElementById('oeCount').textContent = `(${countData.count} en attente)`;
@@ -1032,15 +1042,60 @@
       }
     }
 
-    function oeUpdateButtons() {
-      const playBtn = document.getElementById('oePlayBtn');
-      const pauseBtn = document.getElementById('oePauseBtn');
-      if (oePlaying) {
-        playBtn.style.opacity = '0.4';
-        pauseBtn.style.opacity = '1';
-      } else {
-        playBtn.style.opacity = '1';
-        pauseBtn.style.opacity = '0.4';
+    async function oeLoadWaveform(submissionId) {
+      try {
+        const res = await fetch(`/api/on-ecoute/audio/${submissionId}`);
+        if (!res.ok) return;
+        const buf = await res.arrayBuffer();
+        const actx = new (window.AudioContext || window.webkitAudioContext)();
+        const decoded = await actx.decodeAudioData(buf);
+        actx.close();
+        // Extract waveform
+        const raw = decoded.getChannelData(0);
+        const n = 200;
+        const blockLen = Math.floor(raw.length / n);
+        oeWaveformData = [];
+        for (let i = 0; i < n; i++) {
+          let sum = 0;
+          for (let j = 0; j < blockLen; j++) {
+            const s = raw[i * blockLen + j] || 0;
+            sum += s * s;
+          }
+          oeWaveformData.push(Math.sqrt(sum / blockLen));
+        }
+        const maxVal = Math.max(...oeWaveformData);
+        if (maxVal > 0) oeWaveformData = oeWaveformData.map(v => v / maxVal);
+        document.getElementById('oeWaveformWrap').style.display = 'block';
+        oeDrawWaveform(0, 0);
+      } catch (e) {
+        console.error('Waveform load error:', e);
+      }
+    }
+
+    function oeDrawWaveform(progress, duration) {
+      const canvas = document.getElementById('oeWaveformCanvas');
+      const wrap = document.getElementById('oeWaveformWrap');
+      if (!canvas || !wrap || oeWaveformData.length === 0) return;
+      const dpr = window.devicePixelRatio || 1;
+      const rect = wrap.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      canvas.style.width = rect.width + 'px';
+      canvas.style.height = rect.height + 'px';
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      const n = oeWaveformData.length;
+      const barW = rect.width / n;
+      const pct = duration > 0 ? progress / duration : 0;
+      for (let i = 0; i < n; i++) {
+        const x = i * barW;
+        const h = oeWaveformData[i] * (rect.height * 0.85);
+        const y = (rect.height - h) / 2;
+        const played = (i / n) < pct;
+        ctx.fillStyle = played ? 'rgba(232,185,74,0.8)' : 'rgba(255,255,255,0.15)';
+        ctx.fillRect(x + 0.5, y, Math.max(barW - 1, 1), h);
       }
     }
 
@@ -1057,92 +1112,109 @@
           <div class="oe-artist">${item.artist ? esc(item.artist) : 'Artiste inconnu'}</div>
           <div class="oe-submitter">Propos\u00e9 par ${esc(item.submitted_by || 'Anonyme')}</div>
           ${item.message ? `<div class="oe-message">\u00ab ${esc(item.message)} \u00bb</div>` : ''}
-          <div class="oe-preview-row">
-            <button class="oe-preview-btn" id="oePreviewBtn" onclick="oeTogglePreview()">&#9654;</button>
-            <div style="flex:1">
-              <div style="font-size:12px;color:rgba(255,255,255,.4)">Pr\u00e9-\u00e9coute (casque admin)</div>
-              <div style="font-size:11px;color:rgba(255,255,255,.2)" id="oePreviewTime">0:00</div>
-            </div>
-          </div>
         </div>`;
     }
 
-    function oeTogglePreview() {
-      if (!oeCurrentSubmission) return;
-      const btn = document.getElementById('oePreviewBtn');
-      if (oePreviewing) {
-        oePreviewAudio.pause();
-        oePreviewing = false;
-        if (btn) { btn.innerHTML = '&#9654;'; btn.classList.remove('active'); }
-      } else {
-        oePreviewAudio.src = `/api/on-ecoute/audio/${oeCurrentSubmission.id}`;
-        oePreviewAudio.play();
-        oePreviewing = true;
-        if (btn) { btn.innerHTML = '&#9208;'; btn.classList.add('active'); }
-      }
+    function oeFmt(s) {
+      s = Math.floor(s);
+      return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
     }
 
-    oePreviewAudio.addEventListener('ended', () => {
-      oePreviewing = false;
-      const btn = document.getElementById('oePreviewBtn');
-      if (btn) { btn.innerHTML = '&#9654;'; btn.classList.remove('active'); }
-    });
-
-    oePreviewAudio.addEventListener('timeupdate', () => {
-      const timeEl = document.getElementById('oePreviewTime');
-      if (timeEl && oePreviewAudio.duration) {
-        const cur = Math.floor(oePreviewAudio.currentTime);
-        const tot = Math.floor(oePreviewAudio.duration);
-        timeEl.textContent = `${Math.floor(cur/60)}:${String(cur%60).padStart(2,'0')} / ${Math.floor(tot/60)}:${String(tot%60).padStart(2,'0')}`;
-      }
-    });
-
     // Send command to overlay
-    async function oeSendCommand(action, submissionId) {
+    async function oeSendCommand(action, submissionId, seekTo) {
+      const body = { action };
+      if (submissionId) body.submissionId = submissionId;
+      if (typeof seekTo === 'number') body.seekTo = seekTo;
       await fetch('/api/on-ecoute/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, submissionId }),
+        body: JSON.stringify(body),
       });
     }
 
+    // Poll overlay playback state to update waveform + playhead
+    setInterval(async () => {
+      try {
+        const res = await fetch('/api/on-ecoute/playback-state');
+        if (!res.ok) return;
+        const state = await res.json();
+        oePlaying = state.isPlaying;
+        // Update waveform
+        if (oeWaveformData.length > 0 && state.duration > 0) {
+          oeDrawWaveform(state.currentTime, state.duration);
+          const pct = (state.currentTime / state.duration) * 100;
+          const ph = document.getElementById('oePlayhead');
+          if (ph) ph.style.left = pct + '%';
+          const td = document.getElementById('oeTimeDisplay');
+          if (td) td.textContent = `${oeFmt(state.currentTime)} / ${oeFmt(state.duration)}`;
+        }
+        // Update button visuals
+        const playBtn = document.getElementById('oePlayBtn');
+        const pauseBtn = document.getElementById('oePauseBtn');
+        if (oePlaying) {
+          playBtn.style.opacity = '0.4';
+          pauseBtn.style.opacity = '1';
+        } else {
+          playBtn.style.opacity = '1';
+          pauseBtn.style.opacity = '0.4';
+        }
+      } catch {}
+    }, 400);
+
+    // Waveform click → seek
+    document.getElementById('oeWaveformWrap').addEventListener('click', async (e) => {
+      if (!oeCurrentSubmission) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      // Get current duration from playback state
+      try {
+        const res = await fetch('/api/on-ecoute/playback-state');
+        const state = await res.json();
+        if (state.duration > 0) {
+          const seekTo = pct * state.duration;
+          await oeSendCommand('seek', null, seekTo);
+        }
+      } catch {}
+    });
+
     document.getElementById('oeGenreFilter').addEventListener('change', () => {
       oeCurrentSubmission = null;
-      oePreviewAudio.pause();
-      oePreviewing = false;
       oeLoadRandom();
     });
 
     // PLAY — approve the track + send play command to overlay
     document.getElementById('oePlayBtn').addEventListener('click', async () => {
       if (!oeCurrentSubmission) return;
-      oePreviewAudio.pause();
-      oePreviewing = false;
       // Approve it so overlay can access it
       await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'approved' }),
       });
-      // Send play command to overlay
       await oeSendCommand('play', oeCurrentSubmission.id);
-      oePlaying = true;
-      oeUpdateButtons();
     });
 
-    // PAUSE — pause the overlay
+    // PAUSE
     document.getElementById('oePauseBtn').addEventListener('click', async () => {
       await oeSendCommand('pause');
-      oePlaying = false;
-      oeUpdateButtons();
     });
 
-    // SKIP — mark current as played, load next random, send skip to overlay
+    // STOP
+    document.getElementById('oeStopBtn').addEventListener('click', async () => {
+      await oeSendCommand('stop');
+      if (oeCurrentSubmission) {
+        await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'played' }),
+        });
+      }
+    });
+
+    // SKIP — stop current, load next random
     document.getElementById('oeSkipBtn').addEventListener('click', async () => {
-      oePreviewAudio.pause();
-      oePreviewing = false;
       if (oeCurrentSubmission && oePlaying) {
-        // Mark the played one as 'played'
+        await oeSendCommand('stop');
         await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -1155,9 +1227,7 @@
     // REJECT
     document.getElementById('oeRejectBtn').addEventListener('click', async () => {
       if (!oeCurrentSubmission) return;
-      oePreviewAudio.pause();
-      oePreviewing = false;
-      if (oePlaying) await oeSendCommand('pause');
+      if (oePlaying) await oeSendCommand('stop');
       await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1170,9 +1240,7 @@
     document.getElementById('oeDeleteBtn').addEventListener('click', async () => {
       if (!oeCurrentSubmission) return;
       if (!confirm('Supprimer cette soumission ?')) return;
-      oePreviewAudio.pause();
-      oePreviewing = false;
-      if (oePlaying) await oeSendCommand('pause');
+      if (oePlaying) await oeSendCommand('stop');
       await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, { method: 'DELETE' });
       oeLoadRandom();
     });
