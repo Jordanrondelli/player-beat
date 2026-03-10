@@ -400,6 +400,22 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ═══════ SKIP FLASH ═══════ */
+
+.overlay-top.skip-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  animation: skipFlash 0.5s ease-out forwards;
+}
+
+@keyframes skipFlash {
+  0%   { background: rgba(230,57,70,0.25); }
+  100% { background: transparent; }
+}
+
 /* ═══════ LEGEND CARD (Meilleur Son) ═══════ */
 
 .legend-card {

@@ -643,7 +643,7 @@ function spawnReaction(judge, type) {
 }
 
 // Button handlers
-document.querySelectorAll('.judge-btn').forEach(btn => {
+document.querySelectorAll('.jbtn').forEach(btn => {
   btn.addEventListener('click', function () {
     const judge = this.dataset.judge;
     const vote = this.dataset.vote;
@@ -670,7 +670,7 @@ document.querySelectorAll('.judge-btn').forEach(btn => {
 
     // Down = skip to next
     if (vote === 'down') {
-      const bar = document.querySelector('.overlay-bar');
+      const bar = document.querySelector('.overlay-top');
       bar.classList.add('skip-flash');
       setTimeout(() => bar.classList.remove('skip-flash'), 500);
       setTimeout(() => skipToNext(), 300);
@@ -756,8 +756,8 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'KeyE':
       spawnReaction('host', 'down');
-      document.querySelector('.overlay-bar').classList.add('skip-flash');
-      setTimeout(() => document.querySelector('.overlay-bar').classList.remove('skip-flash'), 500);
+      document.querySelector('.overlay-top').classList.add('skip-flash');
+      setTimeout(() => document.querySelector('.overlay-top').classList.remove('skip-flash'), 500);
       setTimeout(() => skipToNext(), 300);
       break;
     // Guest shortcuts: I=fire, O=up, P=down
@@ -769,8 +769,8 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'KeyP':
       spawnReaction('guest', 'down');
-      document.querySelector('.overlay-bar').classList.add('skip-flash');
-      setTimeout(() => document.querySelector('.overlay-bar').classList.remove('skip-flash'), 500);
+      document.querySelector('.overlay-top').classList.add('skip-flash');
+      setTimeout(() => document.querySelector('.overlay-top').classList.remove('skip-flash'), 500);
       setTimeout(() => skipToNext(), 300);
       break;
   }
