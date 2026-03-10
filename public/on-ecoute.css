@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════
    ON ÉCOUTE — Broadcast Overlay
-   Full-width immersive waveform, 2K (2560×1440)
+   Clean, minimal broadcast overlay — NOT the main player style
+   2K canvas (2560×1440)
    ═══════════════════════════════════════════════════════════ */
 
 :root {
@@ -23,14 +24,13 @@ body {
   height: 1440px;
 }
 
-/* ═══════ OVERLAY TOP ═══════
-   The waveform IS the top section. Everything floats over it. */
+/* ═══════ OVERLAY TOP ═══════ */
 
 .overlay-top {
   position: absolute;
   top: 0; left: 0;
   width: 2560px;
-  height: 220px;
+  height: 280px;
   overflow: visible;
   z-index: 100;
 }
@@ -43,7 +43,6 @@ body {
   z-index: 1;
 }
 
-/* Gradient vignette: dark edges, transparent center — makes bars readable */
 .waveform-vignette {
   position: absolute;
   inset: 0;
@@ -51,34 +50,34 @@ body {
   pointer-events: none;
   background:
     linear-gradient(180deg,
-      rgba(0,0,0,0.55) 0%,
-      rgba(0,0,0,0.15) 30%,
-      transparent 50%,
-      rgba(0,0,0,0.15) 75%,
-      rgba(0,0,0,0.6) 100%),
+      rgba(0,0,0,0.6) 0%,
+      rgba(0,0,0,0.2) 25%,
+      transparent 45%,
+      rgba(0,0,0,0.2) 75%,
+      rgba(0,0,0,0.65) 100%),
     linear-gradient(90deg,
-      rgba(0,0,0,0.4) 0%,
-      transparent 12%,
-      transparent 88%,
-      rgba(0,0,0,0.4) 100%);
+      rgba(0,0,0,0.45) 0%,
+      transparent 10%,
+      transparent 90%,
+      rgba(0,0,0,0.45) 100%);
 }
 
-/* ═══════ TRACK INFO (floating center) ═══════ */
+/* ═══════ TRACK INFO (floating center-top) ═══════ */
 
 .track-info {
   position: absolute;
-  top: 20px;
+  top: 22px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
   text-align: center;
-  max-width: 800px;
+  max-width: 900px;
   pointer-events: none;
 }
 
 .track-title {
   font-weight: 900;
-  font-size: 28px;
+  font-size: 30px;
   letter-spacing: 0.5px;
   white-space: nowrap;
   overflow: hidden;
@@ -90,9 +89,9 @@ body {
 }
 
 .track-meta {
-  font-size: 14px;
+  font-size: 15px;
   color: rgba(255,255,255,0.7);
-  margin-top: 4px;
+  margin-top: 5px;
   text-shadow: 0 0 20px rgba(0,0,0,0.9), 0 2px 6px rgba(0,0,0,0.5);
 }
 
@@ -104,21 +103,20 @@ body {
 
 .time-display {
   position: absolute;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 24px;
+  right: 300px;
   z-index: 10;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: rgba(255,255,255,0.6);
+  color: rgba(255,255,255,0.5);
   text-shadow: 0 0 10px rgba(0,0,0,0.8);
   pointer-events: none;
 }
 
 .time-slash { margin: 0 3px; opacity: 0.4; }
 
-/* ═══════ PROGRESS BAR (bottom edge of overlay) ═══════ */
+/* ═══════ PROGRESS BAR ═══════ */
 
 .progress-bar {
   position: absolute;
@@ -138,143 +136,131 @@ body {
   transition: width 0.3s linear;
 }
 
-/* ═══════ JUDGE PANELS ═══════ */
+/* ═══════ JUDGE PANELS ═══════
+   Horizontal layout: name on top, 3 buttons in a row.
+   Each panel is a frosted glass pill.
+   Host = left, Guest = right.
+*/
 
 .judge {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: 24px;
   z-index: 15;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.host-judge { left: 50px; }
-.guest-judge { right: 50px; }
+.host-judge { left: 40px; }
+.guest-judge { right: 40px; }
 
 .judge-name {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 4px;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255,255,255,0.45);
   text-shadow: 0 0 15px rgba(0,0,0,0.8);
-  margin-bottom: 2px;
 }
 
 .judge-btns {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  gap: 10px;
 }
 
-/* ═══════ JUDGE BUTTONS ═══════ */
+/* ═══════ JUDGE BUTTONS ═══════
+   Small circular buttons — clean broadcast style.
+   NOT the main player's giant glowing squares.
+*/
 
 .jbtn {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  border: 1.5px solid rgba(255,255,255,0.08);
-  background: rgba(0,0,0,0.35);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.1);
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
 }
 
 .jbtn img {
-  width: 32px;
-  height: 32px;
+  width: 22px;
+  height: 22px;
   object-fit: contain;
-  filter: brightness(1.1);
+  filter: brightness(0.9) saturate(0.8);
   pointer-events: none;
-  transition: transform 0.2s;
+  transition: all 0.25s;
 }
 
-.jbtn::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 16px;
-  opacity: 0;
-  transition: opacity 0.25s;
-  pointer-events: none;
-}
-
-/* Fire button glow */
+/* Hover: subtle border glow, no big shadows */
 .jbtn-fire:hover {
-  border-color: rgba(255, 120, 0, 0.5);
-  box-shadow: 0 0 25px rgba(255, 100, 0, 0.4), inset 0 0 15px rgba(255, 100, 0, 0.1);
+  border-color: rgba(255, 140, 40, 0.5);
+  background: rgba(255, 100, 20, 0.12);
 }
-.jbtn-fire:hover img { transform: scale(1.15); }
-.jbtn-fire::after { background: radial-gradient(circle, rgba(255,120,0,0.15), transparent 70%); }
-.jbtn-fire:hover::after { opacity: 1; }
+.jbtn-fire:hover img { filter: brightness(1.2) saturate(1.1); transform: scale(1.1); }
 
-/* Up button glow */
 .jbtn-up:hover {
-  border-color: rgba(46, 204, 113, 0.4);
-  box-shadow: 0 0 25px rgba(46, 204, 113, 0.3), inset 0 0 15px rgba(46, 204, 113, 0.08);
+  border-color: rgba(46, 204, 113, 0.5);
+  background: rgba(46, 204, 113, 0.1);
 }
-.jbtn-up:hover img { transform: scale(1.15); }
-.jbtn-up::after { background: radial-gradient(circle, rgba(46,204,113,0.12), transparent 70%); }
-.jbtn-up:hover::after { opacity: 1; }
+.jbtn-up:hover img { filter: brightness(1.2) saturate(1.1); transform: scale(1.1); }
 
-/* Down button glow */
 .jbtn-down:hover {
   border-color: rgba(230, 57, 70, 0.5);
-  box-shadow: 0 0 25px rgba(230, 57, 70, 0.35), inset 0 0 15px rgba(230, 57, 70, 0.1);
+  background: rgba(230, 57, 70, 0.1);
 }
-.jbtn-down:hover img { transform: scale(1.15); }
-.jbtn-down::after { background: radial-gradient(circle, rgba(230,57,70,0.15), transparent 70%); }
-.jbtn-down:hover::after { opacity: 1; }
+.jbtn-down:hover img { filter: brightness(1.2) saturate(1.1); transform: scale(1.1); }
 
-.jbtn:active { transform: scale(0.88); }
+.jbtn:active { transform: scale(0.9); }
 
-/* ═══════ BUTTON BURST ANIMATIONS ═══════ */
+/* ═══════ BUTTON BURST ANIMATIONS ═══════
+   Quick, subtle pop — not the aggressive main player style.
+*/
 
 .jbtn-fire.burst {
-  animation: firePop 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: fireBurst 0.45s ease-out;
 }
-@keyframes firePop {
-  0%   { transform: scale(0.85); box-shadow: 0 0 0 rgba(255,100,0,0); }
-  35%  { transform: scale(1.25); box-shadow: 0 0 50px rgba(255,100,0,0.7), 0 0 100px rgba(255,60,0,0.3); background: rgba(255,80,0,0.25); }
-  70%  { transform: scale(1.05); }
-  100% { transform: scale(1); box-shadow: none; background: rgba(0,0,0,0.35); }
+@keyframes fireBurst {
+  0%   { transform: scale(0.9); }
+  30%  { transform: scale(1.18); background: rgba(255,120,30,0.2); border-color: rgba(255,140,40,0.6); }
+  100% { transform: scale(1); background: rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.1); }
 }
 
 .jbtn-up.burst {
-  animation: upPop 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: upBurst 0.4s ease-out;
 }
-@keyframes upPop {
-  0%   { transform: scale(0.85); }
-  40%  { transform: scale(1.2); box-shadow: 0 0 40px rgba(46,204,113,0.5); background: rgba(46,204,113,0.15); }
-  100% { transform: scale(1); box-shadow: none; background: rgba(0,0,0,0.35); }
+@keyframes upBurst {
+  0%   { transform: scale(0.9); }
+  35%  { transform: scale(1.15); background: rgba(46,204,113,0.15); border-color: rgba(46,204,113,0.5); }
+  100% { transform: scale(1); background: rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.1); }
 }
 
 .jbtn-down.burst {
-  animation: downPop 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: downBurst 0.4s ease-out;
 }
-@keyframes downPop {
-  0%   { transform: scale(0.85); }
-  40%  { transform: scale(1.2); box-shadow: 0 0 40px rgba(230,57,70,0.5); background: rgba(230,57,70,0.15); }
-  100% { transform: scale(1); box-shadow: none; background: rgba(0,0,0,0.35); }
+@keyframes downBurst {
+  0%   { transform: scale(0.9); }
+  35%  { transform: scale(1.15); background: rgba(230,57,70,0.15); border-color: rgba(230,57,70,0.5); }
+  100% { transform: scale(1); background: rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.1); }
 }
 
-/* ═══════ REACTIONS (floating up from buttons) ═══════ */
+/* ═══════ REACTIONS ═══════ */
 
 .judge-reaction {
   position: absolute;
-  top: 100%;
+  bottom: 70px;
   left: 50%;
   transform: translateX(-50%);
-  width: 160px;
+  width: 200px;
   height: 200px;
   pointer-events: none;
   z-index: 200;
@@ -283,49 +269,45 @@ body {
 .reaction-float {
   position: absolute;
   bottom: 0;
-  animation: reactUp 3s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+  animation: reactUp 2.8s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
   pointer-events: none;
 }
 
 .reaction-float img {
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
 }
 
-/* Fire reaction gets orange glow */
 .reaction-float.react-fire img {
-  filter: drop-shadow(0 0 20px rgba(255,100,0,0.7)) drop-shadow(0 0 40px rgba(255,60,0,0.3));
+  filter: drop-shadow(0 0 12px rgba(255,100,0,0.5));
 }
-
-/* Up reaction gets green glow */
 .reaction-float.react-up img {
-  filter: drop-shadow(0 0 15px rgba(46,204,113,0.5));
+  filter: drop-shadow(0 0 10px rgba(46,204,113,0.4));
 }
-
-/* Down reaction gets red glow */
 .reaction-float.react-down img {
-  filter: drop-shadow(0 0 15px rgba(230,57,70,0.5));
+  filter: drop-shadow(0 0 10px rgba(230,57,70,0.4));
 }
 
 @keyframes reactUp {
-  0%   { opacity: 0; transform: translateY(0) scale(0.3); }
-  12%  { opacity: 1; transform: translateY(10px) scale(1.3); }
-  25%  { opacity: 1; transform: translateY(0) scale(1); }
-  75%  { opacity: 0.8; transform: translateY(-60px) scale(0.9); }
-  100% { opacity: 0; transform: translateY(-140px) scale(0.6); }
+  0%   { opacity: 0; transform: translateY(0) scale(0.4); }
+  10%  { opacity: 1; transform: translateY(5px) scale(1.15); }
+  25%  { opacity: 1; transform: translateY(-5px) scale(1); }
+  70%  { opacity: 0.7; transform: translateY(-70px) scale(0.85); }
+  100% { opacity: 0; transform: translateY(-150px) scale(0.5); }
 }
 
-/* ═══════ CONTROLS (bottom-left, very subtle) ═══════ */
+/* ═══════ CONTROLS (bottom center, minimal) ═══════ */
 
 .controls {
   position: absolute;
-  bottom: 14px;
-  left: 30px;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 15;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .ctrl-btn {
@@ -334,7 +316,7 @@ body {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.35);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -343,19 +325,19 @@ body {
 }
 
 .ctrl-btn:hover {
-  color: rgba(255,255,255,0.8);
-  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.75);
+  background: rgba(255,255,255,0.05);
 }
 
 .ctrl-play {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 50%;
   background: rgba(0,0,0,0.3);
 }
 .ctrl-play:hover {
-  border-color: rgba(255,255,255,0.3);
+  border-color: rgba(255,255,255,0.25);
   background: rgba(0,0,0,0.4);
 }
 
@@ -369,14 +351,14 @@ body {
 .ctrl-sep {
   width: 1px;
   height: 16px;
-  background: rgba(255,255,255,0.1);
-  margin: 0 4px;
+  background: rgba(255,255,255,0.08);
+  margin: 0 2px;
 }
 
 .src-btn {
   background: transparent;
   border: none;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.28);
   font-family: var(--font);
   font-size: 9px;
   font-weight: 700;
@@ -387,16 +369,16 @@ body {
   transition: all 0.2s;
 }
 
-.src-btn:hover { color: rgba(255,255,255,0.6); }
+.src-btn:hover { color: rgba(255,255,255,0.55); }
 .src-btn.active {
   color: var(--red);
-  background: rgba(230,57,70,0.1);
+  background: rgba(230,57,70,0.08);
 }
 
 .queue-info {
   font-size: 10px;
   font-weight: 600;
-  color: rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -412,7 +394,7 @@ body {
 }
 
 @keyframes skipFlash {
-  0%   { background: rgba(230,57,70,0.25); }
+  0%   { background: rgba(230,57,70,0.2); }
   100% { background: transparent; }
 }
 
@@ -420,13 +402,13 @@ body {
 
 .legend-card {
   position: absolute;
-  top: 240px;
+  top: 300px;
   right: 40px;
-  width: 190px;
-  padding: 14px 16px;
+  width: 200px;
+  padding: 16px 18px;
   border-radius: 14px;
   background: rgba(0,0,0,0.45);
-  border: 1px solid rgba(230,57,70,0.12);
+  border: 1px solid rgba(230,57,70,0.1);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: 0 8px 40px rgba(0,0,0,0.5);
@@ -440,11 +422,11 @@ body {
   color: var(--red);
   text-align: center;
   margin-bottom: 8px;
-  opacity: 0.9;
+  opacity: 0.85;
 }
 
 .legend-user {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 800;
   text-align: center;
   color: white;
@@ -458,7 +440,7 @@ body {
   font-size: 11px;
   text-align: center;
   color: rgba(255,255,255,0.5);
-  margin-top: 3px;
+  margin-top: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -479,8 +461,8 @@ body {
 
 @keyframes legendFlash {
   0%   { transform: scale(1); box-shadow: 0 8px 40px rgba(0,0,0,0.5); }
-  20%  { transform: scale(1.06); box-shadow: 0 0 50px var(--red-glow), 0 8px 40px rgba(0,0,0,0.5); border-color: rgba(230,57,70,0.4); }
-  100% { transform: scale(1); box-shadow: 0 8px 40px rgba(0,0,0,0.5); border-color: rgba(230,57,70,0.12); }
+  20%  { transform: scale(1.05); box-shadow: 0 0 40px var(--red-glow), 0 8px 40px rgba(0,0,0,0.5); border-color: rgba(230,57,70,0.35); }
+  100% { transform: scale(1); box-shadow: 0 8px 40px rgba(0,0,0,0.5); border-color: rgba(230,57,70,0.1); }
 }
 
 /* ═══════ LOADING ═══════ */
