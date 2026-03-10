@@ -501,6 +501,17 @@
           <button class="save-btn" id="oePauseBtn" style="flex:1; background:linear-gradient(135deg,rgba(255,255,255,.15),rgba(255,255,255,.06)); box-shadow:none; color:rgba(255,255,255,.7)">&#9208; PAUSE</button>
           <button class="save-btn" id="oeSkipBtn" style="flex:0 0 auto; padding:10px 20px; background:linear-gradient(135deg,rgba(52,152,219,.2),rgba(52,152,219,.1)); box-shadow:none; color:#3498db">&#9197; SUIVANT</button>
         </div>
+        <!-- Names for overlay -->
+        <div style="margin-top:14px; display:flex; gap:12px">
+          <div style="flex:1">
+            <label style="font-size:11px; color:rgba(255,255,255,.4); letter-spacing:1px; font-weight:700">NOM (MOI)</label>
+            <input type="text" id="oeHostName" class="setting-input" placeholder="Ton pseudo" style="margin-top:4px; width:100%">
+          </div>
+          <div style="flex:1">
+            <label style="font-size:11px; color:rgba(255,255,255,.4); letter-spacing:1px; font-weight:700">NOM (INVIT&Eacute;)</label>
+            <input type="text" id="oeGuestName" class="setting-input" placeholder="Pseudo invit&eacute;" style="margin-top:4px; width:100%">
+          </div>
+        </div>
         <!-- Reactions: MOI (host) + INVITÉ (guest) -->
         <div style="margin-top:16px; display:flex; gap:20px">
           <div style="flex:1">
@@ -538,6 +549,15 @@
         </div>
         <!-- List -->
         <div id="oeTrackList" style="display:flex; flex-direction:column; gap:6px; max-height:500px; overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <!-- Message popup modal -->
+    <div id="oeMessageModal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.7); backdrop-filter:blur(8px); align-items:center; justify-content:center" onclick="this.style.display='none'">
+      <div style="background:rgba(20,18,14,.95); border:1.5px solid rgba(200,148,62,.3); border-radius:20px; padding:40px 50px; max-width:700px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.5)" onclick="event.stopPropagation()">
+        <div style="font-size:11px; font-weight:800; letter-spacing:3px; color:rgba(232,185,74,.7); margin-bottom:20px">MESSAGE</div>
+        <div id="oeMessageText" style="font-size:28px; font-weight:600; color:rgba(255,255,255,.9); line-height:1.4; word-break:break-word"></div>
+        <button class="save-btn" style="margin-top:30px; padding:10px 30px; background:linear-gradient(135deg,rgba(255,255,255,.1),rgba(255,255,255,.05)); box-shadow:none; color:rgba(255,255,255,.5)" onclick="document.getElementById('oeMessageModal').style.display='none'">Fermer</button>
       </div>
     </div>
 
@@ -1046,6 +1066,31 @@
       } catch {}
     })();
 
+    // Load names from settings
+    (async () => {
+      try {
+        const res = await fetch('/api/settings');
+        const s = await res.json();
+        document.getElementById('oeHostName').value = s.oe_host_name || '';
+        document.getElementById('oeGuestName').value = s.oe_guest_name || '';
+      } catch {}
+    })();
+
+    // Save names on change
+    function oeSaveNames() {
+      const body = {
+        oe_host_name: document.getElementById('oeHostName').value.trim(),
+        oe_guest_name: document.getElementById('oeGuestName').value.trim(),
+      };
+      fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).catch(() => {});
+    }
+    document.getElementById('oeHostName').addEventListener('change', oeSaveNames);
+    document.getElementById('oeGuestName').addEventListener('change', oeSaveNames);
+
     // Sub-tabs
     document.querySelectorAll('.oe-subtab').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1072,22 +1117,23 @@
           list.innerHTML = '<div class="queue-empty">Aucun son ici</div>';
           return;
         }
-        list.innerHTML = filtered.map(item => `
-          <div class="q-item ${oeSelected && oeSelected.id === item.id ? 'playing' : ''}" style="cursor:pointer" onclick="oeSelectTrack(${item.id})">
-            <div class="q-info">
-              <div class="q-title">${esc(item.title)}</div>
-              <div class="q-meta">
-                ${item.artist ? esc(item.artist) + ' &middot; ' : ''}
-                <span style="color:var(--accent)">${esc(item.submitted_by || 'Anonyme')}</span>
-                ${item.genre ? ' &middot; <span style="color:#e8b94a">' + esc(item.genre) + '</span>' : ''}
-              </div>
-              ${item.message ? '<div class="q-meta" style="font-style:italic;color:rgba(255,255,255,.3)">&laquo; ' + esc(item.message) + ' &raquo;</div>' : ''}
+        list.innerHTML = filtered.map(item => {
+          const isPlayed = oeStatus === 'played';
+          const totalReact = (item.fire || 0) + (item.up || 0) + (item.down || 0);
+          const pctUp = totalReact > 0 ? Math.round(((item.up || 0) / totalReact) * 100) : 0;
+          const fireCount = item.fire || 0;
+          return `
+          <div class="q-item ${oeSelected && oeSelected.id === item.id ? 'playing' : ''}" style="cursor:pointer; display:flex; align-items:center; gap:12px; padding:10px 14px" onclick="oeSelectTrack(${item.id})">
+            <div style="flex:1; min-width:0">
+              <div style="font-weight:700; font-size:14px; color:rgba(255,255,255,.9); white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${esc(item.title || 'Sans titre')}${item.artist ? ' <span style="font-weight:400; color:rgba(255,255,255,.5)">&mdash; ' + esc(item.artist) + '</span>' : ''}</div>
             </div>
-            <div class="q-actions">
-              <button class="q-btn" onclick="event.stopPropagation(); oeDeleteTrack(${item.id})" title="Supprimer">&#128465;</button>
+            ${item.genre ? '<div style="font-size:11px; font-weight:700; color:#e8b94a; background:rgba(232,185,74,.1); padding:3px 10px; border-radius:20px; white-space:nowrap">' + esc(item.genre) + '</div>' : ''}
+            ${isPlayed && totalReact > 0 ? '<div style="display:flex;gap:8px;font-size:12px;color:rgba(255,255,255,.5);white-space:nowrap"><span>&#128293; ' + fireCount + '</span><span>&#128077; ' + pctUp + '%</span></div>' : ''}
+            <div class="q-actions" style="flex-shrink:0">
+              <button class="q-btn" onclick="event.stopPropagation(); oeDeleteTrack(${item.id})" title="Supprimer" style="font-size:14px">&#128465;</button>
             </div>
-          </div>
-        `).join('');
+          </div>`;
+        }).join('');
       } catch (err) {
         console.error('OE list error:', err);
       }
@@ -1103,12 +1149,14 @@
         oeLoadList();
         document.getElementById('oeNowPlaying').style.display = 'block';
         document.getElementById('oeSelectedCard').innerHTML = `
-          <div class="oe-card" style="padding:16px 20px">
-            ${oeSelected.genre ? `<div class="oe-genre-badge">${esc(oeSelected.genre)}</div>` : ''}
-            <div class="oe-title" style="font-size:20px">${esc(oeSelected.title)}</div>
-            <div class="oe-artist">${oeSelected.artist ? esc(oeSelected.artist) : ''}</div>
-            <div class="oe-submitter">par ${esc(oeSelected.submitted_by || 'Anonyme')}</div>
-            ${oeSelected.message ? `<div class="oe-message">\u00ab ${esc(oeSelected.message)} \u00bb</div>` : ''}
+          <div class="oe-card" style="padding:16px 20px; display:flex; align-items:center; gap:16px">
+            <div style="flex:1; min-width:0">
+              ${oeSelected.genre ? `<div class="oe-genre-badge">${esc(oeSelected.genre)}</div>` : ''}
+              <div class="oe-title" style="font-size:20px">${esc(oeSelected.title)}</div>
+              <div class="oe-artist">${oeSelected.artist ? esc(oeSelected.artist) : ''}</div>
+              <div class="oe-submitter">par ${esc(oeSelected.submitted_by || 'Anonyme')}</div>
+            </div>
+            ${oeSelected.message ? `<button class="save-btn" onclick="oeShowMessage()" style="flex-shrink:0; padding:8px 14px; background:linear-gradient(135deg,rgba(232,185,74,.15),rgba(232,185,74,.08)); box-shadow:none; font-size:13px; color:#e8b94a" title="Lire le message">&#128172; Message</button>` : ''}
           </div>`;
         oeWaveformData = [];
         oeDrawWaveform(0, 0);
@@ -1250,12 +1298,14 @@
             oeLoadList();
             document.getElementById('oeNowPlaying').style.display = 'block';
             document.getElementById('oeSelectedCard').innerHTML = `
-              <div class="oe-card" style="padding:16px 20px">
-                ${next.genre ? `<div class="oe-genre-badge">${esc(next.genre)}</div>` : ''}
-                <div class="oe-title" style="font-size:20px">${esc(next.title)}</div>
-                <div class="oe-artist">${next.artist ? esc(next.artist) : ''}</div>
-                <div class="oe-submitter">par ${esc(next.submitted_by || 'Anonyme')}</div>
-                ${next.message ? `<div class="oe-message">\u00ab ${esc(next.message)} \u00bb</div>` : ''}
+              <div class="oe-card" style="padding:16px 20px; display:flex; align-items:center; gap:16px">
+                <div style="flex:1; min-width:0">
+                  ${next.genre ? `<div class="oe-genre-badge">${esc(next.genre)}</div>` : ''}
+                  <div class="oe-title" style="font-size:20px">${esc(next.title)}</div>
+                  <div class="oe-artist">${next.artist ? esc(next.artist) : ''}</div>
+                  <div class="oe-submitter">par ${esc(next.submitted_by || 'Anonyme')}</div>
+                </div>
+                ${next.message ? `<button class="save-btn" onclick="oeShowMessage()" style="flex-shrink:0; padding:8px 14px; background:linear-gradient(135deg,rgba(232,185,74,.15),rgba(232,185,74,.08)); box-shadow:none; font-size:13px; color:#e8b94a" title="Lire le message">&#128172; Message</button>` : ''}
               </div>`;
             oeWaveformData = [];
             oeDrawWaveform(0, 0);
@@ -1294,6 +1344,13 @@
         });
       });
     });
+
+    // Show message popup
+    window.oeShowMessage = function() {
+      if (!oeSelected || !oeSelected.message) return;
+      document.getElementById('oeMessageText').textContent = oeSelected.message;
+      document.getElementById('oeMessageModal').style.display = 'flex';
+    };
 
     // Delete track
     window.oeDeleteTrack = async function(id) {

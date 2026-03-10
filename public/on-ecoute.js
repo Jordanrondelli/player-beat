@@ -7,7 +7,14 @@
 // ===== AUDIO CONTEXT =====
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const gainNode = audioCtx.createGain();
-gainNode.connect(audioCtx.destination);
+// Analyser for real-time intensity glow
+const analyser = audioCtx.createAnalyser();
+analyser.fftSize = 256;
+analyser.smoothingTimeConstant = 0.75;
+gainNode.connect(analyser);
+analyser.connect(audioCtx.destination);
+
+const analyserData = new Uint8Array(analyser.frequencyBinCount);
 
 let audioBuffer = null;
 let sourceNode = null;
@@ -83,7 +90,7 @@ function sampleWaveform(fIdx) {
   return a + (b - a) * f;
 }
 
-// ===== WAVEFORM DRAWING (inside capsule) =====
+// ===== WAVEFORM DRAWING (with intensity glow) =====
 function drawWaveform(currentTime) {
   const dpr = window.devicePixelRatio || 1;
   const w = waveformCanvas.width / dpr;
@@ -95,12 +102,32 @@ function drawWaveform(currentTime) {
   const duration = getDuration();
   if (!duration || waveformData.length === 0) return;
 
+  // Get real-time audio intensity for glow
+  let intensity = 0;
+  if (isPlaying) {
+    analyser.getByteFrequencyData(analyserData);
+    let sum = 0;
+    for (let i = 0; i < analyserData.length; i++) sum += analyserData[i];
+    intensity = sum / (analyserData.length * 255);
+  }
+
   const centerY = h / 2;
   const totalBars = Math.floor(w / 4);
   const barW = 2.5;
   const gap = (w - totalBars * barW) / (totalBars - 1);
   const step = barW + gap;
   const progress = currentTime / duration;
+
+  // Glow behind played portion
+  if (intensity > 0.05) {
+    const glowW = progress * w;
+    const glowGrad = ctx.createRadialGradient(glowW, centerY, 0, glowW, centerY, 100 + intensity * 200);
+    glowGrad.addColorStop(0, `rgba(232, 118, 42, ${intensity * 0.35})`);
+    glowGrad.addColorStop(0.5, `rgba(200, 80, 20, ${intensity * 0.15})`);
+    glowGrad.addColorStop(1, 'rgba(200, 80, 20, 0)');
+    ctx.fillStyle = glowGrad;
+    ctx.fillRect(0, 0, w, h);
+  }
 
   for (let i = 0; i < totalBars; i++) {
     const x = i * step;
@@ -112,12 +139,15 @@ function drawWaveform(currentTime) {
     const isPast = frac <= progress;
 
     if (isPast) {
+      // Near playhead bars get intensity boost
+      const nearPlayhead = 1 - Math.min(1, Math.abs(frac - progress) * 15);
+      const boost = nearPlayhead * intensity * 0.4;
       const grad = ctx.createLinearGradient(x, centerY - barH, x, centerY + barH);
-      grad.addColorStop(0, `rgba(200, 100, 20, ${0.4 + amp * 0.3})`);
-      grad.addColorStop(0.4, `rgba(232, 118, 42, ${0.6 + amp * 0.4})`);
-      grad.addColorStop(0.5, `rgba(240, 160, 50, ${0.7 + amp * 0.3})`);
-      grad.addColorStop(0.6, `rgba(232, 118, 42, ${0.6 + amp * 0.4})`);
-      grad.addColorStop(1, `rgba(200, 100, 20, ${0.4 + amp * 0.3})`);
+      grad.addColorStop(0, `rgba(200, ${100 + boost * 100}, 20, ${0.4 + amp * 0.3 + boost})`);
+      grad.addColorStop(0.4, `rgba(232, ${118 + boost * 80}, 42, ${0.6 + amp * 0.4 + boost})`);
+      grad.addColorStop(0.5, `rgba(240, ${160 + boost * 60}, 50, ${0.7 + amp * 0.3 + boost})`);
+      grad.addColorStop(0.6, `rgba(232, ${118 + boost * 80}, 42, ${0.6 + amp * 0.4 + boost})`);
+      grad.addColorStop(1, `rgba(200, ${100 + boost * 100}, 20, ${0.4 + amp * 0.3 + boost})`);
       ctx.fillStyle = grad;
     } else {
       ctx.fillStyle = `rgba(180, 140, 90, ${0.1 + amp * 0.12})`;
@@ -128,10 +158,15 @@ function drawWaveform(currentTime) {
     roundedBar(ctx, x, centerY + 1, barW, barH, r);
   }
 
-  // Playhead line
+  // Playhead line with glow
   const px = progress * w;
-  ctx.fillStyle = 'rgba(255, 200, 80, 0.8)';
-  ctx.fillRect(px - 0.5, 0, 1, h);
+  if (intensity > 0.05) {
+    ctx.shadowBlur = 8 + intensity * 20;
+    ctx.shadowColor = `rgba(255, 180, 60, ${0.4 + intensity * 0.5})`;
+  }
+  ctx.fillStyle = `rgba(255, 200, 80, ${0.7 + intensity * 0.3})`;
+  ctx.fillRect(px - 0.75, 0, 1.5, h);
+  ctx.shadowBlur = 0;
 }
 
 function roundedBar(ctx, x, y, w, h, r) {
@@ -319,7 +354,7 @@ async function fetchAndLoadQueue() {
   }
 }
 
-// ===== VOTES (On Écoute) =====
+// ===== VOTES (On Écoute — only from Twitch chat, admin reactions are visual only) =====
 let votes = { fire: 0, up: 0, down: 0 };
 
 function updateOeChatDisplay() {
@@ -394,7 +429,21 @@ async function loadLegend() {
 loadLegend();
 setInterval(loadLegend, 5000);
 
-// ===== REACTIONS SYSTEM (emoji based) =====
+// ===== NAMES (loaded from settings) =====
+async function loadJudgeNames() {
+  try {
+    const res = await fetch('/api/settings');
+    const settings = await res.json();
+    const hostEl = document.getElementById('hostName');
+    const guestEl = document.getElementById('guestName');
+    if (hostEl) hostEl.textContent = settings.oe_host_name || '';
+    if (guestEl) guestEl.textContent = settings.oe_guest_name || '';
+  } catch {}
+}
+loadJudgeNames();
+setInterval(loadJudgeNames, 10000);
+
+// ===== REACTIONS SYSTEM (emoji burst) =====
 function spawnReaction(judge, type) {
   const containerId = judge === 'host' ? 'hostReaction' : 'guestReaction';
   const container = document.getElementById(containerId);
@@ -405,7 +454,7 @@ function spawnReaction(judge, type) {
 
   const el = document.createElement('div');
   el.className = `reaction-float ${classMap[type] || ''}`;
-  el.style.left = `${20 + Math.random() * 200}px`;
+  el.style.left = `${20 + Math.random() * 260}px`;
 
   const span = document.createElement('span');
   span.className = 'react-emoji';
@@ -414,6 +463,14 @@ function spawnReaction(judge, type) {
   container.appendChild(el);
 
   setTimeout(() => el.remove(), 3000);
+}
+
+// Spawn a burst of emojis (8-12 staggered for fluid flow)
+function spawnReactionBurst(judge, type) {
+  const count = 8 + Math.floor(Math.random() * 5); // 8-12
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => spawnReaction(judge, type), i * 80 + Math.random() * 60);
+  }
 }
 
 // ===== JUDGE BUTTON HANDLERS =====
@@ -426,12 +483,12 @@ document.querySelectorAll('.judge-btn').forEach(btn => {
     this.classList.remove('burst');
     void this.offsetWidth;
     this.classList.add('burst');
-    setTimeout(() => this.classList.remove('burst'), 500);
+    setTimeout(() => this.classList.remove('burst'), 700);
 
-    // Spawn reaction
-    spawnReaction(judge, vote);
+    // Spawn reaction burst
+    spawnReactionBurst(judge, vote);
 
-    // Send vote to server (On Écoute API)
+    // Send vote to server (On Écoute API) — only from direct overlay clicks (keyboard shortcuts)
     const subId = (playlist[currentTrackIndex] && playlist[currentTrackIndex].submission)
       ? playlist[currentTrackIndex].submission.id : undefined;
     if (subId) {
@@ -506,25 +563,25 @@ document.addEventListener('keydown', (e) => {
       }
       break;
     case 'KeyQ':
-      spawnReaction('host', 'fire');
+      spawnReactionBurst('host', 'fire');
       break;
     case 'KeyW':
-      spawnReaction('host', 'up');
+      spawnReactionBurst('host', 'up');
       break;
     case 'KeyE':
-      spawnReaction('host', 'down');
+      spawnReactionBurst('host', 'down');
       document.getElementById('topBar').classList.add('skip-flash');
       setTimeout(() => document.getElementById('topBar').classList.remove('skip-flash'), 500);
       setTimeout(() => skipToNext(), 300);
       break;
     case 'KeyI':
-      spawnReaction('guest', 'fire');
+      spawnReactionBurst('guest', 'fire');
       break;
     case 'KeyO':
-      spawnReaction('guest', 'up');
+      spawnReactionBurst('guest', 'up');
       break;
     case 'KeyP':
-      spawnReaction('guest', 'down');
+      spawnReactionBurst('guest', 'down');
       document.getElementById('topBar').classList.add('skip-flash');
       setTimeout(() => document.getElementById('topBar').classList.remove('skip-flash'), 500);
       setTimeout(() => skipToNext(), 300);
@@ -632,7 +689,6 @@ setInterval(async () => {
     switch (cmd.action) {
       case 'play':
         if (cmd.submissionId) {
-          // Approve first so playlist endpoint returns it
           await loadSubmissionById(cmd.submissionId, true);
         } else {
           if (audioCtx.state === 'suspended') await audioCtx.resume();
@@ -665,20 +721,11 @@ setInterval(async () => {
             matchBtn.classList.remove('burst');
             void matchBtn.offsetWidth;
             matchBtn.classList.add('burst');
-            setTimeout(() => matchBtn.classList.remove('burst'), 500);
+            setTimeout(() => matchBtn.classList.remove('burst'), 700);
           }
-          // Spawn floating emoji reaction
-          spawnReaction(cmd.judge, cmd.react);
-          // Also send vote to server
-          const subId = (playlist[currentTrackIndex] && playlist[currentTrackIndex].submission)
-            ? playlist[currentTrackIndex].submission.id : undefined;
-          if (subId) {
-            fetch('/api/on-ecoute/votes', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ submission_id: subId, type: cmd.react }),
-            }).catch(() => {});
-          }
+          // Spawn burst of floating emojis (NOT just one)
+          spawnReactionBurst(cmd.judge, cmd.react);
+          // Admin reactions are VISUAL ONLY — no vote counting
         }
         break;
     }

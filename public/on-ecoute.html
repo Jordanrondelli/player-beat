@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=2560, initial-scale=1">
   <title>ON ÉCOUTE — Overlay</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="on-ecoute.css?v=6">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="on-ecoute.css?v=8">
 </head>
 <body>
 
@@ -13,19 +14,22 @@
   <div class="top-bar" id="topBar">
 
     <!-- Host judge buttons (left) -->
-    <div class="judge-panel host-panel">
-      <button class="judge-btn" data-judge="host" data-vote="fire">
-        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F525;</span></div>
-        <span class="judge-btn-label">FIRE</span>
-      </button>
-      <button class="judge-btn" data-judge="host" data-vote="down">
-        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44E;</span></div>
-        <span class="judge-btn-label">THUMBS DOWN</span>
-      </button>
-      <button class="judge-btn" data-judge="host" data-vote="up">
-        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44D;</span></div>
-        <span class="judge-btn-label">THUMBS UP</span>
-      </button>
+    <div class="judge-side">
+      <div class="judge-panel host-panel">
+        <button class="judge-btn" data-judge="host" data-vote="fire">
+          <div class="judge-btn-inner"><span class="judge-emoji">&#x1F525;</span></div>
+          <span class="judge-btn-label">FIRE</span>
+        </button>
+        <button class="judge-btn" data-judge="host" data-vote="down">
+          <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44E;</span></div>
+          <span class="judge-btn-label">THUMBS DOWN</span>
+        </button>
+        <button class="judge-btn" data-judge="host" data-vote="up">
+          <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44D;</span></div>
+          <span class="judge-btn-label">THUMBS UP</span>
+        </button>
+      </div>
+      <div class="judge-name" id="hostName"></div>
     </div>
 
     <!-- Player bar (center capsule) -->
@@ -40,19 +44,22 @@
     </div>
 
     <!-- Guest judge buttons (right) -->
-    <div class="judge-panel guest-panel">
-      <button class="judge-btn" data-judge="guest" data-vote="fire">
-        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F525;</span></div>
-        <span class="judge-btn-label">FIRE</span>
-      </button>
-      <button class="judge-btn" data-judge="guest" data-vote="down">
-        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44E;</span></div>
-        <span class="judge-btn-label">THUMBS DOWN</span>
-      </button>
-      <button class="judge-btn" data-judge="guest" data-vote="up">
-        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44D;</span></div>
-        <span class="judge-btn-label">THUMBS UP</span>
-      </button>
+    <div class="judge-side">
+      <div class="judge-panel guest-panel">
+        <button class="judge-btn" data-judge="guest" data-vote="fire">
+          <div class="judge-btn-inner"><span class="judge-emoji">&#x1F525;</span></div>
+          <span class="judge-btn-label">FIRE</span>
+        </button>
+        <button class="judge-btn" data-judge="guest" data-vote="down">
+          <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44E;</span></div>
+          <span class="judge-btn-label">THUMBS DOWN</span>
+        </button>
+        <button class="judge-btn" data-judge="guest" data-vote="up">
+          <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44D;</span></div>
+          <span class="judge-btn-label">THUMBS UP</span>
+        </button>
+      </div>
+      <div class="judge-name" id="guestName"></div>
     </div>
 
   </div>
@@ -112,9 +119,9 @@
   <!-- Meilleur Son card -->
   <div class="legend-card" id="legendCard">
     <div class="legend-badge">MEILLEUR SON</div>
-    <div class="legend-user" id="legendUser">—</div>
+    <div class="legend-user" id="legendUser">&mdash;</div>
     <div class="legend-track" id="legendTrack"></div>
-    <div class="legend-fire" id="legendFire">🔥 0</div>
+    <div class="legend-fire" id="legendFire">&#128293; 0</div>
   </div>
 
   <!-- Loading -->
@@ -122,6 +129,6 @@
     <div class="loading-spinner"></div>
   </div>
 
-  <script src="on-ecoute.js?v=6"></script>
+  <script src="on-ecoute.js?v=8"></script>
 </body>
 </html>
