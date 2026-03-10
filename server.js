@@ -70,13 +70,13 @@ async function initDB() {
     );
   `);
 
-  // On Écoute — independent submission system
+  // On Écoute — independent submission system (files on disk, not BYTEA)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS on_ecoute_submissions (
       id SERIAL PRIMARY KEY,
       title TEXT NOT NULL,
       artist TEXT DEFAULT '',
-      file_data BYTEA NOT NULL,
+      file_path TEXT NOT NULL,
       file_mimetype TEXT DEFAULT 'audio/mpeg',
       submitted_by TEXT DEFAULT 'Anonyme',
       status TEXT DEFAULT 'pending',
@@ -90,6 +90,10 @@ async function initDB() {
       down INTEGER DEFAULT 0
     );
   `);
+  // Migrate: add file_path column if table had file_data instead
+  await pool.query(`
+    ALTER TABLE on_ecoute_submissions ADD COLUMN IF NOT EXISTS file_path TEXT;
+  `).catch(() => {});
 
   // Skins system
   await pool.query(`
@@ -174,6 +178,8 @@ app.use(session({
 // Upload config
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const onEcouteDir = path.join(__dirname, 'uploads', 'on-ecoute');
+if (!fs.existsSync(onEcouteDir)) fs.mkdirSync(onEcouteDir, { recursive: true });
 const upload = multer({
   dest: uploadDir,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
@@ -861,10 +867,10 @@ app.get('/api/twitch-votes', async (req, res) => {
 
 // ===== ON ÉCOUTE API (independent system) =====
 
-// Upload config for On Écoute: accepts .mp3 and .wav only
+// Upload config for On Écoute: accepts .mp3 and .wav, stored on DISK (not DB)
 const onEcouteUpload = multer({
-  dest: uploadDir,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+  dest: onEcouteDir,
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB max
   fileFilter: (req, file, cb) => {
     const allowed = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav'];
     if (allowed.includes(file.mimetype)) {
@@ -882,7 +888,7 @@ const onEcouteLimiter = rateLimit({
   message: { error: 'Trop de soumissions, réessaie plus tard' },
 });
 
-// Submit a track to On Écoute (public)
+// Submit a track to On Écoute (public) — files stored on DISK
 app.post('/api/on-ecoute/submit', onEcouteLimiter, onEcouteUpload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Fichier audio requis (.mp3 ou .wav)' });
@@ -899,11 +905,17 @@ app.post('/api/on-ecoute/submit', onEcouteLimiter, onEcouteUpload.single('audio'
       return res.status(400).json({ error: 'Titre trop long (max 200 caractères)' });
     }
 
-    const fileBuffer = fs.readFileSync(req.file.path);
     const mimetype = req.file.mimetype || 'audio/mpeg';
+
+    // Rename file with proper extension
+    const ext = mimetype.includes('wav') ? '.wav' : '.mp3';
+    const finalName = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
+    const finalPath = path.join(onEcouteDir, finalName);
+    fs.renameSync(req.file.path, finalPath);
 
     // Extract metadata from file
     try {
+      const fileBuffer = fs.readFileSync(finalPath);
       const metadata = await parseBuffer(fileBuffer, { mimeType: mimetype });
       if (!title && metadata.common.title) title = metadata.common.title;
       if (!artist && metadata.common.artist) artist = metadata.common.artist;
@@ -913,11 +925,9 @@ app.post('/api/on-ecoute/submit', onEcouteLimiter, onEcouteUpload.single('audio'
     if (!title) title = req.file.originalname.replace(/\.(mp3|wav)$/i, '');
 
     const { rows } = await pool.query(
-      'INSERT INTO on_ecoute_submissions (title, artist, file_data, file_mimetype, submitted_by) VALUES ($1, $2, $3, $4, $5) RETURNING id, title, artist, submitted_by, status, created_at',
-      [title, artist || '', fileBuffer, mimetype, submitted_by || 'Anonyme']
+      'INSERT INTO on_ecoute_submissions (title, artist, file_path, file_mimetype, submitted_by) VALUES ($1, $2, $3, $4, $5) RETURNING id, title, artist, submitted_by, status, created_at',
+      [title, artist || '', finalName, mimetype, submitted_by || 'Anonyme']
     );
-
-    fs.unlinkSync(req.file.path);
 
     // Create vote row
     await pool.query('INSERT INTO on_ecoute_votes (submission_id) VALUES ($1)', [rows[0].id]);
@@ -925,7 +935,9 @@ app.post('/api/on-ecoute/submit', onEcouteLimiter, onEcouteUpload.single('audio'
     res.json(rows[0]);
   } catch (err) {
     console.error('On Écoute submit error:', err);
-    if (req.file && req.file.path) try { fs.unlinkSync(req.file.path); } catch {}
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch {}
+    }
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -963,36 +975,63 @@ app.patch('/api/on-ecoute/submissions/:id', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-// Delete submission (admin)
+// Delete submission (admin) — also removes file from disk
 app.delete('/api/on-ecoute/submissions/:id', requireAdmin, async (req, res) => {
-  await pool.query('DELETE FROM on_ecoute_submissions WHERE id = $1', [req.params.id]);
-  res.json({ success: true });
+  try {
+    const { rows } = await pool.query('SELECT file_path FROM on_ecoute_submissions WHERE id = $1', [req.params.id]);
+    if (rows.length && rows[0].file_path) {
+      const fp = path.join(onEcouteDir, rows[0].file_path);
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    }
+    await pool.query('DELETE FROM on_ecoute_submissions WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('On Écoute delete error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
 });
 
-// Wipe all On Écoute submissions (admin)
+// Wipe all On Écoute submissions (admin) — also removes all files
 app.delete('/api/on-ecoute/submissions', requireAdmin, async (req, res) => {
-  await pool.query('DELETE FROM on_ecoute_submissions');
-  res.json({ success: true });
+  try {
+    // Remove all files
+    const { rows } = await pool.query('SELECT file_path FROM on_ecoute_submissions');
+    for (const row of rows) {
+      if (row.file_path) {
+        const fp = path.join(onEcouteDir, row.file_path);
+        if (fs.existsSync(fp)) fs.unlinkSync(fp);
+      }
+    }
+    await pool.query('DELETE FROM on_ecoute_submissions');
+    res.json({ success: true });
+  } catch (err) {
+    console.error('On Écoute wipe error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
 });
 
-// Serve On Écoute audio
+// Serve On Écoute audio (from disk)
 app.get('/api/on-ecoute/audio/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT file_data, file_mimetype, title FROM on_ecoute_submissions WHERE id = $1',
+      'SELECT file_path, file_mimetype, title FROM on_ecoute_submissions WHERE id = $1',
       [req.params.id]
     );
-    if (!rows.length || !rows[0].file_data) {
+    if (!rows.length || !rows[0].file_path) {
       return res.status(404).json({ error: 'Audio non trouvé' });
     }
-    const { file_data, file_mimetype } = rows[0];
+    const filePath = path.join(onEcouteDir, rows[0].file_path);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Fichier audio introuvable sur le disque' });
+    }
+    const stat = fs.statSync(filePath);
     res.set({
-      'Content-Type': file_mimetype || 'audio/mpeg',
-      'Content-Length': file_data.length,
+      'Content-Type': rows[0].file_mimetype || 'audio/mpeg',
+      'Content-Length': stat.size,
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'public, max-age=86400',
     });
-    res.send(file_data);
+    fs.createReadStream(filePath).pipe(res);
   } catch (err) {
     console.error('On Écoute audio serve error:', err);
     res.status(500).json({ error: 'Erreur serveur' });

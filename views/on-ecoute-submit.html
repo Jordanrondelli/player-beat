@@ -230,7 +230,7 @@
 
   <div class="card">
     <h2>Propose ton morceau</h2>
-    <p>Fichiers acceptes : .mp3 et .wav uniquement (50 Mo max)</p>
+    <p>Fichiers acceptes : .mp3 et .wav uniquement (15 Mo max)</p>
 
     <form id="submitForm" novalidate>
       <div class="dropzone" id="dropzone">
@@ -308,8 +308,8 @@
         showToast('Seuls les fichiers .mp3 et .wav sont acceptes', 'error');
         return;
       }
-      if (file.size > 50 * 1024 * 1024) {
-        showToast('Fichier trop lourd (max 50 Mo)', 'error');
+      if (file.size > 15 * 1024 * 1024) {
+        showToast('Fichier trop lourd (max 15 Mo)', 'error');
         return;
       }
       selectedFile = file;
