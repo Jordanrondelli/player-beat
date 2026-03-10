@@ -1099,11 +1099,11 @@
       if (!oeCurrentSubmission) return;
       oePreviewAudio.pause();
       oePreviewing = false;
-      // Approve the submission and mark it as playing in On Écoute overlay
+      // Set to 'approved' so the overlay picks it up via polling
       await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'playing' }),
+        body: JSON.stringify({ status: 'approved' }),
       });
       const btn = document.getElementById('oePlayBtn');
       btn.textContent = '\u2713 ENVOY\u00c9 AU PLAYER';

@@ -538,3 +538,32 @@ animationLoop();
 
 // Auto-load On Écoute queue
 fetchAndLoadQueue();
+
+// Poll for new approved tracks every 5s (admin pushes songs here)
+setInterval(async () => {
+  try {
+    const res = await fetch('/api/on-ecoute/playlist');
+    if (!res.ok) return;
+    const submissions = await res.json();
+    const currentIds = new Set(playlist.map(p => p.submission?.id).filter(Boolean));
+    const newTracks = submissions.filter(s => !currentIds.has(s.id));
+    if (newTracks.length === 0) return;
+
+    // Load new tracks and append to playlist
+    for (const item of newTracks) {
+      try {
+        const response = await fetch(`/api/on-ecoute/audio/${item.id}`);
+        if (!response.ok) continue;
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength < 1000) continue;
+        playlist.push({ name: item.title, arrayBuffer, submission: item });
+      } catch {}
+    }
+    updateQueueCounter();
+
+    // If nothing was playing, start the first new track
+    if (currentTrackIndex === -1 && playlist.length > 0) {
+      await loadTrack(0, true);
+    }
+  } catch {}
+}, 5000);
