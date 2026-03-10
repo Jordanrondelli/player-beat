@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════
 // ON ÉCOUTE — Overlay Player Engine
-// Adapted from player-beat main player for broadcast overlay
+// Matching reference design: capsule player + judge buttons
 // ═══════════════════════════════════════════════════════════
 
 // ===== AUDIO CONTEXT =====
@@ -17,7 +17,7 @@ let playlist = [];
 let currentTrackIndex = -1;
 let waveformData = [];
 let waveformSigned = [];
-let currentSource = null; // 'upload', 'youtube', or null (all)
+let currentSource = null;
 let serverQueue = [];
 
 // ===== YOUTUBE IFRAME PLAYER =====
@@ -66,8 +66,9 @@ const queueCounterEl = document.getElementById('queueCounter');
 // ===== CANVAS RESIZE =====
 function resizeCanvases() {
   const dpr = window.devicePixelRatio || 1;
-  const overlay = document.getElementById('overlayTop');
-  const rect = overlay.getBoundingClientRect();
+  const wrap = document.querySelector('.waveform-wrap');
+  if (!wrap) return;
+  const rect = wrap.getBoundingClientRect();
   waveformCanvas.width = rect.width * dpr;
   waveformCanvas.height = rect.height * dpr;
   waveformCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -188,7 +189,7 @@ function generateSyntheticWaveform(duration, videoId) {
   }
 }
 
-// ===== WAVEFORM DRAWING (FULL-WIDTH IMMERSIVE) =====
+// ===== WAVEFORM DRAWING (inside capsule) =====
 function drawWaveform(currentTime) {
   const dpr = window.devicePixelRatio || 1;
   const w = waveformCanvas.width / dpr;
@@ -200,92 +201,47 @@ function drawWaveform(currentTime) {
   const duration = getDuration();
   if (!duration || waveformData.length === 0) return;
 
-  const playheadX = w * 0.35;
-  const centerY = h * 0.52; // slightly below center for visual weight
-  const windowSec = 15; // wider window for full-width
-  const timeStart = currentTime - (playheadX / w) * windowSec;
-
-  const barW = 3;
-  const gap = 1.5;
+  const centerY = h / 2;
+  const totalBars = Math.floor(w / 4); // bar width ~3px + 1px gap
+  const barW = 2.5;
+  const gap = (w - totalBars * barW) / (totalBars - 1);
   const step = barW + gap;
-  const numBars = Math.ceil(w / step);
 
-  // Pass 1: Bloom/glow layer (soft red glow behind played bars)
-  ctx.save();
-  ctx.filter = 'blur(12px)';
-  for (let i = 0; i < numBars; i += 2) { // every other bar for perf
+  const progress = currentTime / duration;
+
+  for (let i = 0; i < totalBars; i++) {
     const x = i * step;
-    const t = timeStart + (x / w) * windowSec;
-    const frac = t / duration;
-    if (frac < 0 || frac > 1) continue;
-
-    const idx = frac * (waveformData.length - 1);
-    const amp = sampleWaveform(idx);
-    const maxH = centerY * 0.85;
-    const barH = amp * maxH;
-    const isPast = x < playheadX;
-
-    if (isPast && amp > 0.3) {
-      ctx.fillStyle = `rgba(230, 40, 50, ${amp * 0.35})`;
-      ctx.fillRect(x - 2, centerY - barH - 4, barW + 4, (barH + 4) * 2);
-    }
-  }
-  ctx.restore();
-
-  // Pass 2: Main bars
-  for (let i = 0; i < numBars; i++) {
-    const x = i * step;
-    const t = timeStart + (x / w) * windowSec;
-    const frac = t / duration;
-    if (frac < 0 || frac > 1) continue;
-
+    const frac = i / totalBars;
     const idx = frac * (waveformData.length - 1);
     const amp = sampleWaveform(idx);
     const maxH = centerY * 0.85;
     const barH = Math.max(1, amp * maxH);
-    const isPast = x < playheadX;
+    const isPast = frac <= progress;
 
     if (isPast) {
-      // Hot gradient: dark edges → bright red center → white-hot core
+      // Played: warm orange/gold gradient
       const grad = ctx.createLinearGradient(x, centerY - barH, x, centerY + barH);
-      const intensity = 0.5 + amp * 0.5;
-      grad.addColorStop(0, `rgba(150, 20, 30, ${intensity * 0.4})`);
-      grad.addColorStop(0.3, `rgba(230, 50, 60, ${intensity * 0.85})`);
-      grad.addColorStop(0.48, `rgba(255, 85, 75, ${intensity})`);
-      grad.addColorStop(0.52, `rgba(255, 85, 75, ${intensity})`);
-      grad.addColorStop(0.7, `rgba(230, 50, 60, ${intensity * 0.85})`);
-      grad.addColorStop(1, `rgba(150, 20, 30, ${intensity * 0.4})`);
+      grad.addColorStop(0, `rgba(200, 100, 20, ${0.4 + amp * 0.3})`);
+      grad.addColorStop(0.4, `rgba(232, 118, 42, ${0.6 + amp * 0.4})`);
+      grad.addColorStop(0.5, `rgba(240, 160, 50, ${0.7 + amp * 0.3})`);
+      grad.addColorStop(0.6, `rgba(232, 118, 42, ${0.6 + amp * 0.4})`);
+      grad.addColorStop(1, `rgba(200, 100, 20, ${0.4 + amp * 0.3})`);
       ctx.fillStyle = grad;
     } else {
-      // Future bars: very subtle, ghostly
-      ctx.fillStyle = `rgba(200, 50, 60, ${0.06 + amp * 0.1})`;
+      // Unplayed: dim gray/warm
+      ctx.fillStyle = `rgba(180, 140, 90, ${0.1 + amp * 0.12})`;
     }
 
-    // Draw mirrored bars with rounded caps
+    // Mirror bars
     const r = barW / 2;
     roundedBar(ctx, x, centerY - barH, barW, barH, r);
     roundedBar(ctx, x, centerY + 1, barW, barH, r);
   }
 
-  // Pass 3: Playhead line
-  const plGrad = ctx.createLinearGradient(playheadX, 0, playheadX, h);
-  plGrad.addColorStop(0, 'rgba(255,255,255,0)');
-  plGrad.addColorStop(0.15, 'rgba(255,255,255,0.7)');
-  plGrad.addColorStop(0.5, 'rgba(255,255,255,0.95)');
-  plGrad.addColorStop(0.85, 'rgba(255,255,255,0.7)');
-  plGrad.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = plGrad;
-  ctx.fillRect(playheadX - 1, 0, 2, h);
-
-  // Playhead glow orb
-  const orbGrad = ctx.createRadialGradient(playheadX, centerY, 0, playheadX, centerY, 40);
-  orbGrad.addColorStop(0, 'rgba(255, 100, 80, 0.3)');
-  orbGrad.addColorStop(0.5, 'rgba(255, 60, 60, 0.1)');
-  orbGrad.addColorStop(1, 'rgba(255, 60, 60, 0)');
-  ctx.fillStyle = orbGrad;
-  ctx.beginPath();
-  ctx.arc(playheadX, centerY, 40, 0, Math.PI * 2);
-  ctx.fill();
+  // Playhead line
+  const px = progress * w;
+  ctx.fillStyle = 'rgba(255, 200, 80, 0.8)';
+  ctx.fillRect(px - 0.5, 0, 1, h);
 }
 
 function roundedBar(ctx, x, y, w, h, r) {
@@ -342,7 +298,6 @@ function playAudio() {
   isPlaying = true;
   playImg.style.display = 'none'; pauseImg.style.display = 'block';
 
-  // Auto-advance when track ends
   sourceNode.onended = () => {
     if (isPlaying && getCurrentTime() >= getDuration() - 0.5) {
       stopAudio();
@@ -402,6 +357,7 @@ function updateTrackInfo(item) {
 }
 
 function updateQueueCounter() {
+  if (!queueCounterEl) return;
   if (serverQueue.length === 0) {
     queueCounterEl.textContent = '0 / 0';
   } else {
@@ -415,7 +371,6 @@ async function loadTrack(index, autoPlay) {
   loadingOverlay.classList.add('visible');
   stopAudio();
 
-  // Reset votes
   votes = { fire: 0, up: 0, down: 0 };
 
   const qItem = playlist[index] && playlist[index].queueItem;
@@ -434,7 +389,6 @@ async function loadTrack(index, autoPlay) {
     waveformData = [];
     waveformSigned = [];
 
-    // Fast start: launch IFrame immediately
     if (ytPlayer && ytReady) {
       const cuePromise = new Promise((resolve) => {
         const onStateChange = (e) => {
@@ -499,7 +453,6 @@ async function loadTrack(index, autoPlay) {
     if (autoPlay !== false) playAudio();
   } catch (err) {
     console.error('Overlay: Audio decode error:', err);
-    // Try next track
     if (playlist.length > 1 && index + 1 < playlist.length) {
       loadingOverlay.classList.remove('visible');
       loadTrack(index + 1, autoPlay);
@@ -602,7 +555,7 @@ async function loadLegend() {
       const newUser = data.submitted_by || 'Anonyme';
       userEl.textContent = newUser;
       trackEl.textContent = (data.title || 'Sans titre') + (data.artist ? ' — ' + data.artist : '');
-      fireEl.textContent = '🔥 ' + data.fire + ' FIRE';
+      fireEl.textContent = '\u{1F525} ' + data.fire + ' FIRE';
       if (currentLegendUser !== null && currentLegendUser !== newUser) {
         const card = document.getElementById('legendCard');
         card.classList.add('legend-new');
@@ -611,7 +564,7 @@ async function loadLegend() {
       currentLegendUser = newUser;
     } else {
       userEl.textContent = '—';
-      trackEl.textContent = 'En attente du premier 🔥';
+      trackEl.textContent = 'En attente du premier \u{1F525}';
       fireEl.textContent = '';
       currentLegendUser = null;
     }
@@ -620,7 +573,7 @@ async function loadLegend() {
 loadLegend();
 setInterval(loadLegend, 5000);
 
-// ===== REACTIONS SYSTEM (Host / Guest) =====
+// ===== REACTIONS SYSTEM =====
 function spawnReaction(judge, type) {
   const containerId = judge === 'host' ? 'hostReaction' : 'guestReaction';
   const container = document.getElementById(containerId);
@@ -628,22 +581,21 @@ function spawnReaction(judge, type) {
 
   const imgMap = { fire: 'fire.png', up: 'pouce-vert.png', down: 'pouce-rouge.png' };
   const classMap = { fire: 'react-fire', up: 'react-up', down: 'react-down' };
-  const imgSrc = imgMap[type] || 'fire.png';
 
   const el = document.createElement('div');
   el.className = `reaction-float ${classMap[type] || ''}`;
-  el.style.left = `${30 + Math.random() * 100}px`;
+  el.style.left = `${20 + Math.random() * 200}px`;
 
   const img = document.createElement('img');
-  img.src = imgSrc;
+  img.src = imgMap[type] || 'fire.png';
   el.appendChild(img);
   container.appendChild(el);
 
-  setTimeout(() => el.remove(), 3100);
+  setTimeout(() => el.remove(), 3000);
 }
 
-// Button handlers
-document.querySelectorAll('.jbtn').forEach(btn => {
+// ===== JUDGE BUTTON HANDLERS =====
+document.querySelectorAll('.judge-btn').forEach(btn => {
   btn.addEventListener('click', function () {
     const judge = this.dataset.judge;
     const vote = this.dataset.vote;
@@ -652,7 +604,7 @@ document.querySelectorAll('.jbtn').forEach(btn => {
     this.classList.remove('burst');
     void this.offsetWidth;
     this.classList.add('burst');
-    setTimeout(() => this.classList.remove('burst'), 600);
+    setTimeout(() => this.classList.remove('burst'), 500);
 
     // Spawn reaction
     spawnReaction(judge, vote);
@@ -670,7 +622,7 @@ document.querySelectorAll('.jbtn').forEach(btn => {
 
     // Down = skip to next
     if (vote === 'down') {
-      const bar = document.querySelector('.overlay-top');
+      const bar = document.getElementById('topBar');
       bar.classList.add('skip-flash');
       setTimeout(() => bar.classList.remove('skip-flash'), 500);
       setTimeout(() => skipToNext(), 300);
@@ -684,13 +636,14 @@ playBtn.addEventListener('click', () => {
   isPlaying ? pauseAudio() : playAudio();
 });
 
-document.getElementById('prevBtn').addEventListener('click', () => {
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+if (prevBtn) prevBtn.addEventListener('click', () => {
   if (playlist.length === 0) return;
   const prev = (currentTrackIndex - 1 + playlist.length) % playlist.length;
   loadTrack(prev, true);
 });
-
-document.getElementById('nextBtn').addEventListener('click', () => {
+if (nextBtn) nextBtn.addEventListener('click', () => {
   if (playlist.length === 0) return;
   skipToNext();
 });
@@ -747,7 +700,6 @@ document.addEventListener('keydown', (e) => {
         loadTrack(prev, true);
       }
       break;
-    // Host shortcuts: Q=fire, W=up, E=down
     case 'KeyQ':
       spawnReaction('host', 'fire');
       break;
@@ -756,11 +708,10 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'KeyE':
       spawnReaction('host', 'down');
-      document.querySelector('.overlay-top').classList.add('skip-flash');
-      setTimeout(() => document.querySelector('.overlay-top').classList.remove('skip-flash'), 500);
+      document.getElementById('topBar').classList.add('skip-flash');
+      setTimeout(() => document.getElementById('topBar').classList.remove('skip-flash'), 500);
       setTimeout(() => skipToNext(), 300);
       break;
-    // Guest shortcuts: I=fire, O=up, P=down
     case 'KeyI':
       spawnReaction('guest', 'fire');
       break;
@@ -769,8 +720,8 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'KeyP':
       spawnReaction('guest', 'down');
-      document.querySelector('.overlay-top').classList.add('skip-flash');
-      setTimeout(() => document.querySelector('.overlay-top').classList.remove('skip-flash'), 500);
+      document.getElementById('topBar').classList.add('skip-flash');
+      setTimeout(() => document.getElementById('topBar').classList.remove('skip-flash'), 500);
       setTimeout(() => skipToNext(), 300);
       break;
   }

@@ -5,97 +5,103 @@
   <meta name="viewport" content="width=2560, initial-scale=1">
   <title>ON ÉCOUTE — Overlay</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="on-ecoute.css?v=4">
+  <link rel="stylesheet" href="on-ecoute.css?v=5">
 </head>
 <body>
 
-  <!-- ===== FULL-WIDTH OVERLAY TOP ===== -->
-  <div class="overlay-top" id="overlayTop">
+  <!-- ===== TOP BAR: judges left + player center + judges right ===== -->
+  <div class="top-bar" id="topBar">
 
-    <!-- Waveform fills entire overlay -->
-    <canvas id="waveformCanvas"></canvas>
-
-    <!-- Dark gradient vignette over waveform -->
-    <div class="waveform-vignette"></div>
-
-    <!-- Host judge (left) -->
-    <div class="judge host-judge">
-      <div class="judge-name">JORDAN</div>
-      <div class="judge-btns">
-        <button class="jbtn jbtn-fire" data-judge="host" data-vote="fire">
+    <!-- Host judge buttons (left) -->
+    <div class="judge-panel host-panel">
+      <button class="judge-btn" data-judge="host" data-vote="fire">
+        <div class="judge-btn-inner">
           <img src="fire.png" alt="Fire">
-        </button>
-        <button class="jbtn jbtn-up" data-judge="host" data-vote="up">
-          <img src="pouce-vert.png" alt="Up">
-        </button>
-        <button class="jbtn jbtn-down" data-judge="host" data-vote="down">
-          <img src="pouce-rouge.png" alt="Down">
-        </button>
-      </div>
-      <div class="judge-reaction" id="hostReaction"></div>
-    </div>
-
-    <!-- Guest judge (right) -->
-    <div class="judge guest-judge">
-      <div class="judge-name" id="guestLabel">INVITÉ</div>
-      <div class="judge-btns">
-        <button class="jbtn jbtn-fire" data-judge="guest" data-vote="fire">
-          <img src="fire.png" alt="Fire">
-        </button>
-        <button class="jbtn jbtn-up" data-judge="guest" data-vote="up">
-          <img src="pouce-vert.png" alt="Up">
-        </button>
-        <button class="jbtn jbtn-down" data-judge="guest" data-vote="down">
-          <img src="pouce-rouge.png" alt="Down">
-        </button>
-      </div>
-      <div class="judge-reaction" id="guestReaction"></div>
-    </div>
-
-    <!-- Track info (centered, floating over waveform) -->
-    <div class="track-info">
-      <div class="track-title" id="trackTitle">En attente...</div>
-      <div class="track-meta">
-        <span class="track-artist" id="trackArtist"></span>
-        <span class="track-sep" id="trackSep"></span>
-        <span class="track-submitter" id="trackSubmitter"></span>
-      </div>
-    </div>
-
-    <!-- Time display -->
-    <div class="time-display">
-      <span id="currentTime">0:00</span>
-      <span class="time-slash">/</span>
-      <span id="totalTime">0:00</span>
-    </div>
-
-    <!-- Progress bar (bottom of overlay) -->
-    <div class="progress-bar" id="progressBar">
-      <div class="progress-fill" id="progressFill"></div>
-    </div>
-
-    <!-- Controls (bottom left, subtle) -->
-    <div class="controls">
-      <button class="ctrl-btn" id="prevBtn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+        </div>
+        <span class="judge-btn-label">FIRE</span>
       </button>
-      <button class="ctrl-btn ctrl-play" id="playBtn">
+      <button class="judge-btn" data-judge="host" data-vote="down">
+        <div class="judge-btn-inner">
+          <img src="pouce-rouge.png" alt="Thumbs Down">
+        </div>
+        <span class="judge-btn-label">THUMBS DOWN</span>
+      </button>
+      <button class="judge-btn" data-judge="host" data-vote="up">
+        <div class="judge-btn-inner">
+          <img src="pouce-vert.png" alt="Thumbs Up">
+        </div>
+        <span class="judge-btn-label">THUMBS UP</span>
+      </button>
+    </div>
+
+    <!-- Player bar (center capsule) -->
+    <div class="player-bar" id="playerBar">
+      <button class="play-btn" id="playBtn">
         <img id="playImg" src="play.png" alt="Play">
         <img id="pauseImg" src="pause.png" alt="Pause" style="display:none">
       </button>
-      <button class="ctrl-btn" id="nextBtn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-      </button>
-      <div class="ctrl-sep"></div>
-      <button class="src-btn active" id="srcAll">TOUS</button>
-      <button class="src-btn" id="srcUpload">UPLOADS</button>
-      <button class="src-btn" id="srcYoutube">YT</button>
-      <div class="ctrl-sep"></div>
-      <span class="queue-info" id="queueCounter">0/0</span>
+      <div class="waveform-wrap">
+        <canvas id="waveformCanvas"></canvas>
+      </div>
     </div>
+
+    <!-- Guest judge buttons (right) -->
+    <div class="judge-panel guest-panel">
+      <button class="judge-btn" data-judge="guest" data-vote="fire">
+        <div class="judge-btn-inner">
+          <img src="fire.png" alt="Fire">
+        </div>
+        <span class="judge-btn-label">FIRE</span>
+      </button>
+      <button class="judge-btn" data-judge="guest" data-vote="down">
+        <div class="judge-btn-inner">
+          <img src="pouce-rouge.png" alt="Thumbs Down">
+        </div>
+        <span class="judge-btn-label">THUMBS DOWN</span>
+      </button>
+      <button class="judge-btn" data-judge="guest" data-vote="up">
+        <div class="judge-btn-inner">
+          <img src="pouce-vert.png" alt="Thumbs Up">
+        </div>
+        <span class="judge-btn-label">THUMBS UP</span>
+      </button>
+    </div>
+
   </div>
 
-  <!-- ===== MEILLEUR SON ===== -->
+  <!-- Reaction containers -->
+  <div class="reaction-zone host-reactions" id="hostReaction"></div>
+  <div class="reaction-zone guest-reactions" id="guestReaction"></div>
+
+  <!-- Track info (subtle, below player bar) -->
+  <div class="track-info-bar">
+    <span class="track-title" id="trackTitle">En attente...</span>
+    <span class="track-artist" id="trackArtist"></span>
+    <span class="track-sep" id="trackSep"></span>
+    <span class="track-submitter" id="trackSubmitter"></span>
+    <span class="track-time">
+      <span id="currentTime">0:00</span>
+      <span class="time-slash">/</span>
+      <span id="totalTime">0:00</span>
+    </span>
+  </div>
+
+  <!-- Progress bar (thin, below top bar) -->
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <!-- Hidden nav for source/queue (invisible, controlled by keyboard) -->
+  <div style="display:none">
+    <button id="prevBtn"></button>
+    <button id="nextBtn"></button>
+    <button id="srcAll"></button>
+    <button id="srcUpload"></button>
+    <button id="srcYoutube"></button>
+    <span id="queueCounter"></span>
+  </div>
+
+  <!-- Meilleur Son card -->
   <div class="legend-card" id="legendCard">
     <div class="legend-badge">MEILLEUR SON</div>
     <div class="legend-user" id="legendUser">—</div>
@@ -114,6 +120,6 @@
   </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="on-ecoute.js?v=4"></script>
+  <script src="on-ecoute.js?v=5"></script>
 </body>
 </html>
