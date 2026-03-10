@@ -1210,12 +1210,24 @@ app.get('/api/active-skin', async (req, res) => {
   }
 });
 
-// ===== START =====
-initDB().then(async () => {
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  // Start Twitch bot
-  await startTwitchBot();
-}).catch(err => {
-  console.error('DB init failed:', err);
-  process.exit(1);
-});
+// ===== START (with retry for transient DB connection issues) =====
+async function startServer(retries = 5, delay = 3000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await initDB();
+      app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+      await startTwitchBot();
+      return;
+    } catch (err) {
+      console.error(`DB init attempt ${attempt}/${retries} failed:`, err.message);
+      if (attempt === retries) {
+        console.error('All DB init attempts failed, exiting.');
+        process.exit(1);
+      }
+      console.log(`Retrying in ${delay / 1000}s...`);
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2; // exponential backoff
+    }
+  }
+}
+startServer();
