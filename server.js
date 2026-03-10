@@ -1197,6 +1197,30 @@ app.get('/api/on-ecoute/legend', async (req, res) => {
   }
 });
 
+// ===== ON ÉCOUTE REMOTE CONTROL (admin → overlay) =====
+// In-memory command buffer — overlay polls this
+let onEcouteCommand = { action: null, submissionId: null, ts: 0 };
+
+// Admin sends a command to the overlay
+app.post('/api/on-ecoute/command', requireAdmin, (req, res) => {
+  const { action, submissionId } = req.body;
+  if (!['play', 'pause', 'skip', 'load'].includes(action)) {
+    return res.status(400).json({ error: 'Action invalide' });
+  }
+  onEcouteCommand = { action, submissionId: submissionId || null, ts: Date.now() };
+  res.json({ success: true });
+});
+
+// Overlay polls for pending commands
+app.get('/api/on-ecoute/command', (req, res) => {
+  const since = parseInt(req.query.since) || 0;
+  if (onEcouteCommand.ts > since) {
+    res.json(onEcouteCommand);
+  } else {
+    res.json({ action: null, ts: onEcouteCommand.ts });
+  }
+});
+
 // ===== SKINS API =====
 
 const SKIN_IMAGE_KEYS = ['bg', 'marteau', 'play', 'pause', 'fire', 'pouce_rouge', 'pouce_vert', 'bloc_titre', 'bloc_chat', 'murlegende'];

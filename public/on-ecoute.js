@@ -536,34 +536,79 @@ function animationLoop() {
 resizeCanvases();
 animationLoop();
 
-// Auto-load On Écoute queue
+// Auto-load On Écoute queue (but don't auto-play — wait for admin command)
 fetchAndLoadQueue();
 
-// Poll for new approved tracks every 5s (admin pushes songs here)
+// ===== REMOTE CONTROL (admin → overlay) =====
+let lastCommandTs = 0;
+let loadingSubmissionId = null;
+
+async function loadSubmissionById(submissionId, autoPlay) {
+  // Check if already in playlist
+  const existing = playlist.findIndex(p => p.submission && p.submission.id === submissionId);
+  if (existing >= 0) {
+    await loadTrack(existing, autoPlay);
+    return;
+  }
+  // Fetch submission info
+  try {
+    const infoRes = await fetch(`/api/on-ecoute/playlist`);
+    const submissions = await infoRes.json();
+    const item = submissions.find(s => s.id === submissionId);
+    if (!item) {
+      // Not in playlist yet, try loading audio directly
+      const audioRes = await fetch(`/api/on-ecoute/audio/${submissionId}`);
+      if (!audioRes.ok) return;
+      const arrayBuffer = await audioRes.arrayBuffer();
+      if (arrayBuffer.byteLength < 1000) return;
+      // Create a minimal submission object
+      playlist.push({ name: 'Track', arrayBuffer, submission: { id: submissionId, title: 'Chargement...', artist: '', submitted_by: '' } });
+      await loadTrack(playlist.length - 1, autoPlay);
+      return;
+    }
+    // Load audio
+    const audioRes = await fetch(`/api/on-ecoute/audio/${submissionId}`);
+    if (!audioRes.ok) return;
+    const arrayBuffer = await audioRes.arrayBuffer();
+    if (arrayBuffer.byteLength < 1000) return;
+    playlist.push({ name: item.title, arrayBuffer, submission: item });
+    updateQueueCounter();
+    await loadTrack(playlist.length - 1, autoPlay);
+  } catch (err) {
+    console.error('Failed to load submission:', err);
+  }
+}
+
+// Poll for admin commands every 500ms
 setInterval(async () => {
   try {
-    const res = await fetch('/api/on-ecoute/playlist');
+    const res = await fetch(`/api/on-ecoute/command?since=${lastCommandTs}`);
     if (!res.ok) return;
-    const submissions = await res.json();
-    const currentIds = new Set(playlist.map(p => p.submission?.id).filter(Boolean));
-    const newTracks = submissions.filter(s => !currentIds.has(s.id));
-    if (newTracks.length === 0) return;
+    const cmd = await res.json();
+    if (!cmd.action || cmd.ts <= lastCommandTs) return;
+    lastCommandTs = cmd.ts;
 
-    // Load new tracks and append to playlist
-    for (const item of newTracks) {
-      try {
-        const response = await fetch(`/api/on-ecoute/audio/${item.id}`);
-        if (!response.ok) continue;
-        const arrayBuffer = await response.arrayBuffer();
-        if (arrayBuffer.byteLength < 1000) continue;
-        playlist.push({ name: item.title, arrayBuffer, submission: item });
-      } catch {}
-    }
-    updateQueueCounter();
-
-    // If nothing was playing, start the first new track
-    if (currentTrackIndex === -1 && playlist.length > 0) {
-      await loadTrack(0, true);
+    switch (cmd.action) {
+      case 'load':
+        if (cmd.submissionId) {
+          loadingSubmissionId = cmd.submissionId;
+          await loadSubmissionById(cmd.submissionId, false);
+        }
+        break;
+      case 'play':
+        if (cmd.submissionId && (!playlist[currentTrackIndex] || playlist[currentTrackIndex].submission?.id !== cmd.submissionId)) {
+          await loadSubmissionById(cmd.submissionId, true);
+        } else {
+          if (audioCtx.state === 'suspended') await audioCtx.resume();
+          if (!isPlaying) playAudio();
+        }
+        break;
+      case 'pause':
+        if (isPlaying) pauseAudio();
+        break;
+      case 'skip':
+        skipToNext();
+        break;
     }
   } catch {}
-}, 5000);
+}, 500);

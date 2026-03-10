@@ -495,12 +495,13 @@
           <div class="queue-empty">Chargement...</div>
         </div>
 
-        <!-- Navigation -->
+        <!-- Transport controls -->
         <div style="display:flex; gap:10px; margin-top:16px">
-          <button class="save-btn" id="oeSkipBtn" style="flex:1; background:linear-gradient(135deg,rgba(255,255,255,.1),rgba(255,255,255,.06)); box-shadow:none; color:rgba(255,255,255,.7)">&#x23ED; SKIP &mdash; SUIVANT</button>
-          <button class="save-btn" id="oePlayBtn" style="flex:1">&#9654; JOUER DANS LE PLAYER</button>
+          <button class="save-btn" id="oePlayBtn" style="flex:1">&#9654; PLAY</button>
+          <button class="save-btn" id="oePauseBtn" style="flex:1; background:linear-gradient(135deg,rgba(255,255,255,.15),rgba(255,255,255,.06)); box-shadow:none; color:rgba(255,255,255,.7)">&#9208; PAUSE</button>
         </div>
         <div style="display:flex; gap:10px; margin-top:8px">
+          <button class="save-btn" id="oeSkipBtn" style="flex:1; background:linear-gradient(135deg,rgba(255,255,255,.1),rgba(255,255,255,.06)); box-shadow:none; color:rgba(255,255,255,.7)">&#x23ED; SUIVANT</button>
           <button class="q-btn reject" id="oeRejectBtn" style="flex:1; text-align:center; padding:10px">&#10005; REJETER</button>
           <button class="q-btn" id="oeDeleteBtn" style="flex:1; text-align:center; padding:10px; border-color:rgba(255,60,40,.3); color:#ff4040">&#128465; SUPPRIMER</button>
         </div>
@@ -992,10 +993,11 @@
       if (e.key === 'Enter') createSkin();
     });
 
-    // ===== ON ÉCOUTE =====
+    // ===== ON ÉCOUTE (remote control) =====
     let oeCurrentSubmission = null;
     let oePreviewAudio = new Audio();
     let oePreviewing = false;
+    let oePlaying = false; // tracks if we sent play to overlay
 
     async function oeLoadGenres() {
       try {
@@ -1019,13 +1021,26 @@
         const res = await fetch(url);
         const item = await res.json();
         oeCurrentSubmission = item;
+        oePlaying = false;
         oeRenderCard(item);
-        // Update count
+        oeUpdateButtons();
         const countRes = await fetch('/api/on-ecoute/count');
         const countData = await countRes.json();
         document.getElementById('oeCount').textContent = `(${countData.count} en attente)`;
       } catch (err) {
         console.error('OE load error:', err);
+      }
+    }
+
+    function oeUpdateButtons() {
+      const playBtn = document.getElementById('oePlayBtn');
+      const pauseBtn = document.getElementById('oePauseBtn');
+      if (oePlaying) {
+        playBtn.style.opacity = '0.4';
+        pauseBtn.style.opacity = '1';
+      } else {
+        playBtn.style.opacity = '1';
+        pauseBtn.style.opacity = '0.4';
       }
     }
 
@@ -1045,7 +1060,7 @@
           <div class="oe-preview-row">
             <button class="oe-preview-btn" id="oePreviewBtn" onclick="oeTogglePreview()">&#9654;</button>
             <div style="flex:1">
-              <div style="font-size:12px;color:rgba(255,255,255,.4)">Pr\u00e9-\u00e9coute</div>
+              <div style="font-size:12px;color:rgba(255,255,255,.4)">Pr\u00e9-\u00e9coute (casque admin)</div>
               <div style="font-size:11px;color:rgba(255,255,255,.2)" id="oePreviewTime">0:00</div>
             </div>
           </div>
@@ -1082,6 +1097,15 @@
       }
     });
 
+    // Send command to overlay
+    async function oeSendCommand(action, submissionId) {
+      await fetch('/api/on-ecoute/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, submissionId }),
+      });
+    }
+
     document.getElementById('oeGenreFilter').addEventListener('change', () => {
       oeCurrentSubmission = null;
       oePreviewAudio.pause();
@@ -1089,32 +1113,51 @@
       oeLoadRandom();
     });
 
-    document.getElementById('oeSkipBtn').addEventListener('click', () => {
-      oePreviewAudio.pause();
-      oePreviewing = false;
-      oeLoadRandom();
-    });
-
+    // PLAY — approve the track + send play command to overlay
     document.getElementById('oePlayBtn').addEventListener('click', async () => {
       if (!oeCurrentSubmission) return;
       oePreviewAudio.pause();
       oePreviewing = false;
-      // Set to 'approved' so the overlay picks it up via polling
+      // Approve it so overlay can access it
       await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'approved' }),
       });
-      const btn = document.getElementById('oePlayBtn');
-      btn.textContent = '\u2713 ENVOY\u00c9 AU PLAYER';
-      setTimeout(() => { btn.innerHTML = '&#9654; JOUER DANS LE PLAYER'; }, 2000);
+      // Send play command to overlay
+      await oeSendCommand('play', oeCurrentSubmission.id);
+      oePlaying = true;
+      oeUpdateButtons();
+    });
+
+    // PAUSE — pause the overlay
+    document.getElementById('oePauseBtn').addEventListener('click', async () => {
+      await oeSendCommand('pause');
+      oePlaying = false;
+      oeUpdateButtons();
+    });
+
+    // SKIP — mark current as played, load next random, send skip to overlay
+    document.getElementById('oeSkipBtn').addEventListener('click', async () => {
+      oePreviewAudio.pause();
+      oePreviewing = false;
+      if (oeCurrentSubmission && oePlaying) {
+        // Mark the played one as 'played'
+        await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'played' }),
+        });
+      }
       oeLoadRandom();
     });
 
+    // REJECT
     document.getElementById('oeRejectBtn').addEventListener('click', async () => {
       if (!oeCurrentSubmission) return;
       oePreviewAudio.pause();
       oePreviewing = false;
+      if (oePlaying) await oeSendCommand('pause');
       await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1123,11 +1166,13 @@
       oeLoadRandom();
     });
 
+    // DELETE
     document.getElementById('oeDeleteBtn').addEventListener('click', async () => {
       if (!oeCurrentSubmission) return;
       if (!confirm('Supprimer cette soumission ?')) return;
       oePreviewAudio.pause();
       oePreviewing = false;
+      if (oePlaying) await oeSendCommand('pause');
       await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, { method: 'DELETE' });
       oeLoadRandom();
     });
