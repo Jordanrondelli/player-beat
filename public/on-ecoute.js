@@ -66,9 +66,11 @@ const queueCounterEl = document.getElementById('queueCounter');
 // ===== CANVAS RESIZE =====
 function resizeCanvases() {
   const dpr = window.devicePixelRatio || 1;
-  const rect = waveformCanvas.parentElement.getBoundingClientRect();
+  const overlay = document.getElementById('overlayTop');
+  const rect = overlay.getBoundingClientRect();
   waveformCanvas.width = rect.width * dpr;
   waveformCanvas.height = rect.height * dpr;
+  waveformCtx.setTransform(1, 0, 0, 1, 0, 0);
   waveformCtx.scale(dpr, dpr);
   waveformCanvas.style.width = rect.width + 'px';
   waveformCanvas.style.height = rect.height + 'px';
@@ -186,7 +188,7 @@ function generateSyntheticWaveform(duration, videoId) {
   }
 }
 
-// ===== WAVEFORM DRAWING (RED THEME) =====
+// ===== WAVEFORM DRAWING (FULL-WIDTH IMMERSIVE) =====
 function drawWaveform(currentTime) {
   const dpr = window.devicePixelRatio || 1;
   const w = waveformCanvas.width / dpr;
@@ -199,19 +201,19 @@ function drawWaveform(currentTime) {
   if (!duration || waveformData.length === 0) return;
 
   const playheadX = w * 0.35;
-  const centerY = h / 2;
-  const windowSec = 12;
+  const centerY = h * 0.52; // slightly below center for visual weight
+  const windowSec = 15; // wider window for full-width
   const timeStart = currentTime - (playheadX / w) * windowSec;
 
-  const barW = 2.5;
-  const gap = 1;
+  const barW = 3;
+  const gap = 1.5;
   const step = barW + gap;
   const numBars = Math.ceil(w / step);
 
-  // Glow pass (blurred red behind bright bars)
+  // Pass 1: Bloom/glow layer (soft red glow behind played bars)
   ctx.save();
-  ctx.filter = 'blur(6px)';
-  for (let i = 0; i < numBars; i++) {
+  ctx.filter = 'blur(12px)';
+  for (let i = 0; i < numBars; i += 2) { // every other bar for perf
     const x = i * step;
     const t = timeStart + (x / w) * windowSec;
     const frac = t / duration;
@@ -219,18 +221,18 @@ function drawWaveform(currentTime) {
 
     const idx = frac * (waveformData.length - 1);
     const amp = sampleWaveform(idx);
-    const maxH = (h / 2) * 0.82;
+    const maxH = centerY * 0.85;
     const barH = amp * maxH;
     const isPast = x < playheadX;
 
-    if (isPast && amp > 0.4) {
-      ctx.fillStyle = `rgba(230, 57, 70, ${amp * 0.3})`;
-      ctx.fillRect(x - 1, centerY - barH - 2, barW + 2, (barH + 2) * 2);
+    if (isPast && amp > 0.3) {
+      ctx.fillStyle = `rgba(230, 40, 50, ${amp * 0.35})`;
+      ctx.fillRect(x - 2, centerY - barH - 4, barW + 4, (barH + 4) * 2);
     }
   }
   ctx.restore();
 
-  // Main bars
+  // Pass 2: Main bars
   for (let i = 0; i < numBars; i++) {
     const x = i * step;
     const t = timeStart + (x / w) * windowSec;
@@ -239,53 +241,61 @@ function drawWaveform(currentTime) {
 
     const idx = frac * (waveformData.length - 1);
     const amp = sampleWaveform(idx);
-    const maxH = (h / 2) * 0.82;
-    const barH = Math.max(0.5, amp * maxH);
+    const maxH = centerY * 0.85;
+    const barH = Math.max(1, amp * maxH);
     const isPast = x < playheadX;
 
     if (isPast) {
-      // Gradient from dark red at edges to bright red at center
+      // Hot gradient: dark edges → bright red center → white-hot core
       const grad = ctx.createLinearGradient(x, centerY - barH, x, centerY + barH);
-      grad.addColorStop(0, `rgba(230, 57, 70, ${0.3 + amp * 0.3})`);
-      grad.addColorStop(0.4, `rgba(255, 60, 70, ${0.7 + amp * 0.3})`);
-      grad.addColorStop(0.5, `rgba(255, 80, 80, ${0.85 + amp * 0.15})`);
-      grad.addColorStop(0.6, `rgba(255, 60, 70, ${0.7 + amp * 0.3})`);
-      grad.addColorStop(1, `rgba(230, 57, 70, ${0.3 + amp * 0.3})`);
+      const intensity = 0.5 + amp * 0.5;
+      grad.addColorStop(0, `rgba(150, 20, 30, ${intensity * 0.4})`);
+      grad.addColorStop(0.3, `rgba(230, 50, 60, ${intensity * 0.85})`);
+      grad.addColorStop(0.48, `rgba(255, 85, 75, ${intensity})`);
+      grad.addColorStop(0.52, `rgba(255, 85, 75, ${intensity})`);
+      grad.addColorStop(0.7, `rgba(230, 50, 60, ${intensity * 0.85})`);
+      grad.addColorStop(1, `rgba(150, 20, 30, ${intensity * 0.4})`);
       ctx.fillStyle = grad;
     } else {
-      ctx.fillStyle = `rgba(230, 57, 70, ${0.12 + amp * 0.13})`;
+      // Future bars: very subtle, ghostly
+      ctx.fillStyle = `rgba(200, 50, 60, ${0.06 + amp * 0.1})`;
     }
 
-    // Rounded top/bottom
-    const r = Math.min(barW / 2, 1.5);
-    roundedRect(ctx, x, centerY - barH, barW, barH, r);
-    roundedRect(ctx, x, centerY, barW, barH, r);
+    // Draw mirrored bars with rounded caps
+    const r = barW / 2;
+    roundedBar(ctx, x, centerY - barH, barW, barH, r);
+    roundedBar(ctx, x, centerY + 1, barW, barH, r);
   }
 
-  // Playhead
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-  ctx.fillRect(playheadX - 0.75, 2, 1.5, h - 4);
+  // Pass 3: Playhead line
+  const plGrad = ctx.createLinearGradient(playheadX, 0, playheadX, h);
+  plGrad.addColorStop(0, 'rgba(255,255,255,0)');
+  plGrad.addColorStop(0.15, 'rgba(255,255,255,0.7)');
+  plGrad.addColorStop(0.5, 'rgba(255,255,255,0.95)');
+  plGrad.addColorStop(0.85, 'rgba(255,255,255,0.7)');
+  plGrad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = plGrad;
+  ctx.fillRect(playheadX - 1, 0, 2, h);
 
-  // Playhead glow
-  const glowGrad = ctx.createRadialGradient(playheadX, centerY, 0, playheadX, centerY, 25);
-  glowGrad.addColorStop(0, 'rgba(255, 80, 80, 0.35)');
-  glowGrad.addColorStop(1, 'rgba(255, 80, 80, 0)');
-  ctx.fillStyle = glowGrad;
+  // Playhead glow orb
+  const orbGrad = ctx.createRadialGradient(playheadX, centerY, 0, playheadX, centerY, 40);
+  orbGrad.addColorStop(0, 'rgba(255, 100, 80, 0.3)');
+  orbGrad.addColorStop(0.5, 'rgba(255, 60, 60, 0.1)');
+  orbGrad.addColorStop(1, 'rgba(255, 60, 60, 0)');
+  ctx.fillStyle = orbGrad;
   ctx.beginPath();
-  ctx.arc(playheadX, centerY, 25, 0, Math.PI * 2);
+  ctx.arc(playheadX, centerY, 40, 0, Math.PI * 2);
   ctx.fill();
 }
 
-function roundedRect(ctx, x, y, w, h, r) {
-  if (h < r * 2) { ctx.fillRect(x, y, w, h); return; }
+function roundedBar(ctx, x, y, w, h, r) {
+  if (h < 1) { ctx.fillRect(x, y, w, 1); return; }
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
   ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x, y + h);
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.fill();
@@ -616,21 +626,20 @@ function spawnReaction(judge, type) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  // Map vote type to image
   const imgMap = { fire: 'fire.png', up: 'pouce-vert.png', down: 'pouce-rouge.png' };
+  const classMap = { fire: 'react-fire', up: 'react-up', down: 'react-down' };
   const imgSrc = imgMap[type] || 'fire.png';
 
   const el = document.createElement('div');
-  el.className = 'reaction-float';
-  // Random horizontal offset
-  el.style.left = `calc(50% + ${(Math.random() - 0.5) * 60}px)`;
+  el.className = `reaction-float ${classMap[type] || ''}`;
+  el.style.left = `${30 + Math.random() * 100}px`;
 
   const img = document.createElement('img');
   img.src = imgSrc;
   el.appendChild(img);
   container.appendChild(el);
 
-  setTimeout(() => el.remove(), 2600);
+  setTimeout(() => el.remove(), 3100);
 }
 
 // Button handlers
