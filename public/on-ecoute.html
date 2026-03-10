@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=2560, initial-scale=1">
+  <title>ON ÉCOUTE — Overlay</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="on-ecoute.css">
+</head>
+<body>
+
+  <!-- ===== OVERLAY BAR (top of screen) ===== -->
+  <div class="overlay-bar">
+
+    <!-- HOST panel (left) -->
+    <div class="judge-panel host-panel">
+      <div class="judge-label">JORDAN</div>
+      <div class="judge-buttons">
+        <button class="judge-btn btn-fire" data-judge="host" data-vote="fire">
+          <img src="fire.png" alt="Fire" class="btn-icon">
+        </button>
+        <button class="judge-btn btn-up" data-judge="host" data-vote="up">
+          <img src="pouce-vert.png" alt="Up" class="btn-icon">
+        </button>
+        <button class="judge-btn btn-down" data-judge="host" data-vote="down">
+          <img src="pouce-rouge.png" alt="Down" class="btn-icon">
+        </button>
+      </div>
+      <div class="judge-reaction" id="hostReaction"></div>
+    </div>
+
+    <!-- CENTER panel (waveform + info) -->
+    <div class="center-panel">
+      <div class="track-info">
+        <div class="track-title" id="trackTitle">En attente...</div>
+        <div class="track-meta">
+          <span class="track-artist" id="trackArtist"></span>
+          <span class="track-sep" id="trackSep"></span>
+          <span class="track-submitter" id="trackSubmitter"></span>
+        </div>
+      </div>
+
+      <div class="waveform-wrap">
+        <canvas id="waveformCanvas"></canvas>
+        <div class="time-left" id="currentTime">0:00</div>
+        <div class="time-right" id="totalTime">0:00</div>
+      </div>
+
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+
+      <div class="controls-row">
+        <div class="source-toggle">
+          <button class="src-btn active" id="srcAll">TOUS</button>
+          <button class="src-btn" id="srcUpload">UPLOADS</button>
+          <button class="src-btn" id="srcYoutube">YOUTUBE</button>
+        </div>
+        <div class="transport">
+          <button class="transport-btn" id="prevBtn">⏮</button>
+          <button class="transport-btn play-btn" id="playBtn">
+            <img id="playImg" src="play.png" alt="Play">
+            <img id="pauseImg" src="pause.png" alt="Pause" style="display:none">
+          </button>
+          <button class="transport-btn" id="nextBtn">⏭</button>
+        </div>
+        <div class="queue-info" id="queueCounter">0 / 0</div>
+      </div>
+    </div>
+
+    <!-- GUEST panel (right) -->
+    <div class="judge-panel guest-panel">
+      <div class="judge-label" id="guestLabel">INVITÉ</div>
+      <div class="judge-buttons">
+        <button class="judge-btn btn-fire" data-judge="guest" data-vote="fire">
+          <img src="fire.png" alt="Fire" class="btn-icon">
+        </button>
+        <button class="judge-btn btn-up" data-judge="guest" data-vote="up">
+          <img src="pouce-vert.png" alt="Up" class="btn-icon">
+        </button>
+        <button class="judge-btn btn-down" data-judge="guest" data-vote="down">
+          <img src="pouce-rouge.png" alt="Down" class="btn-icon">
+        </button>
+      </div>
+      <div class="judge-reaction" id="guestReaction"></div>
+    </div>
+  </div>
+
+  <!-- ===== MEILLEUR SON (floating card) ===== -->
+  <div class="legend-card" id="legendCard">
+    <div class="legend-title">MEILLEUR SON</div>
+    <div class="legend-user" id="legendUser">—</div>
+    <div class="legend-track" id="legendTrack"></div>
+    <div class="legend-fire" id="legendFire">🔥 0</div>
+  </div>
+
+  <!-- ===== LOADING ===== -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+  </div>
+
+  <!-- Hidden YouTube player -->
+  <div id="ytPlayerWrap" style="position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;overflow:hidden;">
+    <div id="ytPlayer"></div>
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="on-ecoute.js"></script>
+</body>
+</html>

@@ -191,6 +191,11 @@ app.get('/player', requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// "On Écoute" overlay page (admin only)
+app.get('/on-ecoute', requireAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'on-ecoute.html'));
+});
+
 // Admin page (admin only)
 app.get('/admin', requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'admin.html'));
