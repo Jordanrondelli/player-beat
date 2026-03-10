@@ -322,13 +322,41 @@ async function fetchAndLoadQueue() {
 // ===== VOTES (On Écoute) =====
 let votes = { fire: 0, up: 0, down: 0 };
 
+function updateOeChatDisplay() {
+  const total = votes.fire + votes.up + votes.down;
+  const pctFire = total > 0 ? (votes.fire / total) * 100 : 0;
+  const pctUp = total > 0 ? (votes.up / total) * 100 : 0;
+  const pctDown = total > 0 ? (votes.down / total) * 100 : 0;
+
+  const p1 = document.getElementById('oeChatPct1');
+  const p2 = document.getElementById('oeChatPct2');
+  const p3 = document.getElementById('oeChatPct3');
+  if (p1) p1.textContent = Math.round(pctFire) + '%';
+  if (p2) p2.textContent = Math.round(pctUp) + '%';
+  if (p3) p3.textContent = Math.round(pctDown) + '%';
+
+  const b1 = document.getElementById('oeChatBar1');
+  const b2 = document.getElementById('oeChatBar2');
+  const b3 = document.getElementById('oeChatBar3');
+  if (b1) b1.style.width = pctFire + '%';
+  if (b2) b2.style.width = pctUp + '%';
+  if (b3) b3.style.width = pctDown + '%';
+
+  const c1 = document.getElementById('oeChatCount1');
+  const c2 = document.getElementById('oeChatCount2');
+  const c3 = document.getElementById('oeChatCount3');
+  if (c1) c1.textContent = '(' + votes.fire + ')';
+  if (c2) c2.textContent = '(' + votes.up + ')';
+  if (c3) c3.textContent = '(' + votes.down + ')';
+}
+
 function loadVotesForCurrentTrack() {
   const subId = (playlist[currentTrackIndex] && playlist[currentTrackIndex].submission)
     ? playlist[currentTrackIndex].submission.id : undefined;
   if (!subId) return;
   fetch(`/api/on-ecoute/votes?submission_id=${subId}`)
     .then(r => r.json())
-    .then(data => { votes = { fire: data.fire || 0, up: data.up || 0, down: data.down || 0 }; })
+    .then(data => { votes = { fire: data.fire || 0, up: data.up || 0, down: data.down || 0 }; updateOeChatDisplay(); })
     .catch(() => {});
 }
 setInterval(loadVotesForCurrentTrack, 3000);
@@ -627,6 +655,30 @@ setInterval(async () => {
           }
           pauseOffset = Math.max(0, Math.min(cmd.seekTo, audioBuffer.duration));
           if (wasPlaying) playAudio();
+        }
+        break;
+      case 'reaction':
+        if (cmd.judge && cmd.react) {
+          // Trigger button burst animation
+          const matchBtn = document.querySelector(`.judge-btn[data-judge="${cmd.judge}"][data-vote="${cmd.react}"]`);
+          if (matchBtn) {
+            matchBtn.classList.remove('burst');
+            void matchBtn.offsetWidth;
+            matchBtn.classList.add('burst');
+            setTimeout(() => matchBtn.classList.remove('burst'), 500);
+          }
+          // Spawn floating emoji reaction
+          spawnReaction(cmd.judge, cmd.react);
+          // Also send vote to server
+          const subId = (playlist[currentTrackIndex] && playlist[currentTrackIndex].submission)
+            ? playlist[currentTrackIndex].submission.id : undefined;
+          if (subId) {
+            fetch('/api/on-ecoute/votes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ submission_id: subId, type: cmd.react }),
+            }).catch(() => {});
+          }
         }
         break;
     }

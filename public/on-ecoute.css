@@ -417,6 +417,79 @@ body {
   100% { transform: scale(1); box-shadow: 0 8px 40px rgba(0,0,0,0.5); border-color: rgba(200,148,62,0.2); }
 }
 
+/* ═══════ L'AVIS DU CHAT (bottom-left) ═══════ */
+
+.oe-chat-card {
+  position: absolute;
+  bottom: 40px;
+  left: 40px;
+  width: 220px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: rgba(10, 8, 5, 0.75);
+  border: 1.5px solid rgba(200, 148, 62, 0.2);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  z-index: 90;
+}
+
+.oe-chat-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  color: var(--gold);
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.oe-chat-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.oe-chat-label { width: 22px; text-align: center; font-size: 16px; }
+
+.oe-chat-pct {
+  font-weight: 800;
+  font-size: 14px;
+  width: 38px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.oe-chat-bar-bg {
+  flex: 1;
+  height: 8px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .08);
+  overflow: hidden;
+}
+
+.oe-chat-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width .5s cubic-bezier(.25, .46, .45, .94);
+}
+
+.oe-chat-count {
+  font-weight: 700;
+  font-size: 11px;
+  color: rgba(255, 255, 255, .35);
+  width: 40px;
+  text-align: right;
+}
+
+.oe-chat-row.c-fire .oe-chat-pct { color: #ffaa40; }
+.oe-chat-row.c-fire .oe-chat-bar-fill { background: linear-gradient(90deg, #ff8c20, #ff5500); box-shadow: 0 0 8px rgba(255, 100, 0, .3); }
+.oe-chat-row.c-up .oe-chat-pct { color: #6be88a; }
+.oe-chat-row.c-up .oe-chat-bar-fill { background: linear-gradient(90deg, #5eea7e, #30d858); box-shadow: 0 0 8px rgba(80, 220, 100, .3); }
+.oe-chat-row.c-down .oe-chat-pct { color: #7cb8ff; }
+.oe-chat-row.c-down .oe-chat-bar-fill { background: linear-gradient(90deg, #70b0ff, #4090ff); box-shadow: 0 0 8px rgba(80, 150, 255, .3); }
+
 /* ═══════ SKIP FLASH ═══════ */
 
 .top-bar.skip-flash::after {

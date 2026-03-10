@@ -1203,14 +1203,16 @@ let onEcouteCommand = { action: null, submissionId: null, seekTo: null, ts: 0 };
 
 // Admin sends a command to the overlay
 app.post('/api/on-ecoute/command', requireAdmin, (req, res) => {
-  const { action, submissionId, seekTo } = req.body;
-  if (!['play', 'pause', 'stop', 'seek'].includes(action)) {
+  const { action, submissionId, seekTo, judge, react } = req.body;
+  if (!['play', 'pause', 'stop', 'seek', 'reaction'].includes(action)) {
     return res.status(400).json({ error: 'Action invalide' });
   }
   onEcouteCommand = {
     action,
     submissionId: submissionId || null,
     seekTo: typeof seekTo === 'number' ? seekTo : null,
+    judge: judge || null,
+    react: react || null,
     ts: Date.now(),
   };
   res.json({ success: true });

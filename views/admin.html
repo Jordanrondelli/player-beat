@@ -499,7 +499,26 @@
         <div style="display:flex; gap:10px; margin-top:12px">
           <button class="save-btn" id="oePlayBtn" style="flex:1">&#9654; PLAY</button>
           <button class="save-btn" id="oePauseBtn" style="flex:1; background:linear-gradient(135deg,rgba(255,255,255,.15),rgba(255,255,255,.06)); box-shadow:none; color:rgba(255,255,255,.7)">&#9208; PAUSE</button>
-          <button class="save-btn" id="oeStopBtn" style="flex:0 0 auto; padding:10px 20px; background:linear-gradient(135deg,rgba(231,76,60,.2),rgba(231,76,60,.1)); box-shadow:none; color:#e74c3c">&#9724; STOP</button>
+          <button class="save-btn" id="oeSkipBtn" style="flex:0 0 auto; padding:10px 20px; background:linear-gradient(135deg,rgba(52,152,219,.2),rgba(52,152,219,.1)); box-shadow:none; color:#3498db">&#9197; SUIVANT</button>
+        </div>
+        <!-- Reactions: MOI (host) + INVITÉ (guest) -->
+        <div style="margin-top:16px; display:flex; gap:20px">
+          <div style="flex:1">
+            <div style="font-size:11px; font-weight:700; color:rgba(255,255,255,.4); letter-spacing:1px; margin-bottom:8px; text-align:center">MOI</div>
+            <div style="display:flex; gap:8px; justify-content:center">
+              <button class="save-btn oe-react-btn" data-judge="host" data-react="fire" style="flex:1; padding:8px 0; background:linear-gradient(135deg,rgba(255,140,0,.15),rgba(255,100,0,.08)); box-shadow:none; font-size:18px" title="Fire">&#128293;</button>
+              <button class="save-btn oe-react-btn" data-judge="host" data-react="up" style="flex:1; padding:8px 0; background:linear-gradient(135deg,rgba(46,204,113,.15),rgba(46,204,113,.08)); box-shadow:none; font-size:18px" title="J'aime">&#128077;</button>
+              <button class="save-btn oe-react-btn" data-judge="host" data-react="down" style="flex:1; padding:8px 0; background:linear-gradient(135deg,rgba(231,76,60,.15),rgba(231,76,60,.08)); box-shadow:none; font-size:18px" title="J'aime pas">&#128078;</button>
+            </div>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:11px; font-weight:700; color:rgba(255,255,255,.4); letter-spacing:1px; margin-bottom:8px; text-align:center">INVIT&Eacute;</div>
+            <div style="display:flex; gap:8px; justify-content:center">
+              <button class="save-btn oe-react-btn" data-judge="guest" data-react="fire" style="flex:1; padding:8px 0; background:linear-gradient(135deg,rgba(255,140,0,.15),rgba(255,100,0,.08)); box-shadow:none; font-size:18px" title="Fire">&#128293;</button>
+              <button class="save-btn oe-react-btn" data-judge="guest" data-react="up" style="flex:1; padding:8px 0; background:linear-gradient(135deg,rgba(46,204,113,.15),rgba(46,204,113,.08)); box-shadow:none; font-size:18px" title="J'aime">&#128077;</button>
+              <button class="save-btn oe-react-btn" data-judge="guest" data-react="down" style="flex:1; padding:8px 0; background:linear-gradient(135deg,rgba(231,76,60,.15),rgba(231,76,60,.08)); box-shadow:none; font-size:18px" title="J'aime pas">&#128078;</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1207,19 +1226,73 @@
     // PAUSE
     document.getElementById('oePauseBtn').addEventListener('click', () => oeSendCommand('pause'));
 
-    // STOP -> mark as played, hide now playing
-    document.getElementById('oeStopBtn').addEventListener('click', async () => {
-      await oeSendCommand('stop');
+    // SKIP -> mark current as played, load next random from same genre
+    document.getElementById('oeSkipBtn').addEventListener('click', async () => {
+      const currentGenre = oeSelected ? oeSelected.genre : '';
+      const currentId = oeSelected ? oeSelected.id : 0;
+      // Mark current as played
       if (oeSelected) {
+        await oeSendCommand('stop');
         await fetch(`/api/on-ecoute/submissions/${oeSelected.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'played' }),
         });
       }
-      oeSelected = null;
-      document.getElementById('oeNowPlaying').style.display = 'none';
-      oeLoadList();
+      // Fetch next random from same genre
+      try {
+        const genreParam = currentGenre ? `&genre=${encodeURIComponent(currentGenre)}` : '';
+        const res = await fetch(`/api/on-ecoute/random?exclude=${currentId}${genreParam}`);
+        if (res.ok) {
+          const next = await res.json();
+          if (next && next.id) {
+            oeSelected = next;
+            oeLoadList();
+            document.getElementById('oeNowPlaying').style.display = 'block';
+            document.getElementById('oeSelectedCard').innerHTML = `
+              <div class="oe-card" style="padding:16px 20px">
+                ${next.genre ? `<div class="oe-genre-badge">${esc(next.genre)}</div>` : ''}
+                <div class="oe-title" style="font-size:20px">${esc(next.title)}</div>
+                <div class="oe-artist">${next.artist ? esc(next.artist) : ''}</div>
+                <div class="oe-submitter">par ${esc(next.submitted_by || 'Anonyme')}</div>
+                ${next.message ? `<div class="oe-message">\u00ab ${esc(next.message)} \u00bb</div>` : ''}
+              </div>`;
+            oeWaveformData = [];
+            oeDrawWaveform(0, 0);
+            oeLoadWaveformData(next.id);
+            // Auto-approve and play
+            await fetch(`/api/on-ecoute/submissions/${next.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'approved' }),
+            });
+            await oeSendCommand('play', next.id);
+          } else {
+            oeSelected = null;
+            document.getElementById('oeNowPlaying').style.display = 'none';
+            oeLoadList();
+          }
+        }
+      } catch (err) {
+        console.error('Skip error:', err);
+      }
+    });
+
+    // Reaction buttons -> send reaction command to overlay
+    document.querySelectorAll('.oe-react-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const judge = btn.dataset.judge;
+        const react = btn.dataset.react;
+        // Visual feedback on button
+        btn.style.transform = 'scale(0.9)';
+        setTimeout(() => btn.style.transform = 'scale(1)', 200);
+        // Send reaction command to overlay
+        await fetch('/api/on-ecoute/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reaction', judge, react }),
+        });
+      });
     });
 
     // Delete track
