@@ -71,6 +71,16 @@ async function initDB() {
   `);
 
   // On Écoute — independent submission system (files on disk, not BYTEA)
+  // Drop old BYTEA-based table if it exists (schema changed to file_path)
+  const { rows: oeCheck } = await pool.query(`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_name = 'on_ecoute_submissions' AND column_name = 'file_data'
+  `);
+  if (oeCheck.length > 0) {
+    console.log('Migrating on_ecoute_submissions: dropping old BYTEA table...');
+    await pool.query('DROP TABLE IF EXISTS on_ecoute_votes CASCADE');
+    await pool.query('DROP TABLE IF EXISTS on_ecoute_submissions CASCADE');
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS on_ecoute_submissions (
       id SERIAL PRIMARY KEY,
@@ -90,10 +100,6 @@ async function initDB() {
       down INTEGER DEFAULT 0
     );
   `);
-  // Migrate: add file_path column if table had file_data instead
-  await pool.query(`
-    ALTER TABLE on_ecoute_submissions ADD COLUMN IF NOT EXISTS file_path TEXT;
-  `).catch(() => {});
 
   // Skins system
   await pool.query(`
