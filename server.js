@@ -193,6 +193,7 @@ app.get('/player', requireAdmin, (req, res) => {
 
 // "On Écoute" overlay page (public — needs to be accessible from OBS browser source)
 app.get('/on-ecoute', (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, 'public', 'on-ecoute.html'));
 });
 
