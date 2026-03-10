@@ -103,13 +103,12 @@ body {
   pointer-events: none;
 }
 
-.judge-btn-inner img {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+.judge-emoji {
+  font-size: 36px;
+  line-height: 1;
   pointer-events: none;
   transition: transform 0.2s;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
 }
 
 .judge-btn-label {
@@ -132,7 +131,7 @@ body {
     0 0 20px rgba(200, 148, 62, 0.25),
     0 0 0 1px rgba(200, 148, 62, 0.3);
 }
-.judge-btn:hover .judge-btn-inner img {
+.judge-btn:hover .judge-emoji {
   transform: scale(1.08);
 }
 
@@ -210,11 +209,11 @@ body {
     0 0 15px rgba(200,148,62,0.2);
 }
 
-.play-btn img {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
-  filter: brightness(1.5) sepia(0.5) hue-rotate(-10deg) saturate(2);
+.play-icon {
+  font-size: 20px;
+  line-height: 1;
+  color: var(--gold-light);
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
 }
 
 /* Waveform area inside capsule */
@@ -329,19 +328,18 @@ body {
   pointer-events: none;
 }
 
-.reaction-float img {
-  width: 52px;
-  height: 52px;
-  object-fit: contain;
+.reaction-float .react-emoji {
+  font-size: 48px;
+  line-height: 1;
 }
 
-.reaction-float.react-fire img {
+.reaction-float.react-fire .react-emoji {
   filter: drop-shadow(0 0 12px rgba(255,100,0,0.5));
 }
-.reaction-float.react-up img {
+.reaction-float.react-up .react-emoji {
   filter: drop-shadow(0 0 10px rgba(46,204,113,0.4));
 }
-.reaction-float.react-down img {
+.reaction-float.react-down .react-emoji {
   filter: drop-shadow(0 0 10px rgba(230,57,70,0.4));
 }
 

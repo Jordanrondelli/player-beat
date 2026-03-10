@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════
-// ON ÉCOUTE — Overlay Player Engine
-// Matching reference design: capsule player + judge buttons
+// ON ÉCOUTE — Independent Overlay Player Engine
+// Only plays .mp3/.wav from on_ecoute_submissions table
+// Emoji-based judge buttons, no YouTube
 // ═══════════════════════════════════════════════════════════
 
 // ===== AUDIO CONTEXT =====
@@ -17,42 +18,13 @@ let playlist = [];
 let currentTrackIndex = -1;
 let waveformData = [];
 let waveformSigned = [];
-let currentSource = null;
-let serverQueue = [];
-
-// ===== YOUTUBE IFRAME PLAYER =====
-let ytPlayer = null;
-let ytReady = false;
-let ytIsCurrentSource = false;
-let ytDuration = 0;
-
-function onYouTubeIframeAPIReady() {
-  ytPlayer = new YT.Player('ytPlayer', {
-    width: 320, height: 180,
-    playerVars: { autoplay: 0, controls: 0, disablekb: 1, fs: 0, modestbranding: 1, rel: 0 },
-    events: {
-      onReady: () => { ytReady = true; console.log('YT Player ready (overlay)'); },
-      onStateChange: (e) => {
-        if (e.data === YT.PlayerState.ENDED && ytIsCurrentSource) {
-          stopAudio();
-          if (playlist.length > 1) {
-            const next = currentTrackIndex + 1;
-            if (next < playlist.length) loadTrack(next, true);
-            else fetchAndLoadQueue(currentSource);
-          }
-        }
-      },
-    },
-  });
-}
-window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 
 // ===== DOM REFERENCES =====
 const waveformCanvas = document.getElementById('waveformCanvas');
 const waveformCtx = waveformCanvas.getContext('2d');
 const playBtn = document.getElementById('playBtn');
-const playImg = document.getElementById('playImg');
-const pauseImg = document.getElementById('pauseImg');
+const playIcon = document.getElementById('playIcon');
+const pauseIcon = document.getElementById('pauseIcon');
 const currentTimeEl = document.getElementById('currentTime');
 const totalTimeEl = document.getElementById('totalTime');
 const progressFill = document.getElementById('progressFill');
@@ -111,84 +83,6 @@ function sampleWaveform(fIdx) {
   return a + (b - a) * f;
 }
 
-// ===== SYNTHETIC WAVEFORM (for YouTube) =====
-function generateSyntheticWaveform(duration, videoId) {
-  const sampleRate = 30;
-  const totalSamples = Math.floor(duration * sampleRate);
-  waveformData = [];
-  waveformSigned = [];
-
-  let seed = 12345;
-  if (videoId) {
-    for (let i = 0; i < videoId.length; i++) {
-      seed = ((seed << 5) - seed + videoId.charCodeAt(i)) | 0;
-    }
-  }
-  seed = Math.abs(seed) || 1;
-  function rand() {
-    seed = (seed * 16807 + 12345) % 2147483647;
-    return (seed & 0x7fffffff) / 2147483647;
-  }
-
-  const secLen = 12 + rand() * 20;
-  const numSections = Math.max(3, Math.floor(duration / secLen));
-  const templates = [
-    [0.25, 0.45, 0.85, 0.35, 0.50, 0.90, 0.30, 0.85],
-    [0.30, 0.55, 0.70, 0.45, 0.75, 0.55, 0.80, 0.40],
-    [0.35, 0.60, 0.80, 0.40, 0.65, 0.85, 0.35, 0.75],
-    [0.20, 0.40, 0.65, 0.30, 0.50, 0.70, 0.80, 0.25],
-  ];
-  const template = templates[Math.floor(rand() * templates.length)];
-  const sectionEnergies = [];
-  for (let s = 0; s < numSections; s++) {
-    const tIdx = s % template.length;
-    const base = template[tIdx];
-    sectionEnergies.push(Math.max(0.15, Math.min(0.95, base + (rand() - 0.5) * 0.15)));
-  }
-
-  const fakeBPM = 100 + rand() * 60;
-  const beatSamples = (60 / fakeBPM) * sampleRate;
-  const modFreq1 = 0.003 + rand() * 0.008;
-  const modFreq2 = 0.01 + rand() * 0.02;
-  const modPhase1 = rand() * Math.PI * 2;
-  const modPhase2 = rand() * Math.PI * 2;
-
-  for (let i = 0; i < totalSamples; i++) {
-    const t = i / totalSamples;
-    const rawIdx = t * numSections;
-    const sIdx = Math.min(numSections - 1, Math.floor(rawIdx));
-    const nIdx = Math.min(numSections - 1, sIdx + 1);
-    const blend = rawIdx - sIdx;
-    const smooth = blend * blend * (3 - 2 * blend);
-    const sectionLevel = sectionEnergies[sIdx] * (1 - smooth) + sectionEnergies[nIdx] * smooth;
-
-    const beatPos = (i % beatSamples) / beatSamples;
-    const kick = Math.exp(-beatPos * 8) * 0.20 * sectionLevel;
-    const halfBeat = ((i + beatSamples / 2) % beatSamples) / beatSamples;
-    const snare = Math.exp(-halfBeat * 6) * 0.10 * sectionLevel;
-
-    const n1 = Math.sin(i * modFreq1 * 6.28 + modPhase1) * 0.08;
-    const n2 = Math.sin(i * modFreq2 * 6.28 + modPhase2) * 0.05;
-    const n3 = (rand() - 0.5) * 0.08 * sectionLevel;
-
-    const accentPeriod = beatSamples * (4 + Math.floor(rand() * 2) * 2);
-    const accentPos = (i % accentPeriod) / accentPeriod;
-    const accent = accentPos < 0.02 ? 0.15 * sectionLevel : 0;
-
-    const val = Math.max(0.04, Math.min(1, sectionLevel + kick + snare + n1 + n2 + n3 + accent));
-    waveformData.push(val);
-    waveformSigned.push(val);
-  }
-
-  const maxVal = Math.max(...waveformData);
-  if (maxVal > 0) {
-    for (let i = 0; i < waveformData.length; i++) {
-      waveformData[i] /= maxVal;
-      waveformSigned[i] /= maxVal;
-    }
-  }
-}
-
 // ===== WAVEFORM DRAWING (inside capsule) =====
 function drawWaveform(currentTime) {
   const dpr = window.devicePixelRatio || 1;
@@ -202,11 +96,10 @@ function drawWaveform(currentTime) {
   if (!duration || waveformData.length === 0) return;
 
   const centerY = h / 2;
-  const totalBars = Math.floor(w / 4); // bar width ~3px + 1px gap
+  const totalBars = Math.floor(w / 4);
   const barW = 2.5;
   const gap = (w - totalBars * barW) / (totalBars - 1);
   const step = barW + gap;
-
   const progress = currentTime / duration;
 
   for (let i = 0; i < totalBars; i++) {
@@ -219,7 +112,6 @@ function drawWaveform(currentTime) {
     const isPast = frac <= progress;
 
     if (isPast) {
-      // Played: warm orange/gold gradient
       const grad = ctx.createLinearGradient(x, centerY - barH, x, centerY + barH);
       grad.addColorStop(0, `rgba(200, 100, 20, ${0.4 + amp * 0.3})`);
       grad.addColorStop(0.4, `rgba(232, 118, 42, ${0.6 + amp * 0.4})`);
@@ -228,11 +120,9 @@ function drawWaveform(currentTime) {
       grad.addColorStop(1, `rgba(200, 100, 20, ${0.4 + amp * 0.3})`);
       ctx.fillStyle = grad;
     } else {
-      // Unplayed: dim gray/warm
       ctx.fillStyle = `rgba(180, 140, 90, ${0.1 + amp * 0.12})`;
     }
 
-    // Mirror bars
     const r = barW / 2;
     roundedBar(ctx, x, centerY - barH, barW, barH, r);
     roundedBar(ctx, x, centerY + 1, barW, barH, r);
@@ -259,14 +149,10 @@ function roundedBar(ctx, x, y, w, h, r) {
 
 // ===== PLAYBACK HELPERS =====
 function getDuration() {
-  if (ytIsCurrentSource) return ytDuration || 0;
   return audioBuffer ? audioBuffer.duration : 0;
 }
 
 function getCurrentTime() {
-  if (ytIsCurrentSource) {
-    return (ytPlayer && ytReady) ? ytPlayer.getCurrentTime() : 0;
-  }
   if (!isPlaying) return pauseOffset;
   return pauseOffset + (audioCtx.currentTime - startTime);
 }
@@ -280,14 +166,6 @@ function formatTime(sec) {
 
 // ===== PLAYBACK CONTROL =====
 function playAudio() {
-  if (ytIsCurrentSource) {
-    if (ytPlayer && ytReady) {
-      ytPlayer.playVideo();
-      isPlaying = true;
-      playImg.style.display = 'none'; pauseImg.style.display = 'block';
-    }
-    return;
-  }
   if (!audioBuffer) return;
   if (audioCtx.state === 'suspended') audioCtx.resume();
   sourceNode = audioCtx.createBufferSource();
@@ -296,7 +174,7 @@ function playAudio() {
   sourceNode.start(0, pauseOffset);
   startTime = audioCtx.currentTime;
   isPlaying = true;
-  playImg.style.display = 'none'; pauseImg.style.display = 'block';
+  playIcon.style.display = 'none'; pauseIcon.style.display = 'inline';
 
   sourceNode.onended = () => {
     if (isPlaying && getCurrentTime() >= getDuration() - 0.5) {
@@ -310,27 +188,16 @@ function playAudio() {
 }
 
 function pauseAudio() {
-  if (ytIsCurrentSource) {
-    if (ytPlayer && ytReady) ytPlayer.pauseVideo();
-    isPlaying = false;
-    playImg.style.display = 'block'; pauseImg.style.display = 'none';
-    return;
-  }
   if (sourceNode) {
     sourceNode.stop();
     sourceNode.disconnect();
   }
   pauseOffset += audioCtx.currentTime - startTime;
   isPlaying = false;
-  playImg.style.display = 'block'; pauseImg.style.display = 'none';
+  playIcon.style.display = 'inline'; pauseIcon.style.display = 'none';
 }
 
 function stopAudio() {
-  if (ytIsCurrentSource) {
-    if (ytPlayer && ytReady) ytPlayer.stopVideo();
-    ytIsCurrentSource = false;
-    ytDuration = 0;
-  }
   if (sourceNode) {
     try { sourceNode.stop(); } catch (e) {}
     sourceNode.disconnect();
@@ -338,7 +205,7 @@ function stopAudio() {
   }
   isPlaying = false;
   pauseOffset = 0;
-  playImg.style.display = 'block'; pauseImg.style.display = 'none';
+  playIcon.style.display = 'inline'; pauseIcon.style.display = 'none';
 }
 
 // ===== TRACK LOADING =====
@@ -352,17 +219,15 @@ function updateTrackInfo(item) {
   }
   trackTitleEl.textContent = item.title || 'Sans titre';
   trackArtistEl.textContent = item.artist || '';
-  trackSepEl.textContent = item.artist && item.submitted_by ? '·' : '';
+  trackSepEl.textContent = item.artist && item.submitted_by ? '\u00B7' : '';
   trackSubmitterEl.textContent = item.submitted_by ? `par ${item.submitted_by}` : '';
 }
 
 function updateQueueCounter() {
   if (!queueCounterEl) return;
-  if (serverQueue.length === 0) {
-    queueCounterEl.textContent = '0 / 0';
-  } else {
-    queueCounterEl.textContent = `${currentTrackIndex + 1} / ${serverQueue.length}`;
-  }
+  queueCounterEl.textContent = playlist.length === 0
+    ? '0 / 0'
+    : `${currentTrackIndex + 1} / ${playlist.length}`;
 }
 
 async function loadTrack(index, autoPlay) {
@@ -371,79 +236,16 @@ async function loadTrack(index, autoPlay) {
   loadingOverlay.classList.add('visible');
   stopAudio();
 
-  votes = { fire: 0, up: 0, down: 0 };
+  const track = playlist[index];
 
-  const qItem = playlist[index] && playlist[index].queueItem;
-  if (qItem && qItem.id) {
-    fetch(`/api/player/now-playing/${qItem.id}`, { method: 'POST' }).catch(() => {});
+  // Notify server this track is now playing
+  if (track.submission && track.submission.id) {
+    fetch(`/api/on-ecoute/now-playing/${track.submission.id}`, { method: 'POST' }).catch(() => {});
   }
 
-  const track = playlist[index];
-  updateTrackInfo(track.queueItem);
+  updateTrackInfo(track.submission);
   updateQueueCounter();
 
-  // YouTube track
-  if (track.youtubeId) {
-    ytIsCurrentSource = true;
-    audioBuffer = null;
-    waveformData = [];
-    waveformSigned = [];
-
-    if (ytPlayer && ytReady) {
-      const cuePromise = new Promise((resolve) => {
-        const onStateChange = (e) => {
-          if (e.data === YT.PlayerState.CUED || e.data === YT.PlayerState.PLAYING) {
-            ytPlayer.removeEventListener('onStateChange', onStateChange);
-            resolve();
-          }
-        };
-        ytPlayer.addEventListener('onStateChange', onStateChange);
-        ytPlayer.cueVideoById(track.youtubeId);
-        setTimeout(resolve, 2000);
-      });
-      await cuePromise;
-
-      ytDuration = ytPlayer.getDuration();
-      if (ytDuration <= 0) ytDuration = 180;
-
-      generateSyntheticWaveform(ytDuration, track.youtubeId);
-      resizeCanvases();
-      pauseOffset = 0;
-      if (autoPlay !== false) {
-        ytPlayer.playVideo();
-        isPlaying = true;
-        playImg.style.display = 'none'; pauseImg.style.display = 'block';
-      }
-    }
-    loadingOverlay.classList.remove('visible');
-
-    // Background: try to upgrade to real audio
-    const ytVideoId = track.youtubeId;
-    fetch(`/api/yt-audio/${ytVideoId}`, { signal: AbortSignal.timeout(12000) })
-      .then(async (audioRes) => {
-        if (!audioRes.ok) return;
-        const arrayBuffer = await audioRes.arrayBuffer();
-        if (arrayBuffer.byteLength <= 1000) return;
-        const realAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        console.log(`Overlay: YouTube audio upgraded: ${realAudioBuffer.duration.toFixed(1)}s`);
-        if (playlist[currentTrackIndex] && playlist[currentTrackIndex].youtubeId === ytVideoId) {
-          const currentPos = (ytPlayer && ytReady) ? ytPlayer.getCurrentTime() : 0;
-          const wasPlaying = isPlaying;
-          audioBuffer = realAudioBuffer;
-          extractWaveformData(audioBuffer);
-          resizeCanvases();
-          if (ytPlayer && ytReady) ytPlayer.pauseVideo();
-          ytIsCurrentSource = false;
-          pauseOffset = currentPos;
-          if (wasPlaying) playAudio();
-        }
-      })
-      .catch((e) => console.log('Overlay: YouTube upgrade skipped:', e.message));
-    return;
-  }
-
-  // Regular upload track
-  ytIsCurrentSource = false;
   try {
     const bufferCopy = track.arrayBuffer.slice(0);
     audioBuffer = await audioCtx.decodeAudioData(bufferCopy);
@@ -452,7 +254,7 @@ async function loadTrack(index, autoPlay) {
     pauseOffset = 0;
     if (autoPlay !== false) playAudio();
   } catch (err) {
-    console.error('Overlay: Audio decode error:', err);
+    console.error('On Ecoute: Audio decode error:', err);
     if (playlist.length > 1 && index + 1 < playlist.length) {
       loadingOverlay.classList.remove('visible');
       loadTrack(index + 1, autoPlay);
@@ -470,41 +272,32 @@ function skipToNext() {
   loadTrack(next, true);
 }
 
-// ===== QUEUE MANAGEMENT =====
-async function fetchAndLoadQueue(type) {
-  currentSource = type;
-  serverQueue = [];
+// ===== QUEUE MANAGEMENT (On Écoute independent API) =====
+async function fetchAndLoadQueue() {
   playlist = [];
   currentTrackIndex = -1;
   updateQueueCounter();
   updateTrackInfo(null);
 
   try {
-    const url = type ? `/api/player/playlist?type=${type}` : '/api/player/playlist';
-    const res = await fetch(url);
+    const res = await fetch('/api/on-ecoute/playlist');
     if (!res.ok) throw new Error('Server error');
-    serverQueue = await res.json();
+    const submissions = await res.json();
 
-    if (serverQueue.length === 0) {
-      updateTrackInfo(null);
+    if (submissions.length === 0) {
       trackTitleEl.textContent = 'Aucun son en attente';
       return;
     }
 
     loadingOverlay.classList.add('visible');
 
-    const fetchPromises = serverQueue.map(async (item) => {
-      if (item.type === 'youtube' && item.source_url) {
-        const m = item.source_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|music\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/);
-        if (m) return { name: item.title, youtubeId: m[1], queueItem: item };
-        return null;
-      }
+    const fetchPromises = submissions.map(async (item) => {
       try {
-        const response = await fetch(`/api/audio/${item.id}`);
+        const response = await fetch(`/api/on-ecoute/audio/${item.id}`);
         if (!response.ok) return null;
         const arrayBuffer = await response.arrayBuffer();
         if (arrayBuffer.byteLength < 1000) return null;
-        return { name: item.title, arrayBuffer, queueItem: item };
+        return { name: item.title, arrayBuffer, submission: item };
       } catch (err) {
         console.error('Failed to load:', item.title, err);
         return null;
@@ -520,32 +313,32 @@ async function fetchAndLoadQueue(type) {
       await loadTrack(0);
     }
   } catch (err) {
-    console.error('Overlay queue error:', err);
+    console.error('On Ecoute queue error:', err);
     trackTitleEl.textContent = 'Erreur de chargement';
     loadingOverlay.classList.remove('visible');
   }
 }
 
-// ===== VOTES =====
+// ===== VOTES (On Écoute) =====
 let votes = { fire: 0, up: 0, down: 0 };
 
 function loadVotesForCurrentTrack() {
-  const queueId = (playlist[currentTrackIndex] && playlist[currentTrackIndex].queueItem)
-    ? playlist[currentTrackIndex].queueItem.id : undefined;
-  const url = queueId ? `/api/votes?queue_id=${queueId}` : '/api/votes';
-  fetch(url)
+  const subId = (playlist[currentTrackIndex] && playlist[currentTrackIndex].submission)
+    ? playlist[currentTrackIndex].submission.id : undefined;
+  if (!subId) return;
+  fetch(`/api/on-ecoute/votes?submission_id=${subId}`)
     .then(r => r.json())
     .then(data => { votes = { fire: data.fire || 0, up: data.up || 0, down: data.down || 0 }; })
     .catch(() => {});
 }
 setInterval(loadVotesForCurrentTrack, 3000);
 
-// ===== LEGEND (Meilleur Son) =====
+// ===== LEGEND (Meilleur Son — On Écoute) =====
 let currentLegendUser = null;
 
 async function loadLegend() {
   try {
-    const res = await fetch('/api/legend');
+    const res = await fetch('/api/on-ecoute/legend');
     const data = await res.json();
     const userEl = document.getElementById('legendUser');
     const trackEl = document.getElementById('legendTrack');
@@ -554,7 +347,7 @@ async function loadLegend() {
     if (data && data.fire > 0) {
       const newUser = data.submitted_by || 'Anonyme';
       userEl.textContent = newUser;
-      trackEl.textContent = (data.title || 'Sans titre') + (data.artist ? ' — ' + data.artist : '');
+      trackEl.textContent = (data.title || 'Sans titre') + (data.artist ? ' \u2014 ' + data.artist : '');
       fireEl.textContent = '\u{1F525} ' + data.fire + ' FIRE';
       if (currentLegendUser !== null && currentLegendUser !== newUser) {
         const card = document.getElementById('legendCard');
@@ -563,7 +356,7 @@ async function loadLegend() {
       }
       currentLegendUser = newUser;
     } else {
-      userEl.textContent = '—';
+      userEl.textContent = '\u2014';
       trackEl.textContent = 'En attente du premier \u{1F525}';
       fireEl.textContent = '';
       currentLegendUser = null;
@@ -573,22 +366,23 @@ async function loadLegend() {
 loadLegend();
 setInterval(loadLegend, 5000);
 
-// ===== REACTIONS SYSTEM =====
+// ===== REACTIONS SYSTEM (emoji based) =====
 function spawnReaction(judge, type) {
   const containerId = judge === 'host' ? 'hostReaction' : 'guestReaction';
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  const imgMap = { fire: 'fire.png', up: 'pouce-vert.png', down: 'pouce-rouge.png' };
+  const emojiMap = { fire: '\u{1F525}', up: '\u{1F44D}', down: '\u{1F44E}' };
   const classMap = { fire: 'react-fire', up: 'react-up', down: 'react-down' };
 
   const el = document.createElement('div');
   el.className = `reaction-float ${classMap[type] || ''}`;
   el.style.left = `${20 + Math.random() * 200}px`;
 
-  const img = document.createElement('img');
-  img.src = imgMap[type] || 'fire.png';
-  el.appendChild(img);
+  const span = document.createElement('span');
+  span.className = 'react-emoji';
+  span.textContent = emojiMap[type] || '\u{1F525}';
+  el.appendChild(span);
   container.appendChild(el);
 
   setTimeout(() => el.remove(), 3000);
@@ -609,14 +403,14 @@ document.querySelectorAll('.judge-btn').forEach(btn => {
     // Spawn reaction
     spawnReaction(judge, vote);
 
-    // Send vote to server
-    const queueId = (playlist[currentTrackIndex] && playlist[currentTrackIndex].queueItem)
-      ? playlist[currentTrackIndex].queueItem.id : undefined;
-    if (queueId && vote === 'fire') {
-      fetch('/api/votes', {
+    // Send vote to server (On Écoute API)
+    const subId = (playlist[currentTrackIndex] && playlist[currentTrackIndex].submission)
+      ? playlist[currentTrackIndex].submission.id : undefined;
+    if (subId) {
+      fetch('/api/on-ecoute/votes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ queue_id: queueId, vote_type: 'fire', value: 5 }),
+        body: JSON.stringify({ submission_id: subId, type: vote }),
       }).catch(() => {});
     }
 
@@ -648,29 +442,12 @@ if (nextBtn) nextBtn.addEventListener('click', () => {
   skipToNext();
 });
 
-// Source toggle
-document.querySelectorAll('.src-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.src-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    stopAudio();
-    const type = btn.id === 'srcUpload' ? 'upload' : btn.id === 'srcYoutube' ? 'youtube' : null;
-    fetchAndLoadQueue(type);
-  });
-});
-
 // Progress bar seek
 document.getElementById('progressBar').addEventListener('click', (e) => {
   const rect = e.currentTarget.getBoundingClientRect();
   const pct = (e.clientX - rect.left) / rect.width;
   const duration = getDuration();
-  if (!duration) return;
-
-  if (ytIsCurrentSource && ytPlayer && ytReady) {
-    ytPlayer.seekTo(pct * ytDuration, true);
-    return;
-  }
-  if (!audioBuffer) return;
+  if (!duration || !audioBuffer) return;
   const wasPlaying = isPlaying;
   if (isPlaying) {
     sourceNode.stop();
@@ -734,22 +511,19 @@ function animationLoop() {
   const ct = getCurrentTime();
   const dur = getDuration();
 
-  // Update time display
   currentTimeEl.textContent = formatTime(ct);
   totalTimeEl.textContent = formatTime(dur);
 
-  // Update progress bar
   if (dur > 0) {
     progressFill.style.width = `${(ct / dur) * 100}%`;
   }
 
-  // Draw waveform
   if (waveformData.length > 0) {
     drawWaveform(ct);
   }
 
-  // Auto-advance for uploads
-  if (isPlaying && !ytIsCurrentSource && audioBuffer && ct >= audioBuffer.duration - 0.1) {
+  // Auto-advance
+  if (isPlaying && audioBuffer && ct >= audioBuffer.duration - 0.1) {
     stopAudio();
     if (playlist.length > 1) {
       const next = (currentTrackIndex + 1) % playlist.length;
@@ -762,5 +536,5 @@ function animationLoop() {
 resizeCanvases();
 animationLoop();
 
-// Auto-load queue on page load (all sources)
-fetchAndLoadQueue(null);
+// Auto-load On Écoute queue
+fetchAndLoadQueue();

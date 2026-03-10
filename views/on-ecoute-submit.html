@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ON ECOUTE — Envoie ton son</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gold: #c8943e;
+      --gold-light: #e8b94a;
+      --bg: #0a0806;
+      --card: rgba(20, 16, 10, 0.9);
+      --border: rgba(200, 148, 62, 0.15);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: #fff;
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+
+    .logo {
+      font-size: 42px;
+      font-weight: 900;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, var(--gold-light), var(--gold), #d4a84a);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 40px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 520px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      backdrop-filter: blur(20px);
+    }
+
+    .card h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .card p {
+      font-size: 13px;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 24px;
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,0.5);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.04);
+      color: #fff;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .field input:focus {
+      border-color: var(--gold);
+    }
+    .field input::placeholder {
+      color: rgba(255,255,255,0.2);
+    }
+
+    /* Drop zone */
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 20px;
+      position: relative;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--gold);
+      background: rgba(200, 148, 62, 0.05);
+    }
+    .dropzone.has-file {
+      border-color: var(--gold-light);
+      background: rgba(200, 148, 62, 0.08);
+    }
+    .dropzone-icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
+    .dropzone-text {
+      font-size: 14px;
+      color: rgba(255,255,255,0.5);
+    }
+    .dropzone-text strong {
+      color: var(--gold-light);
+    }
+    .dropzone-formats {
+      font-size: 11px;
+      color: rgba(255,255,255,0.25);
+      margin-top: 8px;
+    }
+    .dropzone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .file-info {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--gold-light);
+    }
+    .file-info.visible {
+      display: flex;
+    }
+    .file-info .file-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-info .file-remove {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.3);
+      cursor: pointer;
+      font-size: 18px;
+      padding: 2px 6px;
+    }
+    .file-info .file-remove:hover { color: #e74c3c; }
+
+    .submit-btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--gold), #b87d30);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      font-family: inherit;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .submit-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(200, 148, 62, 0.3);
+    }
+    .submit-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .queue-count {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 12px;
+      color: rgba(255,255,255,0.3);
+    }
+    .queue-count strong {
+      color: var(--gold-light);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 9999;
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+    }
+    .toast.visible {
+      transform: translateX(-50%) translateY(0);
+    }
+    .toast.success {
+      background: rgba(46, 204, 113, 0.9);
+      color: #fff;
+    }
+    .toast.error {
+      background: rgba(231, 76, 60, 0.9);
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo">ON ECOUTE</div>
+  <div class="subtitle">Envoie ton son pour l'emission</div>
+
+  <div class="card">
+    <h2>Propose ton morceau</h2>
+    <p>Fichiers acceptes : .mp3 et .wav uniquement (50 Mo max)</p>
+
+    <form id="submitForm">
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-icon">&#x1F3B5;</div>
+        <div class="dropzone-text">Glisse ton fichier ici ou <strong>clique pour choisir</strong></div>
+        <div class="dropzone-formats">.mp3 / .wav</div>
+        <input type="file" id="audioFile" accept=".mp3,.wav,audio/mpeg,audio/wav">
+      </div>
+
+      <div class="file-info" id="fileInfo">
+        <span>&#x1F3B6;</span>
+        <span class="file-name" id="fileName"></span>
+        <button type="button" class="file-remove" id="fileRemove">&times;</button>
+      </div>
+
+      <div class="field">
+        <label>Ton pseudo</label>
+        <input type="text" id="submittedBy" placeholder="Comment tu t'appelles ?" maxlength="50">
+      </div>
+
+      <div class="field">
+        <label>Titre du morceau (optionnel)</label>
+        <input type="text" id="trackTitle" placeholder="Sera detecte automatiquement si vide" maxlength="200">
+      </div>
+
+      <div class="field">
+        <label>Artiste (optionnel)</label>
+        <input type="text" id="trackArtist" placeholder="Sera detecte automatiquement si vide" maxlength="200">
+      </div>
+
+      <button type="submit" class="submit-btn" id="submitBtn" disabled>ENVOYER MON SON</button>
+    </form>
+
+    <div class="queue-count">
+      <strong id="queueCount">0</strong> son(s) en attente de review
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('audioFile');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const fileRemove = document.getElementById('fileRemove');
+    const submitBtn = document.getElementById('submitBtn');
+    const form = document.getElementById('submitForm');
+    const toast = document.getElementById('toast');
+
+    let selectedFile = null;
+
+    // Drag & drop
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    function handleFile(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (!['mp3', 'wav'].includes(ext)) {
+        showToast('Seuls les fichiers .mp3 et .wav sont acceptes', 'error');
+        return;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        showToast('Fichier trop lourd (max 50 Mo)', 'error');
+        return;
+      }
+      selectedFile = file;
+      fileName.textContent = file.name;
+      fileInfo.classList.add('visible');
+      dropzone.classList.add('has-file');
+      submitBtn.disabled = false;
+    }
+
+    fileRemove.addEventListener('click', () => {
+      selectedFile = null;
+      fileInput.value = '';
+      fileInfo.classList.remove('visible');
+      dropzone.classList.remove('has-file');
+      submitBtn.disabled = true;
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!selectedFile) return;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'ENVOI EN COURS...';
+
+      const formData = new FormData();
+      formData.append('audio', selectedFile);
+      formData.append('submitted_by', document.getElementById('submittedBy').value.trim() || 'Anonyme');
+      formData.append('title', document.getElementById('trackTitle').value.trim());
+      formData.append('artist', document.getElementById('trackArtist').value.trim());
+
+      try {
+        const res = await fetch('/api/on-ecoute/submit', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erreur');
+
+        showToast('Ton son a ete envoye ! Il sera review par l\'equipe.', 'success');
+        // Reset form
+        selectedFile = null;
+        fileInput.value = '';
+        fileInfo.classList.remove('visible');
+        dropzone.classList.remove('has-file');
+        document.getElementById('submittedBy').value = '';
+        document.getElementById('trackTitle').value = '';
+        document.getElementById('trackArtist').value = '';
+        loadCount();
+      } catch (err) {
+        showToast(err.message || 'Erreur lors de l\'envoi', 'error');
+      } finally {
+        submitBtn.disabled = !selectedFile;
+        submitBtn.textContent = 'ENVOYER MON SON';
+      }
+    });
+
+    function showToast(msg, type) {
+      toast.textContent = msg;
+      toast.className = `toast ${type} visible`;
+      setTimeout(() => toast.classList.remove('visible'), 4000);
+    }
+
+    async function loadCount() {
+      try {
+        const res = await fetch('/api/on-ecoute/count');
+        const data = await res.json();
+        document.getElementById('queueCount').textContent = data.count;
+      } catch {}
+    }
+    loadCount();
+    setInterval(loadCount, 15000);
+  </script>
+</body>
+</html>

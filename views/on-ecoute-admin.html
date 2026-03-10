@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ON ECOUTE — Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gold: #c8943e;
+      --gold-light: #e8b94a;
+      --bg: #0a0806;
+      --card: rgba(20, 16, 10, 0.9);
+      --border: rgba(200, 148, 62, 0.15);
+      --green: #2ecc71;
+      --red: #e74c3c;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: #fff;
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding: 30px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header h1 {
+      font-size: 28px;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--gold-light), var(--gold));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .header-actions a {
+      color: rgba(255,255,255,0.4);
+      text-decoration: none;
+      font-size: 13px;
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .header-actions a:hover {
+      color: var(--gold-light);
+      border-color: var(--gold);
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 24px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 10px;
+      overflow: hidden;
+      max-width: 600px;
+    }
+    .tab {
+      flex: 1;
+      padding: 10px 16px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      background: none;
+    }
+    .tab:hover { color: rgba(255,255,255,0.7); }
+    .tab.active {
+      color: var(--gold-light);
+      background: rgba(200, 148, 62, 0.1);
+    }
+    .tab .count {
+      display: inline-block;
+      background: rgba(200, 148, 62, 0.2);
+      color: var(--gold-light);
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      margin-left: 4px;
+    }
+
+    /* Stats bar */
+    .stats {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .stat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 20px;
+      min-width: 140px;
+    }
+    .stat-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,0.35);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--gold-light);
+    }
+
+    /* Track list */
+    .track-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .track-item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      transition: border-color 0.2s;
+    }
+    .track-item:hover {
+      border-color: rgba(200, 148, 62, 0.3);
+    }
+    .track-item.playing {
+      border-color: var(--gold);
+      box-shadow: 0 0 20px rgba(200, 148, 62, 0.1);
+    }
+
+    .track-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .track-title {
+      font-size: 15px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .track-meta {
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+      margin-top: 2px;
+    }
+    .track-meta .by { color: var(--gold); }
+    .track-date {
+      font-size: 11px;
+      color: rgba(255,255,255,0.2);
+      margin-top: 2px;
+    }
+
+    .track-votes {
+      display: flex;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .vote-fire { color: #ff6b35; }
+    .vote-up { color: var(--green); }
+    .vote-down { color: var(--red); }
+
+    .track-actions {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .action-btn {
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: none;
+      color: rgba(255,255,255,0.5);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .action-btn:hover {
+      color: #fff;
+      border-color: rgba(255,255,255,0.3);
+    }
+    .action-btn.approve {
+      border-color: rgba(46, 204, 113, 0.3);
+      color: var(--green);
+    }
+    .action-btn.approve:hover {
+      background: rgba(46, 204, 113, 0.1);
+      border-color: var(--green);
+    }
+    .action-btn.play-now {
+      border-color: rgba(232, 185, 74, 0.3);
+      color: var(--gold-light);
+    }
+    .action-btn.play-now:hover {
+      background: rgba(232, 185, 74, 0.1);
+      border-color: var(--gold-light);
+    }
+    .action-btn.reject {
+      border-color: rgba(231, 76, 60, 0.3);
+      color: var(--red);
+    }
+    .action-btn.reject:hover {
+      background: rgba(231, 76, 60, 0.1);
+      border-color: var(--red);
+    }
+    .action-btn.delete {
+      border-color: rgba(231, 76, 60, 0.2);
+      color: rgba(231, 76, 60, 0.6);
+    }
+    .action-btn.delete:hover {
+      background: rgba(231, 76, 60, 0.1);
+      color: var(--red);
+    }
+
+    .preview-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--gold-light);
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .preview-btn:hover {
+      background: rgba(200, 148, 62, 0.1);
+      border-color: var(--gold);
+    }
+    .preview-btn.playing-preview {
+      color: var(--gold-light);
+      border-color: var(--gold);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(200,148,62,0.3); }
+      50% { box-shadow: 0 0 0 6px rgba(200,148,62,0); }
+    }
+
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: rgba(255,255,255,0.2);
+      font-size: 14px;
+    }
+
+    .danger-zone {
+      margin-top: 40px;
+      padding: 20px;
+      border: 1px solid rgba(231, 76, 60, 0.15);
+      border-radius: 12px;
+      background: rgba(231, 76, 60, 0.03);
+    }
+    .danger-zone h3 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--red);
+      margin-bottom: 12px;
+    }
+    .danger-btn {
+      padding: 8px 16px;
+      border: 1px solid rgba(231, 76, 60, 0.3);
+      border-radius: 8px;
+      background: none;
+      color: var(--red);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .danger-btn:hover {
+      background: rgba(231, 76, 60, 0.1);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 9999;
+      transition: transform 0.3s ease;
+      pointer-events: none;
+    }
+    .toast.visible { transform: translateX(-50%) translateY(0); }
+    .toast.success { background: rgba(46,204,113,0.9); }
+    .toast.error { background: rgba(231,76,60,0.9); }
+
+    /* Hidden audio preview */
+    #previewAudio { display: none; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>ON ECOUTE — Admin</h1>
+    <div class="header-actions">
+      <a href="/on-ecoute">Overlay</a>
+      <a href="/on-ecoute/submit">Page soumission</a>
+      <a href="/admin">Admin principal</a>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">En attente</div>
+      <div class="stat-value" id="statPending">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Approuves</div>
+      <div class="stat-value" id="statApproved">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">En lecture</div>
+      <div class="stat-value" id="statPlaying">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Joues</div>
+      <div class="stat-value" id="statPlayed">0</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-status="pending">En attente <span class="count" id="tabPending">0</span></button>
+    <button class="tab" data-status="approved">Approuves <span class="count" id="tabApproved">0</span></button>
+    <button class="tab" data-status="playing">En lecture</button>
+    <button class="tab" data-status="played">Historique</button>
+    <button class="tab" data-status="rejected">Rejetes</button>
+  </div>
+
+  <div class="track-list" id="trackList"></div>
+
+  <div class="danger-zone">
+    <h3>Zone danger</h3>
+    <button class="danger-btn" id="wipeAll">Supprimer toutes les soumissions On Ecoute</button>
+  </div>
+
+  <audio id="previewAudio"></audio>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let currentStatus = 'pending';
+    let previewingId = null;
+    const previewAudio = document.getElementById('previewAudio');
+    const toast = document.getElementById('toast');
+
+    // Tabs
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentStatus = tab.dataset.status;
+        loadSubmissions();
+      });
+    });
+
+    async function loadSubmissions() {
+      try {
+        const res = await fetch(`/api/on-ecoute/submissions?status=${currentStatus}`);
+        if (res.status === 401 || res.redirected) {
+          window.location.href = '/login';
+          return;
+        }
+        const items = await res.json();
+        renderList(items);
+      } catch (err) {
+        console.error('Load error:', err);
+      }
+    }
+
+    async function loadStats() {
+      try {
+        const statuses = ['pending', 'approved', 'playing', 'played'];
+        const counts = {};
+        for (const s of statuses) {
+          const res = await fetch(`/api/on-ecoute/submissions?status=${s}`);
+          if (!res.ok) continue;
+          const data = await res.json();
+          counts[s] = data.length;
+        }
+        document.getElementById('statPending').textContent = counts.pending || 0;
+        document.getElementById('statApproved').textContent = counts.approved || 0;
+        document.getElementById('statPlaying').textContent = counts.playing || 0;
+        document.getElementById('statPlayed').textContent = counts.played || 0;
+        document.getElementById('tabPending').textContent = counts.pending || 0;
+        document.getElementById('tabApproved').textContent = counts.approved || 0;
+      } catch {}
+    }
+
+    function renderList(items) {
+      const list = document.getElementById('trackList');
+      if (items.length === 0) {
+        list.innerHTML = '<div class="empty">Aucune soumission dans cette categorie</div>';
+        return;
+      }
+
+      list.innerHTML = items.map(item => {
+        const date = new Date(item.created_at).toLocaleString('fr-FR', {
+          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+        });
+        const isPlaying = item.status === 'playing';
+
+        let actions = '';
+        if (currentStatus === 'pending') {
+          actions = `
+            <button class="action-btn approve" onclick="setStatus(${item.id}, 'approved')">Approuver</button>
+            <button class="action-btn reject" onclick="setStatus(${item.id}, 'rejected')">Rejeter</button>
+            <button class="action-btn delete" onclick="deleteItem(${item.id})">&#x1F5D1;</button>
+          `;
+        } else if (currentStatus === 'approved') {
+          actions = `
+            <button class="action-btn play-now" onclick="setStatus(${item.id}, 'playing')">Lancer</button>
+            <button class="action-btn reject" onclick="setStatus(${item.id}, 'rejected')">Retirer</button>
+          `;
+        } else if (currentStatus === 'playing') {
+          actions = `
+            <button class="action-btn" onclick="setStatus(${item.id}, 'played')">Marquer joue</button>
+          `;
+        } else if (currentStatus === 'rejected') {
+          actions = `
+            <button class="action-btn approve" onclick="setStatus(${item.id}, 'pending')">Remettre</button>
+            <button class="action-btn delete" onclick="deleteItem(${item.id})">&#x1F5D1;</button>
+          `;
+        } else if (currentStatus === 'played') {
+          actions = `
+            <button class="action-btn approve" onclick="setStatus(${item.id}, 'approved')">Rejouer</button>
+            <button class="action-btn delete" onclick="deleteItem(${item.id})">&#x1F5D1;</button>
+          `;
+        }
+
+        return `
+          <div class="track-item ${isPlaying ? 'playing' : ''}">
+            <button class="preview-btn ${previewingId === item.id ? 'playing-preview' : ''}" onclick="togglePreview(${item.id})">
+              ${previewingId === item.id ? '&#x23F8;' : '&#x25B6;'}
+            </button>
+            <div class="track-info">
+              <div class="track-title">${escapeHtml(item.title)}</div>
+              <div class="track-meta">
+                ${item.artist ? escapeHtml(item.artist) + ' &middot; ' : ''}
+                par <span class="by">${escapeHtml(item.submitted_by || 'Anonyme')}</span>
+              </div>
+              <div class="track-date">${date}</div>
+            </div>
+            <div class="track-votes">
+              <span class="vote-fire">&#x1F525; ${item.fire || 0}</span>
+              <span class="vote-up">&#x1F44D; ${item.up || 0}</span>
+              <span class="vote-down">&#x1F44E; ${item.down || 0}</span>
+            </div>
+            <div class="track-actions">${actions}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function setStatus(id, status) {
+      try {
+        const res = await fetch(`/api/on-ecoute/submissions/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        });
+        if (!res.ok) throw new Error('Erreur');
+        showToast(`Statut mis a jour: ${status}`, 'success');
+        loadSubmissions();
+        loadStats();
+      } catch (err) {
+        showToast('Erreur lors de la mise a jour', 'error');
+      }
+    }
+
+    async function deleteItem(id) {
+      if (!confirm('Supprimer cette soumission ?')) return;
+      try {
+        await fetch(`/api/on-ecoute/submissions/${id}`, { method: 'DELETE' });
+        showToast('Soumission supprimee', 'success');
+        loadSubmissions();
+        loadStats();
+      } catch {
+        showToast('Erreur', 'error');
+      }
+    }
+
+    function togglePreview(id) {
+      if (previewingId === id) {
+        previewAudio.pause();
+        previewingId = null;
+        loadSubmissions(); // re-render to update button
+        return;
+      }
+      previewAudio.src = `/api/on-ecoute/audio/${id}`;
+      previewAudio.play();
+      previewingId = id;
+      loadSubmissions(); // re-render to update button
+    }
+
+    previewAudio.addEventListener('ended', () => {
+      previewingId = null;
+      loadSubmissions();
+    });
+
+    document.getElementById('wipeAll').addEventListener('click', async () => {
+      if (!confirm('ATTENTION : Supprimer TOUTES les soumissions On Ecoute ?')) return;
+      if (!confirm('Tu es sur ? Cette action est irreversible.')) return;
+      try {
+        await fetch('/api/on-ecoute/submissions', { method: 'DELETE' });
+        showToast('Toutes les soumissions ont ete supprimees', 'success');
+        loadSubmissions();
+        loadStats();
+      } catch {
+        showToast('Erreur', 'error');
+      }
+    });
+
+    function showToast(msg, type) {
+      toast.textContent = msg;
+      toast.className = `toast ${type} visible`;
+      setTimeout(() => toast.classList.remove('visible'), 3000);
+    }
+
+    // Init
+    loadSubmissions();
+    loadStats();
+    setInterval(loadSubmissions, 10000);
+    setInterval(loadStats, 15000);
+  </script>
+</body>
+</html>

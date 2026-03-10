@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=2560, initial-scale=1">
   <title>ON ÉCOUTE — Overlay</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="on-ecoute.css?v=5">
+  <link rel="stylesheet" href="on-ecoute.css?v=6">
 </head>
 <body>
 
@@ -15,21 +15,15 @@
     <!-- Host judge buttons (left) -->
     <div class="judge-panel host-panel">
       <button class="judge-btn" data-judge="host" data-vote="fire">
-        <div class="judge-btn-inner">
-          <img src="fire.png" alt="Fire">
-        </div>
+        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F525;</span></div>
         <span class="judge-btn-label">FIRE</span>
       </button>
       <button class="judge-btn" data-judge="host" data-vote="down">
-        <div class="judge-btn-inner">
-          <img src="pouce-rouge.png" alt="Thumbs Down">
-        </div>
+        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44E;</span></div>
         <span class="judge-btn-label">THUMBS DOWN</span>
       </button>
       <button class="judge-btn" data-judge="host" data-vote="up">
-        <div class="judge-btn-inner">
-          <img src="pouce-vert.png" alt="Thumbs Up">
-        </div>
+        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44D;</span></div>
         <span class="judge-btn-label">THUMBS UP</span>
       </button>
     </div>
@@ -37,8 +31,8 @@
     <!-- Player bar (center capsule) -->
     <div class="player-bar" id="playerBar">
       <button class="play-btn" id="playBtn">
-        <img id="playImg" src="play.png" alt="Play">
-        <img id="pauseImg" src="pause.png" alt="Pause" style="display:none">
+        <span id="playIcon" class="play-icon">&#x25B6;</span>
+        <span id="pauseIcon" class="play-icon" style="display:none">&#x23F8;</span>
       </button>
       <div class="waveform-wrap">
         <canvas id="waveformCanvas"></canvas>
@@ -48,21 +42,15 @@
     <!-- Guest judge buttons (right) -->
     <div class="judge-panel guest-panel">
       <button class="judge-btn" data-judge="guest" data-vote="fire">
-        <div class="judge-btn-inner">
-          <img src="fire.png" alt="Fire">
-        </div>
+        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F525;</span></div>
         <span class="judge-btn-label">FIRE</span>
       </button>
       <button class="judge-btn" data-judge="guest" data-vote="down">
-        <div class="judge-btn-inner">
-          <img src="pouce-rouge.png" alt="Thumbs Down">
-        </div>
+        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44E;</span></div>
         <span class="judge-btn-label">THUMBS DOWN</span>
       </button>
       <button class="judge-btn" data-judge="guest" data-vote="up">
-        <div class="judge-btn-inner">
-          <img src="pouce-vert.png" alt="Thumbs Up">
-        </div>
+        <div class="judge-btn-inner"><span class="judge-emoji">&#x1F44D;</span></div>
         <span class="judge-btn-label">THUMBS UP</span>
       </button>
     </div>
@@ -91,13 +79,10 @@
     <div class="progress-fill" id="progressFill"></div>
   </div>
 
-  <!-- Hidden nav for source/queue (invisible, controlled by keyboard) -->
+  <!-- Hidden nav (keyboard controlled) -->
   <div style="display:none">
     <button id="prevBtn"></button>
     <button id="nextBtn"></button>
-    <button id="srcAll"></button>
-    <button id="srcUpload"></button>
-    <button id="srcYoutube"></button>
     <span id="queueCounter"></span>
   </div>
 
@@ -114,12 +99,6 @@
     <div class="loading-spinner"></div>
   </div>
 
-  <!-- Hidden YouTube player -->
-  <div id="ytPlayerWrap" style="position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;overflow:hidden;">
-    <div id="ytPlayer"></div>
-  </div>
-
-  <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="on-ecoute.js?v=5"></script>
+  <script src="on-ecoute.js?v=6"></script>
 </body>
 </html>
