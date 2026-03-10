@@ -233,9 +233,121 @@
       color: #ff7040; margin-bottom: 4px;
     }
 
+    /* Tab navigation */
+    .tab-nav {
+      display: flex; gap: 0; border-radius: 14px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,.1);
+      margin-bottom: 28px;
+      background: rgba(0,0,0,.2);
+    }
+    .tab-btn {
+      flex: 1; padding: 14px 8px;
+      border: none; background: transparent;
+      color: rgba(255,255,255,.4);
+      font-family: 'Bangers', cursive;
+      font-size: 15px; letter-spacing: 1.5px;
+      cursor: pointer; transition: all .25s;
+      position: relative;
+    }
+    .tab-btn:hover { color: rgba(255,255,255,.7); background: rgba(255,255,255,.04); }
+    .tab-btn.active {
+      background: linear-gradient(135deg, rgba(255,80,30,.15), rgba(255,40,10,.1));
+      color: #fff;
+    }
+    .tab-btn.active::after {
+      content: ''; position: absolute; bottom: 0; left: 20%; right: 20%;
+      height: 2px; background: #ff6030; border-radius: 2px;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Skins tab */
+    .skin-card {
+      padding: 18px 22px; border-radius: 16px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.08);
+      margin-bottom: 14px;
+      transition: all .25s;
+    }
+    .skin-card.is-active {
+      border-color: rgba(80,255,120,.3);
+      background: rgba(80,255,120,.04);
+    }
+    .skin-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .skin-name {
+      font-family: 'Bangers', cursive; font-size: 20px; letter-spacing: 1.5px;
+    }
+    .skin-badge {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1.5px; padding: 4px 12px; border-radius: 8px;
+      background: rgba(80,255,120,.15); color: #6dff80;
+    }
+    .skin-actions { display: flex; gap: 8px; }
+    .skin-images-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .skin-slot {
+      border-radius: 12px;
+      background: rgba(0,0,0,.2);
+      border: 1px solid rgba(255,255,255,.06);
+      padding: 10px;
+      text-align: center;
+      transition: all .25s;
+    }
+    .skin-slot:hover { border-color: rgba(255,255,255,.15); }
+    .skin-slot-label {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1px;
+      color: rgba(255,255,255,.35); margin-bottom: 8px;
+    }
+    .skin-slot-preview {
+      width: 100%; height: 70px;
+      border-radius: 8px; overflow: hidden;
+      background: rgba(255,255,255,.03);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 8px;
+    }
+    .skin-slot-preview img {
+      max-width: 100%; max-height: 100%; object-fit: contain;
+    }
+    .skin-slot-placeholder {
+      font-size: 28px; opacity: .2;
+    }
+    .skin-slot-actions { display: flex; gap: 4px; justify-content: center; }
+    .skin-slot-btn {
+      padding: 4px 10px; border-radius: 6px; border: none;
+      font-size: 11px; font-weight: 700; cursor: pointer;
+      transition: all .2s;
+    }
+    .skin-slot-btn.upload {
+      background: rgba(100,150,255,.15); color: #8ab4ff;
+    }
+    .skin-slot-btn.upload:hover { background: rgba(100,150,255,.25); }
+    .skin-slot-btn.remove {
+      background: rgba(255,60,40,.1); color: #ff6060;
+    }
+    .skin-slot-btn.remove:hover { background: rgba(255,60,40,.2); }
+    .create-skin-row {
+      display: flex; gap: 10px; margin-bottom: 18px;
+    }
+    .create-skin-row input {
+      flex: 1; padding: 10px 14px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.1);
+      background: rgba(255,255,255,.06); color: #fff;
+      font-family: 'Quicksand', sans-serif; font-size: 14px; font-weight: 600;
+      outline: none;
+    }
+    .create-skin-row input:focus { border-color: rgba(255,120,60,.4); }
+
     @media (max-width: 600px) {
       .settings-grid { grid-template-columns: 1fr; }
       .admin-header { flex-direction: column; gap: 12px; text-align: center; }
+      .tab-btn { font-size: 12px; padding: 10px 4px; }
+      .skin-images-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
     }
   </style>
 </head>
@@ -254,6 +366,17 @@
         <a href="#" id="logoutBtn" class="danger">D&eacute;connexion</a>
       </div>
     </div>
+
+    <!-- Tab navigation -->
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="queue">&#128203; File d'attente</button>
+      <button class="tab-btn" data-tab="settings">&#9881; R&eacute;glages</button>
+      <button class="tab-btn" data-tab="skins">&#127912; Skins</button>
+      <button class="tab-btn" data-tab="history">&#9989; Historique</button>
+    </div>
+
+    <!-- TAB: Queue -->
+    <div class="tab-content active" id="tab-queue">
 
     <!-- Now Playing -->
     <div class="admin-section">
@@ -276,7 +399,10 @@
       </div>
     </div>
 
-    <!-- Settings -->
+    </div><!-- end tab-queue -->
+
+    <!-- TAB: Settings -->
+    <div class="tab-content" id="tab-settings">
     <div class="admin-section">
       <div class="section-title">&#9881; REGLAGES DU PLAYER</div>
       <div class="panel">
@@ -320,6 +446,26 @@
             </div>
           </div>
           <div class="setting-item">
+            <div class="setting-label">&#9889; Puissance &mdash; YouTube</div>
+            <div style="font-size:11px;color:rgba(255,255,255,.35);margin-bottom:4px">
+              Bloc marteau + effets visuels pour les liens YouTube.
+            </div>
+            <div class="setting-toggle">
+              <button class="toggle-switch on" data-key="power_youtube"></button>
+              <span style="font-size:13px;color:rgba(255,255,255,.5)">Activ&eacute;</span>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">&#9889; Puissance &mdash; Uploads</div>
+            <div style="font-size:11px;color:rgba(255,255,255,.35);margin-bottom:4px">
+              Bloc marteau + effets visuels pour les fichiers upload&eacute;s.
+            </div>
+            <div class="setting-toggle">
+              <button class="toggle-switch on" data-key="power_uploads"></button>
+              <span style="font-size:13px;color:rgba(255,255,255,.5)">Activ&eacute;</span>
+            </div>
+          </div>
+          <div class="setting-item">
             <div class="setting-label">Style de fond</div>
             <select class="setting-input" data-key="background_style">
               <option value="default">Par d&eacute;faut</option>
@@ -338,10 +484,44 @@
           </div>
         </div>
         <button class="save-btn" id="saveSettingsBtn">SAUVEGARDER</button>
+        <div style="margin-top:16px; padding-top:16px; border-top:1px solid rgba(255,255,255,.1);">
+          <button class="save-btn" id="resetVotesBtn" style="background:linear-gradient(135deg,#cc3300,#991100); width:auto; padding:10px 24px; font-size:13px;">&#128465; RESET TOUS LES VOTES</button>
+        </div>
       </div>
     </div>
 
-    <!-- Played history -->
+    </div><!-- end tab-settings -->
+
+    <!-- TAB: Skins -->
+    <div class="tab-content" id="tab-skins">
+    <div class="admin-section">
+      <div class="section-title">&#127912; SKINS DU PLAYER</div>
+      <div class="panel">
+        <div style="margin-bottom:16px">
+          <div class="skin-card is-active" id="defaultSkinCard">
+            <div class="skin-header">
+              <div class="skin-name">&#127912; D&eacute;faut</div>
+              <div>
+                <span class="skin-badge" id="defaultBadge">ACTIF</span>
+              </div>
+            </div>
+            <div style="font-size:12px;color:rgba(255,255,255,.4)">Images d'origine du player. Toujours disponible.</div>
+            <button class="q-btn play" style="margin-top:10px" onclick="activateSkin(0)">&#10003; Activer</button>
+          </div>
+        </div>
+
+        <div class="create-skin-row">
+          <input type="text" id="newSkinName" placeholder="Nom du nouveau skin..." maxlength="50">
+          <button class="save-btn" style="margin:0;padding:10px 20px;font-size:13px" onclick="createSkin()">+ NOUVEAU SKIN</button>
+        </div>
+
+        <div id="skinsList"></div>
+      </div>
+    </div>
+    </div><!-- end tab-skins -->
+
+    <!-- TAB: History -->
+    <div class="tab-content" id="tab-history">
     <div class="admin-section">
       <div class="section-title">&#9989; HISTORIQUE (D&Eacute;J&Agrave; JOU&Eacute;S)</div>
       <div class="panel">
@@ -350,6 +530,8 @@
         </div>
       </div>
     </div>
+    </div><!-- end tab-history -->
+
   </div>
 
   <script>
@@ -530,6 +712,17 @@
       setTimeout(() => btn.textContent = 'SAUVEGARDER', 2000);
     });
 
+    // ===== RESET VOTES =====
+    document.getElementById('resetVotesBtn').addEventListener('click', async () => {
+      if (!confirm('Remettre tous les votes à zéro ?')) return;
+      const res = await fetch('/api/votes', { method: 'DELETE' });
+      if (res.ok) {
+        const btn = document.getElementById('resetVotesBtn');
+        btn.textContent = '✅ Votes réinitialisés !';
+        setTimeout(() => btn.innerHTML = '&#128465; RESET TOUS LES VOTES', 2000);
+      }
+    });
+
     // ===== LOGOUT =====
     document.getElementById('logoutBtn').addEventListener('click', async (e) => {
       e.preventDefault();
@@ -554,9 +747,148 @@
       return `il y a ${Math.floor(hours / 24)}j`;
     }
 
+    // ===== TABS =====
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    // ===== SKINS =====
+    const SKIN_SLOTS = [
+      { key: 'bg', label: 'Fond d\u2019\u00e9cran', icon: '\ud83c\uddfa' },
+      { key: 'marteau', label: 'Marteau', icon: '\ud83d\udd28' },
+      { key: 'play', label: 'Bouton Play', icon: '\u25b6' },
+      { key: 'pause', label: 'Bouton Pause', icon: '\u23f8' },
+      { key: 'fire', label: 'Bouton Fire', icon: '\ud83d\udd25' },
+      { key: 'pouce_rouge', label: 'Pouce rouge', icon: '\ud83d\udc4e' },
+      { key: 'pouce_vert', label: 'Pouce vert', icon: '\ud83d\udc4d' },
+      { key: 'bloc_titre', label: 'Bloc titre', icon: '\ud83c\udfb5' },
+      { key: 'bloc_chat', label: 'Bloc chat', icon: '\ud83d\udcac' },
+      { key: 'murlegende', label: 'Bloc l\u00e9gende', icon: '\ud83d\udc51' },
+    ];
+
+    async function loadSkins() {
+      try {
+        const res = await fetch('/api/skins');
+        const skins = await res.json();
+        const container = document.getElementById('skinsList');
+        const anyActive = skins.some(s => s.is_active);
+
+        // Update default card
+        const defCard = document.getElementById('defaultSkinCard');
+        const defBadge = document.getElementById('defaultBadge');
+        if (!anyActive) {
+          defCard.classList.add('is-active');
+          defBadge.style.display = '';
+        } else {
+          defCard.classList.remove('is-active');
+          defBadge.style.display = 'none';
+        }
+
+        if (skins.length === 0) {
+          container.innerHTML = '<div class="queue-empty">Aucun skin personnalis\u00e9</div>';
+          return;
+        }
+
+        container.innerHTML = skins.map(skin => `
+          <div class="skin-card ${skin.is_active ? 'is-active' : ''}" id="skin-${skin.id}">
+            <div class="skin-header">
+              <div class="skin-name">${esc(skin.name)}</div>
+              <div class="skin-actions">
+                ${skin.is_active ? '<span class="skin-badge">ACTIF</span>' : `<button class="q-btn play" onclick="activateSkin(${skin.id})">Activer</button>`}
+                <button class="q-btn reject" onclick="deleteSkin(${skin.id}, '${esc(skin.name)}')">Supprimer</button>
+              </div>
+            </div>
+            <div class="skin-images-grid">
+              ${SKIN_SLOTS.map(slot => {
+                const hasImage = skin.images && skin.images.includes(slot.key);
+                return `
+                <div class="skin-slot" id="slot-${skin.id}-${slot.key}">
+                  <div class="skin-slot-label">${slot.label}</div>
+                  <div class="skin-slot-preview">
+                    ${hasImage
+                      ? `<img src="/api/skins/${skin.id}/images/${slot.key}?t=${Date.now()}" alt="${slot.label}">`
+                      : `<div class="skin-slot-placeholder">${slot.icon}</div>`
+                    }
+                  </div>
+                  <div class="skin-slot-actions">
+                    <label class="skin-slot-btn upload">
+                      ${hasImage ? 'Changer' : 'Upload'}
+                      <input type="file" accept="image/*" hidden onchange="uploadSkinImage(${skin.id}, '${slot.key}', this)">
+                    </label>
+                    ${hasImage ? `<button class="skin-slot-btn remove" onclick="removeSkinImage(${skin.id}, '${slot.key}')">X</button>` : ''}
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error('Load skins error:', err);
+      }
+    }
+
+    async function createSkin() {
+      const input = document.getElementById('newSkinName');
+      const name = input.value.trim();
+      if (!name) return input.focus();
+      const res = await fetch('/api/skins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        input.value = '';
+        loadSkins();
+      }
+    }
+
+    async function deleteSkin(id, name) {
+      if (!confirm('Supprimer le skin "' + name + '" ?')) return;
+      await fetch('/api/skins/' + id, { method: 'DELETE' });
+      loadSkins();
+    }
+
+    async function activateSkin(id) {
+      await fetch('/api/skins/' + id + '/activate', { method: 'POST' });
+      loadSkins();
+    }
+
+    async function uploadSkinImage(skinId, key, input) {
+      const file = input.files[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('image', file);
+      const res = await fetch('/api/skins/' + skinId + '/images/' + key, {
+        method: 'POST',
+        body: fd,
+      });
+      if (res.ok) {
+        loadSkins();
+      } else {
+        alert('Erreur lors de l\u2019upload');
+      }
+      input.value = '';
+    }
+
+    async function removeSkinImage(skinId, key) {
+      await fetch('/api/skins/' + skinId + '/images/' + key, { method: 'DELETE' });
+      loadSkins();
+    }
+
+    // Enter key to create skin
+    document.getElementById('newSkinName').addEventListener('keydown', e => {
+      if (e.key === 'Enter') createSkin();
+    });
+
     // ===== INIT =====
     loadQueue();
     loadSettings();
+    loadSkins();
     // Auto-refresh queue every 10s
     setInterval(loadQueue, 10000);
   </script>

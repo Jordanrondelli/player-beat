@@ -6,9 +6,10 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fs = require('fs');
 const crypto = require('crypto');
-const { execFile } = require('child_process');
 const { parseBuffer } = require('music-metadata');
 const ytdl = require('@distube/ytdl-core');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -69,12 +70,35 @@ async function initDB() {
     );
   `);
 
+  // Skins system
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS skins (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      is_active BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS skin_images (
+      id SERIAL PRIMARY KEY,
+      skin_id INTEGER REFERENCES skins(id) ON DELETE CASCADE,
+      image_key TEXT NOT NULL,
+      file_data BYTEA NOT NULL,
+      file_mimetype TEXT DEFAULT 'image/png',
+      UNIQUE(skin_id, image_key)
+    );
+  `);
+
   // Seed default admin if none exists
   const { rows } = await pool.query('SELECT id FROM admin_users LIMIT 1');
   if (rows.length === 0) {
-    const hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'admin123', 10);
-    await pool.query('INSERT INTO admin_users (username, password_hash) VALUES ($1, $2)', ['admin', hash]);
-    console.log('Default admin created (user: admin)');
+    if (!process.env.ADMIN_PASSWORD) {
+      console.error('WARNING: ADMIN_PASSWORD env variable is not set! Default admin will NOT be created.');
+      console.error('Set ADMIN_PASSWORD in your environment to create the admin user.');
+    } else {
+      const hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10);
+      await pool.query('INSERT INTO admin_users (username, password_hash) VALUES ($1, $2)', ['admin', hash]);
+      console.log('Default admin created (user: admin)');
+    }
   }
 
   // Seed default settings
@@ -86,6 +110,8 @@ async function initDB() {
     primary_color: '#ff4400',
     player_source: 'community',
     twitch_channel: '',
+    power_youtube: 'true',
+    power_uploads: 'true',
   };
   for (const [key, value] of Object.entries(defaults)) {
     await pool.query(
@@ -97,6 +123,15 @@ async function initDB() {
 }
 
 // ===== MIDDLEWARE =====
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Let the app manage CSP
+}));
+
+// Trust proxy (for rate limiting behind Render/reverse proxy)
+app.set('trust proxy', 1);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -107,7 +142,12 @@ app.use(session({
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, secure: false },
+  cookie: {
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'strict',
+  },
 }));
 
 // Upload config
@@ -146,9 +186,15 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'login.html'));
 });
 
-// Player page (public)
-app.get('/player', (req, res) => {
+// Player page (admin only)
+app.get('/player', requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// "On Écoute" overlay page (public — needs to be accessible from OBS browser source)
+app.get('/on-ecoute', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', 'on-ecoute.html'));
 });
 
 // Admin page (admin only)
@@ -161,7 +207,14 @@ app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // ===== AUTH API =====
 
-app.post('/api/login', async (req, res) => {
+// Rate limit login: 5 attempts per 15 min per IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Trop de tentatives, réessaie dans 15 minutes' },
+});
+
+app.post('/api/login', loginLimiter, async (req, res) => {
   const { password } = req.body;
   if (!password) return res.status(400).json({ error: 'Mot de passe requis' });
 
@@ -186,10 +239,28 @@ app.get('/api/me', (req, res) => {
 
 // ===== QUEUE API =====
 
+// Rate limit queue submissions: 10 per hour per IP
+const queueLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { error: 'Trop de soumissions, réessaie plus tard' },
+});
+
 // Submit a track (public)
-app.post('/api/queue', upload.single('audio'), async (req, res) => {
+app.post('/api/queue', queueLimiter, upload.single('audio'), async (req, res) => {
   try {
     const { type, title, artist, source_url, submitted_by } = req.body;
+
+    // Input length validation
+    if (submitted_by && submitted_by.length > 50) {
+      return res.status(400).json({ error: 'Pseudo trop long (max 50 caractères)' });
+    }
+    if (title && title.length > 200) {
+      return res.status(400).json({ error: 'Titre trop long (max 200 caractères)' });
+    }
+    if (artist && artist.length > 200) {
+      return res.status(400).json({ error: 'Artiste trop long (max 200 caractères)' });
+    }
 
     if (type === 'upload') {
       if (!req.file) return res.status(400).json({ error: 'Fichier audio requis' });
@@ -228,12 +299,12 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
         return res.status(400).json({ error: 'Lien YouTube invalide.' });
       }
 
-      // Fetch title/artist via oEmbed
+      // Fetch title/artist via oEmbed (fast, works from any server)
       let ytTitle = title || '';
       let ytArtist = artist || '';
       try {
         const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(source_url)}&format=json`;
-        const oembedRes = await fetch(oembedUrl);
+        const oembedRes = await fetch(oembedUrl, { signal: AbortSignal.timeout(5000) });
         if (oembedRes.ok) {
           const oembedData = await oembedRes.json();
           if (!ytTitle && oembedData.title) ytTitle = oembedData.title;
@@ -244,79 +315,10 @@ app.post('/api/queue', upload.single('audio'), async (req, res) => {
       }
       if (!ytTitle) ytTitle = 'YouTube Track';
 
-      let fileBuffer = null;
-      let fileMime = 'audio/mpeg';
-
-      // Method 1: yt-dlp binary (downloaded at build time, no pip/ffmpeg needed)
-      const ytdlpBin = path.join(__dirname, 'yt-dlp');
-      const tmpBase = path.join(uploadDir, `yt-${Date.now()}`);
-      try {
-        console.log('yt-dlp: downloading audio for', source_url);
-        await new Promise((resolve, reject) => {
-          execFile(ytdlpBin, [
-            '-f', 'bestaudio[ext=m4a]/bestaudio',
-            '--no-playlist',
-            '--max-filesize', '50m',
-            '--no-check-certificates',
-            '-o', tmpBase + '.%(ext)s',
-            source_url
-          ], { timeout: 120000 }, (err, stdout, stderr) => {
-            if (err) reject(new Error(stderr || err.message));
-            else resolve(stdout);
-          });
-        });
-        const candidates = fs.readdirSync(uploadDir)
-          .filter(f => f.startsWith(path.basename(tmpBase)))
-          .map(f => path.join(uploadDir, f));
-        if (candidates.length > 0) {
-          const actualFile = candidates[0];
-          fileBuffer = fs.readFileSync(actualFile);
-          fileMime = actualFile.endsWith('.m4a') ? 'audio/mp4' : actualFile.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
-          candidates.forEach(f => { try { fs.unlinkSync(f); } catch {} });
-          console.log('yt-dlp: downloaded', fileBuffer.length, 'bytes');
-        }
-      } catch (e) {
-        console.error('yt-dlp error:', e.message);
-        try {
-          fs.readdirSync(uploadDir)
-            .filter(f => f.startsWith(path.basename(tmpBase)))
-            .forEach(f => fs.unlinkSync(path.join(uploadDir, f)));
-        } catch {}
-      }
-
-      // Method 2: ytdl-core fallback (pure JS, no binary needed)
-      if (!fileBuffer) {
-        console.log('yt-dlp failed, trying ytdl-core...');
-        try {
-          const chunks = [];
-          await new Promise((resolve, reject) => {
-            const stream = ytdl(source_url, {
-              filter: 'audioonly',
-              quality: 'highestaudio',
-            });
-            const timeout = setTimeout(() => {
-              stream.destroy();
-              reject(new Error('ytdl timeout (2min)'));
-            }, 120000);
-            stream.on('data', chunk => chunks.push(chunk));
-            stream.on('end', () => { clearTimeout(timeout); resolve(); });
-            stream.on('error', err => { clearTimeout(timeout); reject(err); });
-          });
-          fileBuffer = Buffer.concat(chunks);
-          fileMime = 'audio/webm';
-          console.log('ytdl-core: downloaded', fileBuffer.length, 'bytes');
-        } catch (e) {
-          console.error('ytdl-core error:', e.message);
-        }
-      }
-
-      if (!fileBuffer || fileBuffer.length < 1000) {
-        return res.status(400).json({ error: 'Impossible de télécharger l\'audio YouTube. Vérifiez le lien et réessayez.' });
-      }
-
+      // Store YouTube URL only — audio is fetched on-demand when the player loads the track
       const { rows } = await pool.query(
-        'INSERT INTO queue (type, title, artist, source_url, file_data, file_mimetype, submitted_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, type, title, artist, source_url, submitted_by, status, created_at',
-        ['youtube', ytTitle, ytArtist, source_url, fileBuffer, fileMime, submitted_by || 'Anonyme']
+        'INSERT INTO queue (type, title, artist, source_url, submitted_by) VALUES ($1, $2, $3, $4, $5) RETURNING id, type, title, artist, source_url, submitted_by, status, created_at',
+        ['youtube', ytTitle, ytArtist, source_url, submitted_by || 'Anonyme']
       );
       await pool.query('INSERT INTO votes (queue_id) VALUES ($1)', [rows[0].id]);
       return res.json(rows[0]);
@@ -360,9 +362,14 @@ app.patch('/api/queue/:id', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-// Wipe all uploads (admin)
+// Wipe all by type (admin)
 app.delete('/api/queue/wipe-all', requireAdmin, async (req, res) => {
-  await pool.query("DELETE FROM queue WHERE type = 'upload'");
+  const type = req.query.type;
+  if (type && ['upload', 'youtube'].includes(type)) {
+    await pool.query('DELETE FROM queue WHERE type = $1', [type]);
+  } else {
+    await pool.query('DELETE FROM queue');
+  }
   res.json({ success: true });
 });
 
@@ -385,18 +392,70 @@ app.get('/api/votes', async (req, res) => {
   res.json(rows[0]);
 });
 
-app.post('/api/votes', async (req, res) => {
+// Rate limit votes: 30 per minute per IP
+const voteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: 'Trop de votes, réessaie dans une minute' },
+});
+
+app.post('/api/votes', voteLimiter, async (req, res) => {
   const { type, queue_id } = req.body;
   if (!type || !['fire', 'up', 'down'].includes(type)) {
     return res.status(400).json({ error: 'Type must be fire, up, or down' });
   }
   const amount = type === 'fire' ? 5 : 1;
   if (queue_id) {
-    await pool.query(`UPDATE votes SET ${type} = ${type} + $1 WHERE queue_id = $2`, [amount, queue_id]);
+    await pool.query(
+      `UPDATE votes SET
+        fire = fire + CASE WHEN $1 = 'fire' THEN $2 ELSE 0 END,
+        up = up + CASE WHEN $1 = 'up' THEN $2 ELSE 0 END,
+        down = down + CASE WHEN $1 = 'down' THEN $2 ELSE 0 END
+      WHERE queue_id = $3`,
+      [type, amount, queue_id]
+    );
     const { rows } = await pool.query('SELECT * FROM votes WHERE queue_id = $1', [queue_id]);
     return res.json(rows[0]);
   }
   res.json({ fire: 0, up: 0, down: 0 });
+});
+
+// Player marks a track as now playing (resets votes + enables Twitch voting)
+app.post('/api/player/now-playing/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  // Set all other tracks to non-playing, then set this one to playing
+  await pool.query("UPDATE queue SET status = 'pending' WHERE status = 'playing'");
+  await pool.query("UPDATE queue SET status = 'playing' WHERE id = $1", [id]);
+  // Reset votes for fresh start
+  await pool.query('UPDATE votes SET fire = 0, up = 0, down = 0 WHERE queue_id = $1', [id]);
+  await pool.query('DELETE FROM twitch_votes WHERE queue_id = $1', [id]);
+  res.json({ fire: 0, up: 0, down: 0 });
+});
+
+// Reset all votes (admin only)
+app.delete('/api/votes', requireAdmin, async (req, res) => {
+  await pool.query('UPDATE votes SET fire = 0, up = 0, down = 0');
+  await pool.query('DELETE FROM twitch_votes');
+  res.json({ success: true });
+});
+
+// ===== LEGEND WALL API =====
+app.get('/api/legend', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT q.title, q.artist, q.submitted_by, v.fire
+      FROM votes v JOIN queue q ON v.queue_id = q.id
+      WHERE v.fire > 0
+      ORDER BY v.fire DESC LIMIT 1
+    `);
+    if (rows.length > 0) {
+      res.json(rows[0]);
+    } else {
+      res.json(null);
+    }
+  } catch (e) {
+    res.json(null);
+  }
 });
 
 // ===== SETTINGS API =====
@@ -408,7 +467,7 @@ app.get('/api/settings', async (req, res) => {
   res.json(settings);
 });
 
-// ===== SERVE AUDIO FROM DB =====
+// ===== SERVE AUDIO FROM DB (uploads only — YouTube is played client-side) =====
 app.get('/api/audio/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -418,7 +477,7 @@ app.get('/api/audio/:id', async (req, res) => {
     if (!rows.length || !rows[0].file_data) {
       return res.status(404).json({ error: 'Audio non trouvé' });
     }
-    const { file_data, file_mimetype, title } = rows[0];
+    const { file_data, file_mimetype } = rows[0];
     res.set({
       'Content-Type': file_mimetype || 'audio/mpeg',
       'Content-Length': file_data.length,
@@ -430,6 +489,177 @@ app.get('/api/audio/:id', async (req, res) => {
     console.error('Audio serve error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
+});
+
+// ===== YOUTUBE AUDIO PROXY (via Piped/Invidious) =====
+// Rate limit YT proxy: 30 per hour per IP
+const ytProxyLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  message: { error: 'Trop de requêtes YouTube, réessaie plus tard' },
+});
+
+// Server fetches from Piped (no CORS issues), Piped fetches from YouTube (different IP than Render)
+app.get('/api/yt-audio/:videoId', ytProxyLimiter, async (req, res) => {
+  const videoId = req.params.videoId;
+  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+    return res.status(400).json({ error: 'Invalid video ID' });
+  }
+
+  // Check DB cache first
+  try {
+    const { rows } = await pool.query(
+      "SELECT file_data, file_mimetype FROM queue WHERE source_url LIKE $1 AND file_data IS NOT NULL LIMIT 1",
+      [`%${videoId}%`]
+    );
+    if (rows.length && rows[0].file_data && rows[0].file_data.length > 1000) {
+      console.log(`YT proxy: serving cached audio for ${videoId}`);
+      res.set({
+        'Content-Type': rows[0].file_mimetype || 'audio/mp4',
+        'Content-Length': rows[0].file_data.length,
+        'Cache-Control': 'public, max-age=86400',
+      });
+      return res.send(rows[0].file_data);
+    }
+  } catch (e) { /* ignore cache errors */ }
+
+  // Race all providers in parallel — first successful response wins
+  async function tryPiped(instance) {
+    console.log(`YT proxy (${instance}): fetching streams for ${videoId}`);
+    const infoRes = await fetch(`${instance}/streams/${videoId}`, {
+      signal: AbortSignal.timeout(4000),
+      headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!infoRes.ok) throw new Error(`HTTP ${infoRes.status}`);
+    const info = await infoRes.json();
+    const audioStreams = (info.audioStreams || [])
+      .filter(s => s.url && s.mimeType && s.mimeType.startsWith('audio/'))
+      .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+    if (audioStreams.length === 0) throw new Error('no audio streams');
+    const stream = audioStreams[0];
+    console.log(`YT proxy: downloading from ${instance} (${stream.mimeType}, ${stream.bitrate}bps)`);
+    const audioRes = await fetch(stream.url, {
+      signal: AbortSignal.timeout(30000),
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!audioRes.ok) throw new Error(`download HTTP ${audioRes.status}`);
+    const buf = Buffer.from(await audioRes.arrayBuffer());
+    if (buf.length < 1000) throw new Error('too small');
+    return { buf, mime: stream.mimeType.split(';')[0], source: `Piped ${instance}` };
+  }
+
+  async function tryInvidious(instance) {
+    console.log(`YT proxy Invidious (${instance}): trying ${videoId}`);
+    const infoRes = await fetch(`${instance}/api/v1/videos/${videoId}`, {
+      signal: AbortSignal.timeout(4000),
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!infoRes.ok) throw new Error(`HTTP ${infoRes.status}`);
+    const info = await infoRes.json();
+    const audioFormats = (info.adaptiveFormats || [])
+      .filter(f => f.type && f.type.startsWith('audio/'))
+      .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+    if (audioFormats.length === 0 || !audioFormats[0].url) throw new Error('no audio');
+    const audioRes = await fetch(audioFormats[0].url, { signal: AbortSignal.timeout(30000) });
+    if (!audioRes.ok) throw new Error(`download HTTP ${audioRes.status}`);
+    const buf = Buffer.from(await audioRes.arrayBuffer());
+    if (buf.length < 1000) throw new Error('too small');
+    return { buf, mime: audioFormats[0].type.split(';')[0], source: `Invidious ${instance}` };
+  }
+
+  // Launch all providers in parallel, take first success
+  const providers = [
+    tryPiped('https://pipedapi.kavin.rocks'),
+    tryPiped('https://pipedapi.adminforge.de'),
+    tryPiped('https://piped-api.codespace.cz'),
+    tryInvidious('https://inv.nadeko.net'),
+    tryInvidious('https://yewtu.be'),
+  ];
+
+  // Promise.any resolves with the first fulfilled promise
+  try {
+    const result = await Promise.any(providers);
+    console.log(`YT proxy: success via ${result.source}! ${result.buf.length} bytes (${result.mime})`);
+    pool.query(
+      "UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL",
+      [result.buf, result.mime, `%${videoId}%`]
+    ).catch(() => {});
+    res.set({ 'Content-Type': result.mime, 'Content-Length': result.buf.length, 'Cache-Control': 'public, max-age=86400' });
+    return res.send(result.buf);
+  } catch (e) {
+    console.log('YT proxy: all Piped/Invidious failed, trying Cobalt...');
+  }
+
+  // Try Cobalt API instances in parallel as fallback
+  async function tryCobaltV10(cobaltBase) {
+    console.log(`YT proxy Cobalt v10 (${cobaltBase}): trying ${videoId}`);
+    const cobaltRes = await fetch(`${cobaltBase}/`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(10000),
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        downloadMode: 'audio',
+        audioFormat: 'mp3',
+        audioBitrate: '128',
+      }),
+    });
+    if (!cobaltRes.ok) throw new Error(`HTTP ${cobaltRes.status}`);
+    const cobaltData = await cobaltRes.json();
+    const downloadUrl = cobaltData.url || cobaltData.audio;
+    if (!downloadUrl) throw new Error('no URL');
+    const audioRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(30000) });
+    if (!audioRes.ok) throw new Error(`download HTTP ${audioRes.status}`);
+    const buf = Buffer.from(await audioRes.arrayBuffer());
+    if (buf.length < 1000) throw new Error('too small');
+    const mime = audioRes.headers.get('content-type')?.split(';')[0] || 'audio/mpeg';
+    return { buf, mime, source: `Cobalt v10 ${cobaltBase}` };
+  }
+
+  async function tryCobaltV7(cobaltBase) {
+    console.log(`YT proxy Cobalt v7 (${cobaltBase}): trying ${videoId}`);
+    const cobaltRes = await fetch(`${cobaltBase}/api/json`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(10000),
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        isAudioOnly: true,
+        aFormat: 'mp3',
+      }),
+    });
+    if (!cobaltRes.ok) throw new Error(`HTTP ${cobaltRes.status}`);
+    const cobaltData = await cobaltRes.json();
+    if (cobaltData.status !== 'stream' && cobaltData.status !== 'redirect') throw new Error(`status=${cobaltData.status}`);
+    const downloadUrl = cobaltData.url;
+    if (!downloadUrl) throw new Error('no URL');
+    const audioRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(30000) });
+    if (!audioRes.ok) throw new Error(`download HTTP ${audioRes.status}`);
+    const buf = Buffer.from(await audioRes.arrayBuffer());
+    if (buf.length < 1000) throw new Error('too small');
+    const mime = audioRes.headers.get('content-type')?.split(';')[0] || 'audio/mpeg';
+    return { buf, mime, source: `Cobalt v7 ${cobaltBase}` };
+  }
+
+  const cobaltProviders = [
+    tryCobaltV10('https://api.cobalt.tools'),
+    tryCobaltV10('https://cobalt-api.ayo.tf'),
+    tryCobaltV7('https://cobaltapi.clebootin.com'),
+    tryCobaltV7('https://ca.haloz.at'),
+    tryCobaltV7('https://nyc1.coapi.ggtyler.dev'),
+  ];
+
+  try {
+    const result = await Promise.any(cobaltProviders);
+    console.log(`YT proxy: success via ${result.source}! ${result.buf.length} bytes (${result.mime})`);
+    pool.query("UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL", [result.buf, result.mime, `%${videoId}%`]).catch(() => {});
+    res.set({ 'Content-Type': result.mime, 'Content-Length': result.buf.length, 'Cache-Control': 'public, max-age=86400' });
+    return res.send(result.buf);
+  } catch (e) {
+    console.log('YT proxy: all Cobalt instances failed too');
+  }
+
+  res.status(502).json({ error: 'Audio YouTube indisponible' });
 });
 
 // ===== PLAYER PLAYLIST (public) =====
@@ -551,8 +781,12 @@ async function startTwitchBot() {
       // Only update votes table if the insert actually happened (not a duplicate)
       if (rowCount > 0) {
         await pool.query(
-          `UPDATE votes SET ${voteType} = ${voteType} + 1 WHERE queue_id = $1`,
-          [queueId]
+          `UPDATE votes SET
+            fire = fire + CASE WHEN $1 = 'fire' THEN 1 ELSE 0 END,
+            up = up + CASE WHEN $1 = 'up' THEN 1 ELSE 0 END,
+            down = down + CASE WHEN $1 = 'down' THEN 1 ELSE 0 END
+          WHERE queue_id = $2`,
+          [voteType, queueId]
         );
       }
     } catch (e) {
@@ -592,6 +826,143 @@ app.get('/api/twitch-votes', async (req, res) => {
   if (!queueId) return res.json({ fire: 0, up: 0, down: 0 });
   const { rows } = await pool.query('SELECT * FROM votes WHERE queue_id = $1', [queueId]);
   res.json(rows[0] || { fire: 0, up: 0, down: 0 });
+});
+
+// ===== SKINS API =====
+
+const SKIN_IMAGE_KEYS = ['bg', 'marteau', 'play', 'pause', 'fire', 'pouce_rouge', 'pouce_vert', 'bloc_titre', 'bloc_chat', 'murlegende'];
+
+const skinUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Seuls les fichiers image sont acceptés'));
+  },
+});
+
+// List all skins
+app.get('/api/skins', requireAdmin, async (req, res) => {
+  try {
+    const { rows: skins } = await pool.query('SELECT * FROM skins ORDER BY created_at ASC');
+    // Get image keys for each skin
+    for (const skin of skins) {
+      const { rows: imgs } = await pool.query('SELECT image_key FROM skin_images WHERE skin_id = $1', [skin.id]);
+      skin.images = imgs.map(i => i.image_key);
+    }
+    res.json(skins);
+  } catch (err) {
+    console.error('List skins error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Create new skin
+app.post('/api/skins', requireAdmin, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || name.length > 50) return res.status(400).json({ error: 'Nom requis (max 50 caractères)' });
+    const { rows } = await pool.query('INSERT INTO skins (name) VALUES ($1) RETURNING *', [name]);
+    rows[0].images = [];
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Create skin error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Delete skin
+app.delete('/api/skins/:id', requireAdmin, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM skins WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete skin error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Upload image for a skin slot
+app.post('/api/skins/:id/images/:key', requireAdmin, skinUpload.single('image'), async (req, res) => {
+  try {
+    const { id, key } = req.params;
+    if (!SKIN_IMAGE_KEYS.includes(key)) return res.status(400).json({ error: 'Clé image invalide' });
+    if (!req.file) return res.status(400).json({ error: 'Fichier image requis' });
+    await pool.query(
+      'INSERT INTO skin_images (skin_id, image_key, file_data, file_mimetype) VALUES ($1, $2, $3, $4) ON CONFLICT (skin_id, image_key) DO UPDATE SET file_data = $3, file_mimetype = $4',
+      [id, key, req.file.buffer, req.file.mimetype]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Upload skin image error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Remove image from skin slot
+app.delete('/api/skins/:id/images/:key', requireAdmin, async (req, res) => {
+  try {
+    const { id, key } = req.params;
+    await pool.query('DELETE FROM skin_images WHERE skin_id = $1 AND image_key = $2', [id, key]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete skin image error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Activate a skin
+app.post('/api/skins/:id/activate', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('UPDATE skins SET is_active = FALSE');
+    if (id !== '0') {
+      await pool.query('UPDATE skins SET is_active = TRUE WHERE id = $1', [id]);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Activate skin error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Serve skin image (public — needed by the player)
+app.get('/api/skins/:id/images/:key', async (req, res) => {
+  try {
+    const { id, key } = req.params;
+    const { rows } = await pool.query(
+      'SELECT file_data, file_mimetype FROM skin_images WHERE skin_id = $1 AND image_key = $2',
+      [id, key]
+    );
+    if (!rows.length || !rows[0].file_data) return res.status(404).json({ error: 'Image non trouvée' });
+    res.set({
+      'Content-Type': rows[0].file_mimetype || 'image/png',
+      'Content-Length': rows[0].file_data.length,
+      'Cache-Control': 'public, max-age=3600',
+    });
+    res.send(rows[0].file_data);
+  } catch (err) {
+    console.error('Serve skin image error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Get active skin info (public — player uses this to load skin)
+app.get('/api/active-skin', async (req, res) => {
+  try {
+    const { rows: skins } = await pool.query('SELECT id, name FROM skins WHERE is_active = TRUE LIMIT 1');
+    if (!skins.length) return res.json({ id: null, name: 'Défaut', images: {} });
+    const skin = skins[0];
+    const { rows: imgs } = await pool.query('SELECT image_key FROM skin_images WHERE skin_id = $1', [skin.id]);
+    const images = {};
+    for (const img of imgs) {
+      images[img.image_key] = `/api/skins/${skin.id}/images/${img.image_key}`;
+    }
+    res.json({ id: skin.id, name: skin.name, images });
+  } catch (err) {
+    console.error('Active skin error:', err);
+    res.json({ id: null, name: 'Défaut', images: {} });
+  }
 });
 
 // ===== START =====

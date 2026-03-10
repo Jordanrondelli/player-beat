@@ -27,6 +27,59 @@ function createFlames(container, count, hMin, hMax, wMin, wMax) {
   }
 }
 
+// ===== SETTINGS =====
+let playerSettings = {};
+async function loadPlayerSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (res.ok) playerSettings = await res.json();
+  } catch (e) { /* use defaults */ }
+  applyPlayerSettings();
+}
+function isPowerEnabled() {
+  if (ytIsCurrentSource) {
+    return playerSettings.power_youtube !== 'false'; // default true
+  }
+  return playerSettings.power_uploads !== 'false'; // default true
+}
+function applyPlayerSettings() {
+  // Power block visibility (depends on current source)
+  const powerOn = isPowerEnabled();
+  const hammerEl = document.getElementById('hammerMeter');
+  if (hammerEl) hammerEl.style.display = powerOn ? '' : 'none';
+  // If power just got disabled, clean up all lingering effects
+  if (!powerOn) {
+    cleanupPowerEffects();
+  }
+  // Fire button visibility
+  const fireEnabled = playerSettings.fire_button_enabled !== 'false';
+  const fireWrap = document.querySelector('.fire-wrap');
+  if (fireWrap) fireWrap.style.display = fireEnabled ? '' : 'none';
+}
+function cleanupPowerEffects() {
+  // Remove all overload/shake classes from all elements
+  const wp = document.querySelector('.waveform-panel');
+  const cc = document.querySelector('.chat-card');
+  const uc = document.querySelector('.user-card');
+  const wrapper = document.getElementById('wrapper');
+  if (wp) wp.classList.remove('overload-shake', 'overload-border');
+  if (cc) cc.classList.remove('overload-shake');
+  if (uc) uc.classList.remove('overload-shake');
+  if (wrapper) wrapper.classList.remove('shaking');
+  document.querySelectorAll('.overload-chroma').forEach(el => el.remove());
+  // Reset hammer state
+  hammerCharge = 0;
+  displayedHammerPct = 0;
+  currentHammerStage = 'cool';
+  const hammerCard = document.getElementById('hammerMeter');
+  if (hammerCard) hammerCard.setAttribute('data-stage', 'cold');
+  const hammerStageEl = document.getElementById('hammerStage');
+  if (hammerStageEl) hammerStageEl.textContent = '';
+}
+loadPlayerSettings();
+// Reload settings periodically (admin can change them live)
+setInterval(loadPlayerSettings, 10000);
+
 // ===== AUDIO CONTEXT =====
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const gainNode = audioCtx.createGain();
@@ -35,10 +88,39 @@ let sourceNode = null;
 let isPlaying = false;
 let startTime = 0;
 let pauseOffset = 0;
-let playlist = []; // array of { name, arrayBuffer }
+let playlist = []; // array of { name, arrayBuffer } or { name, youtubeId, queueItem }
 let currentTrackIndex = -1;
 let waveformData = [];
 let waveformSigned = []; // signed samples for neon line display
+
+// ===== YOUTUBE IFRAME PLAYER =====
+let ytPlayer = null;
+let ytReady = false;
+let ytIsCurrentSource = false; // true when current track is YouTube
+let ytDuration = 0;
+
+function onYouTubeIframeAPIReady() {
+  ytPlayer = new YT.Player('ytPlayer', {
+    width: 320, height: 180,
+    playerVars: { autoplay: 0, controls: 0, disablekb: 1, fs: 0, modestbranding: 1, rel: 0 },
+    events: {
+      onReady: () => { ytReady = true; console.log('YouTube IFrame Player ready'); },
+      onStateChange: (e) => {
+        if (e.data === YT.PlayerState.ENDED && ytIsCurrentSource) {
+          stopAudio();
+          // Auto-advance
+          if (playlist.length > 1) {
+            const next = currentTrackIndex + 1;
+            if (next < playlist.length) loadTrack(next);
+            else fetchAndLoadQueue(currentSource);
+          }
+        }
+      },
+    },
+  });
+}
+// Make it global for YouTube API callback
+window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 
 // Analyser for spectrum
 const analyser = audioCtx.createAnalyser();
@@ -402,7 +484,7 @@ function drawWaveform(currentTime) {
   const dpr = window.devicePixelRatio || 1;
   const w = waveformCanvas.width / dpr;
   const h = waveformCanvas.height / dpr;
-  const duration = audioBuffer ? audioBuffer.duration : 30;
+  const duration = ytIsCurrentSource ? (ytDuration || 180) : (audioBuffer ? audioBuffer.duration : 30);
   waveformCtx.clearRect(0, 0, w, h);
 
   // Density: average amplitude over ~2 seconds around playhead
@@ -416,9 +498,9 @@ function drawWaveform(currentTime) {
   density = dCount > 0 ? dSum / dCount : 0;
   densitySmooth += (density - densitySmooth) * .05;
 
-  // Kick detection from audio analyser
+  // Kick detection from audio analyser (or synthetic for YouTube)
   let kickLevel = 0;
-  if (isPlaying && audioBuffer) {
+  if (isPlaying && audioBuffer && !ytIsCurrentSource) {
     analyser.getByteFrequencyData(frequencyData);
     kickAnalyser.getByteTimeDomainData(kickTimeData);
     let sum = 0;
@@ -427,6 +509,20 @@ function drawWaveform(currentTime) {
       sum += v * v;
     }
     kickLevel = Math.sqrt(sum / kickTimeData.length);
+  } else if (isPlaying && ytIsCurrentSource) {
+    // Enhanced kick simulation from synthetic waveform
+    const wfVal = waveformData[Math.min(pIdx, waveformData.length - 1)] || 0;
+    const prevVal = waveformData[Math.max(0, pIdx - 2)] || 0;
+    const prevVal2 = waveformData[Math.max(0, pIdx - 4)] || 0;
+    // Base energy proportional to waveform level
+    kickLevel = wfVal * 0.35;
+    // Detect rises (simulated transients) — sharper rises = stronger kick
+    const rise1 = Math.max(0, wfVal - prevVal);
+    const rise2 = Math.max(0, wfVal - prevVal2);
+    if (rise1 > 0.02) kickLevel += rise1 * 3;
+    if (rise2 > 0.04) kickLevel += rise2 * 1.5;
+    // High-energy sections get stronger baseline kick presence
+    if (wfVal > 0.65) kickLevel += (wfVal - 0.65) * 0.8;
   } else {
     kickLevel = (waveformData[Math.min(pIdx, waveformData.length - 1)] || 0) * 0.3;
   }
@@ -459,20 +555,22 @@ function drawWaveform(currentTime) {
   const timeStart = currentTime - scrollBack;
   const centerY = h * 0.5;
 
-  // === KICK SHAKE — fast, punchy canvas tremble ===
-  if (kickDecay > .03) {
-    const shakeAmt = kickDecay * 4;
+  // === KICK SHAKE — fast, punchy canvas tremble (boosted in fire mode) ===
+  const fireShakeBoost = fireModeIntensity > 0 ? 1 + fireModeIntensity * 1.5 : 1;
+  if (kickDecay > .03 || fireModeIntensity > 0.1) {
+    const shakeAmt = Math.max(kickDecay * 4, fireModeIntensity * 2) * fireShakeBoost;
     const sx = (Math.random() - 0.5) * shakeAmt;
     const sy = (Math.random() - 0.5) * shakeAmt * 0.6;
     waveformCtx.save();
     waveformCtx.translate(sx, sy);
   }
 
-  // Bass bloom pass — extra wide aura on kicks (screen blend)
-  if (kickDecay > .02) {
+  // Bass bloom pass — extra wide aura on kicks (screen blend, boosted in fire mode)
+  if (kickDecay > .02 || fireModeIntensity > 0.1) {
+    const bloomKick = Math.max(kickDecay, fireModeIntensity * 0.6);
     waveformCtx.save();
-    waveformCtx.filter = `blur(${18 + kickDecay * 25}px)`;
-    waveformCtx.globalAlpha = kickDecay * .45;
+    waveformCtx.filter = `blur(${18 + bloomKick * 25}px)`;
+    waveformCtx.globalAlpha = bloomKick * .45;
     waveformCtx.globalCompositeOperation = 'screen';
     drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, true);
     waveformCtx.restore();
@@ -484,7 +582,7 @@ function drawWaveform(currentTime) {
   drawWaveformBars(waveformCtx, w, h, timeStart, windowSec, playheadX, centerY, duration, kickDecay, false);
 
   // End kick shake
-  if (kickDecay > .03) {
+  if (kickDecay > .03 || fireModeIntensity > 0.1) {
     waveformCtx.restore();
   }
 
@@ -517,8 +615,9 @@ function drawWaveform(currentTime) {
 
   // Glow elements — intensify blur + opacity on kicks, clip to played side only
   const glowClip = `inset(0 ${100 - (playheadX / w) * 100}% 0 0)`;
-  if (glow1El) { glow1El.style.opacity = .3 + kickDecay * 1.4; glow1El.style.filter = `blur(${35 + kickDecay * 25}px)`; glow1El.style.clipPath = glowClip; }
-  if (glow2El) { glow2El.style.opacity = .15 + kickDecay * 1.1; glow2El.style.filter = `blur(${20 + kickDecay * 15}px)`; glow2El.style.clipPath = glowClip; }
+  const glowFire = fireModeIntensity * 0.5;
+  if (glow1El) { glow1El.style.opacity = .3 + kickDecay * 1.4 + glowFire; glow1El.style.filter = `blur(${35 + kickDecay * 25}px)`; glow1El.style.clipPath = glowClip; }
+  if (glow2El) { glow2El.style.opacity = .15 + kickDecay * 1.1 + glowFire; glow2El.style.filter = `blur(${20 + kickDecay * 15}px)`; glow2El.style.clipPath = glowClip; }
 
   // Background — no kick reaction, just CSS animation
 
@@ -539,7 +638,60 @@ function drawWaveform(currentTime) {
   // Uses the pre-computed waveform envelope (same data that drives the visual bars)
   // as the primary power source. What you SEE is what you GET.
   // Bass presence from FFT adds a bonus to reward actual low-end content.
-  if (isPlaying && audioBuffer) {
+  if (!isPowerEnabled()) {
+    // Power disabled for this source — skip all hammer computation
+  } else if (isPlaying && ytIsCurrentSource) {
+    // YouTube mode: power from synthetic waveform (beat-aligned, section-aware)
+    const wfIdx = Math.floor((currentTime / duration) * waveformData.length);
+    // Wider window for smoother section-level energy
+    const wfWindow = 8;
+    let wfSum = 0, wfCount = 0;
+    for (let i = wfIdx - wfWindow; i <= wfIdx + wfWindow; i++) {
+      const ci = Math.max(0, Math.min(waveformData.length - 1, i));
+      wfSum += waveformData[ci];
+      wfCount++;
+    }
+    const wfLevel = wfSum / wfCount;
+
+    // Simulate bass presence — scales with section energy
+    const bassBonus = Math.min(1, wfLevel * wfLevel * 1.2);
+    // Detect transients from the beat-aligned pulses in the synthetic waveform
+    const curVal = waveformData[Math.min(wfIdx, waveformData.length - 1)] || 0;
+    const prev3 = waveformData[Math.max(0, wfIdx - 3)] || 0;
+    const prev6 = waveformData[Math.max(0, wfIdx - 6)] || 0;
+    const riseShort = Math.max(0, curVal - prev3);
+    const riseLong = Math.max(0, curVal - prev6);
+    // Kick simulation — responds to beat pulses baked into the waveform
+    if (riseShort > 0.03) {
+      const intensity = Math.min(1, riseShort * 5 * Math.max(wfLevel, 0.3));
+      kickDecay = Math.max(kickDecay, intensity);
+      kickActivity += (1 - kickActivity) * 0.30;
+    } else if (riseLong > 0.05) {
+      kickDecay = Math.max(kickDecay, riseLong * 3);
+      kickActivity += (1 - kickActivity) * 0.15;
+    }
+    // High-energy sections sustain kick activity
+    if (wfLevel > 0.6) {
+      kickActivity = Math.max(kickActivity, (wfLevel - 0.6) * 1.5);
+    } else {
+      kickActivity *= 0.97;
+    }
+    kickDecay *= 0.82;
+    const kickImpact = Math.min(1, kickActivity);
+
+    hammerSmooth += (wfLevel - hammerSmooth) * 0.12;
+
+    const baseScore = wfLevel;
+    const bassAdd = bassBonus * 0.25;
+    const kickAdd = kickImpact * 0.25;
+    const rawScore = Math.min(1, baseScore + bassAdd + kickAdd);
+    const shaped = rawScore * rawScore * (3 - 2 * rawScore) * 100;
+
+    const diff = shaped - hammerCharge;
+    if (diff > 0) hammerCharge += diff * 0.35;
+    else hammerCharge += diff * 0.008;
+    hammerCharge = Math.max(0, Math.min(100, hammerCharge));
+  } else if (isPlaying && audioBuffer) {
     // --- PRIMARY: Waveform envelope (RMS) at current playback position ---
     // waveformData is already normalized 0-1 relative to track peak.
     // Intro = small bars = low value. Drop = big bars = high value.
@@ -672,7 +824,14 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
       const rms = sampleWaveform(fIdx);
       val = peak * 0.65 + rms * 0.35;
     }
-    raw.push({ x, val: Math.max(minH, val * maxAmp) });
+    // Fire mode: boost amplitude + add agitation
+    let fireBoost = 1;
+    if (fireModeIntensity > 0) {
+      fireBoost = 1 + fireModeIntensity * 0.5; // 50% taller bars
+      // Add slight random agitation for "survolté" effect
+      val += fireModeIntensity * (Math.random() * 0.08 - 0.02);
+    }
+    raw.push({ x, val: Math.max(minH, val * maxAmp * fireBoost) });
   }
 
   // Light smooth — 3-wide kernel, preserves kick spikes
@@ -768,14 +927,24 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
     ctx.restore();
   }
 
+  // Fire mode color interpolation
+  const fm = fireModeIntensity; // 0-1
+
   const redColors = {
-    outer: 'rgba(255,40,10,0.9)',
-    mid:   'rgba(255,70,30,0.9)',
-    fill:  'rgba(220,30,10,0.25)',
-    core:  'rgba(255,140,100,1)',
-    hot:   'rgba(255,220,200,0.8)'
+    outer: fm > 0 ? `rgba(${255},${Math.round(40 - fm * 20)},${Math.round(10)},${0.9 + fm * 0.1})` : 'rgba(255,40,10,0.9)',
+    mid:   fm > 0 ? `rgba(${255},${Math.round(70 + fm * 60)},${Math.round(30)},${0.9 + fm * 0.1})` : 'rgba(255,70,30,0.9)',
+    fill:  fm > 0 ? `rgba(${255},${Math.round(30 + fm * 40)},${Math.round(10)},${0.25 + fm * 0.2})` : 'rgba(220,30,10,0.25)',
+    core:  fm > 0 ? `rgba(255,${Math.round(140 + fm * 60)},${Math.round(100 - fm * 30)},1)` : 'rgba(255,140,100,1)',
+    hot:   fm > 0 ? `rgba(255,${Math.round(220 + fm * 35)},${Math.round(200 - fm * 50)},${0.8 + fm * 0.2})` : 'rgba(255,220,200,0.8)'
   };
-  const blueColors = {
+  // In fire mode, unplayed side also turns fiery orange/red
+  const blueColors = fm > 0 ? {
+    outer: `rgba(${Math.round(30 + fm * 225)},${Math.round(140 - fm * 60)},${Math.round(255 - fm * 220)},${0.7 + fm * 0.2})`,
+    mid:   `rgba(${Math.round(60 + fm * 195)},${Math.round(170 - fm * 80)},${Math.round(255 - fm * 210)},${0.8 + fm * 0.1})`,
+    fill:  `rgba(${Math.round(40 + fm * 200)},${Math.round(120 - fm * 60)},${Math.round(220 - fm * 190)},${0.12 + fm * 0.15})`,
+    core:  `rgba(${Math.round(130 + fm * 125)},${Math.round(210 - fm * 60)},${Math.round(255 - fm * 130)},${0.9 + fm * 0.1})`,
+    hot:   `rgba(${Math.round(210 + fm * 45)},${Math.round(240 - fm * 20)},${Math.round(255 - fm * 80)},${0.6 + fm * 0.3})`
+  } : {
     outer: 'rgba(30,140,255,0.7)',
     mid:   'rgba(60,170,255,0.8)',
     fill:  'rgba(40,120,220,0.12)',
@@ -787,25 +956,44 @@ function drawWaveformBars(ctx, w, h, timeStart, windowSec, playheadX, centerY, d
   if (glowOnly) {
     if (splitIdx > 0) {
       buildEnvelope(0, splitIdx);
-      ctx.fillStyle = 'rgba(255,50,20,1)';
+      ctx.fillStyle = fm > 0 ? `rgba(255,${Math.round(50 + fm * 80)},${Math.round(20 + fm * 30)},1)` : 'rgba(255,50,20,1)';
+      ctx.fill();
+    }
+    // In fire mode, also bloom the unplayed side
+    if (fm > 0 && splitIdx < pts.length - 1) {
+      buildEnvelope(splitIdx, pts.length - 1);
+      ctx.fillStyle = `rgba(255,${Math.round(80 + fm * 50)},${Math.round(20)},${fm * 0.8})`;
       ctx.fill();
     }
     return;
   }
 
-  // Played side — red neon
+  // Played side — red neon (boosted in fire mode)
   if (splitIdx > 0) drawNeonEnvelope(0, splitIdx, redColors, true);
 
-  // Unplayed side — blue neon
-  if (splitIdx < pts.length - 1) drawNeonEnvelope(splitIdx, pts.length - 1, blueColors, false);
+  // Unplayed side — blue neon (turns fiery in fire mode)
+  if (splitIdx < pts.length - 1) drawNeonEnvelope(splitIdx, pts.length - 1, blueColors, fm > 0);
 }
 
 // ===== ANIMATION LOOP =====
 function animationLoop() {
+  // Update fire mode intensity for waveform effects
+  updateFireModeIntensity();
+
   let currentTime = 0;
-  if (isPlaying && audioBuffer) {
+  let duration = 30;
+
+  if (ytIsCurrentSource && ytPlayer && ytReady) {
+    duration = ytDuration || 180;
+    if (isPlaying) {
+      currentTime = ytPlayer.getCurrentTime() || 0;
+    } else {
+      currentTime = (ytPlayer.getCurrentTime && ytPlayer.getCurrentTime()) || 0;
+    }
+  } else if (isPlaying && audioBuffer) {
     currentTime = audioCtx.currentTime - startTime + pauseOffset;
-    if (currentTime >= audioBuffer.duration) {
+    duration = audioBuffer.duration;
+    if (currentTime >= duration) {
       stopAudio();
       currentTime = 0;
       pauseOffset = 0;
@@ -822,13 +1010,13 @@ function animationLoop() {
     }
   } else if (audioBuffer) {
     currentTime = pauseOffset;
+    duration = audioBuffer.duration;
   } else {
     currentTime = (Date.now() / 1000) % 30;
   }
 
   drawWaveform(currentTime);
 
-  const duration = audioBuffer ? audioBuffer.duration : 30;
   currentTimeEl.textContent = formatTime(currentTime);
   totalTimeEl.textContent = formatTime(duration);
   requestAnimationFrame(animationLoop);
@@ -894,6 +1082,8 @@ function detectBPM(buffer) {
 
 // ===== HAMMER VISUALS =====
 function updateHammerVisuals(pct, kick) {
+  // Skip all hammer visuals if power is disabled for current source
+  if (!isPowerEnabled()) return;
   const hPctEl = document.getElementById('hammerPct');
   if (!hPctEl) return;
 
@@ -972,12 +1162,24 @@ function updateHammerVisuals(pct, kick) {
 }
 
 function triggerHammerActivation(stage) {
-  // Shockwave
+  // Shockwave — primary ring
   if (hammerShockwave) {
     hammerShockwave.classList.remove('active');
     void hammerShockwave.offsetWidth;
     hammerShockwave.classList.add('active');
     setTimeout(() => hammerShockwave.classList.remove('active'), 700);
+
+    // Secondary ripple (delayed)
+    const parent = hammerShockwave.parentElement;
+    if (parent) {
+      const ring2 = document.createElement('div');
+      ring2.className = 'hammer-shockwave-2';
+      parent.appendChild(ring2);
+      setTimeout(() => {
+        ring2.classList.add('active');
+        setTimeout(() => ring2.remove(), 850);
+      }, 80);
+    }
   }
 
   // Hammer slam
@@ -1001,9 +1203,12 @@ function triggerHammerActivation(stage) {
   if (stage === 'lourd') {
     const flash = document.createElement('div');
     flash.className = 'fire-flash';
-    flash.style.background = 'radial-gradient(ellipse at center, rgba(255, 200, 50, .4) 0%, rgba(255, 100, 0, .2) 40%, transparent 70%)';
+    const inner = document.createElement('div');
+    inner.className = 'fire-flash-inner';
+    inner.style.background = 'radial-gradient(ellipse at center, rgba(255, 200, 50, .4) 0%, rgba(255, 100, 0, .2) 40%, transparent 70%)';
+    flash.appendChild(inner);
     document.body.appendChild(flash);
-    flash.addEventListener('animationend', () => flash.remove());
+    inner.addEventListener('animationend', () => flash.remove());
   }
 
   // OVERLOAD — massive visual explosion
@@ -1039,6 +1244,7 @@ function triggerHammerActivation(stage) {
 
 function startBeatSync() {
   stopBeatSync();
+  if (!isPowerEnabled()) return; // Power disabled — no beat animations
   if (!detectedBPM || !hammerIconEl) return;
   const beatSec = 60 / detectedBPM;
 
@@ -1146,10 +1352,28 @@ function stopBeatSync() {
   if (gaugeGlow) gaugeGlow.style.strokeDashoffset = GAUGE_CIRCUMFERENCE;
   const hammerIconWrap = document.getElementById('hammerIconWrap');
   if (hammerIconWrap) { hammerIconWrap.style.width = '42px'; hammerIconWrap.style.height = '42px'; }
+
+  // Clean up overload visual effects
+  const wp = document.querySelector('.waveform-panel');
+  const cc = document.querySelector('.chat-card');
+  const uc = document.querySelector('.user-card');
+  if (wp) { wp.classList.remove('overload-shake', 'overload-border'); }
+  if (cc) cc.classList.remove('overload-shake');
+  if (uc) uc.classList.remove('overload-shake');
+  document.querySelectorAll('.overload-chroma').forEach(el => el.remove());
 }
 
 // ===== PLAYBACK CONTROLS =====
 function playAudio() {
+  if (ytIsCurrentSource) {
+    if (ytPlayer && ytReady) {
+      ytPlayer.playVideo();
+      isPlaying = true;
+      playImg.style.display = 'none'; pauseImg.style.display = 'block';
+      startBeatSync();
+    }
+    return;
+  }
   if (!audioBuffer) return;
   if (audioCtx.state === 'suspended') audioCtx.resume();
   sourceNode = audioCtx.createBufferSource();
@@ -1164,6 +1388,13 @@ function playAudio() {
 }
 
 function pauseAudio() {
+  if (ytIsCurrentSource) {
+    if (ytPlayer && ytReady) ytPlayer.pauseVideo();
+    isPlaying = false;
+    stopBeatSync();
+    playImg.style.display = 'block'; pauseImg.style.display = 'none';
+    return;
+  }
   if (sourceNode) {
     sourceNode.stop();
     sourceNode.disconnect();
@@ -1175,6 +1406,11 @@ function pauseAudio() {
 }
 
 function stopAudio() {
+  if (ytIsCurrentSource) {
+    if (ytPlayer && ytReady) { ytPlayer.stopVideo(); }
+    ytIsCurrentSource = false;
+    ytDuration = 0;
+  }
   if (sourceNode) {
     try { sourceNode.stop(); } catch (e) { /* already stopped */ }
     sourceNode.disconnect();
@@ -1188,14 +1424,22 @@ function stopAudio() {
 
 // ===== EVENT LISTENERS =====
 playBtn.addEventListener('click', () => {
+  if (ytIsCurrentSource) {
+    isPlaying ? pauseAudio() : playAudio();
+    return;
+  }
   isPlaying ? pauseAudio() : (audioBuffer && playAudio());
 });
 
 // Mini nav seek
 document.getElementById('miniNav').addEventListener('click', (e) => {
-  if (!audioBuffer) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const pct = (e.clientX - rect.left) / rect.width;
+  if (ytIsCurrentSource && ytPlayer && ytReady) {
+    ytPlayer.seekTo(pct * ytDuration, true);
+    return;
+  }
+  if (!audioBuffer) return;
   const wasPlaying = isPlaying;
   if (isPlaying) {
     sourceNode.stop();
@@ -1209,7 +1453,11 @@ document.getElementById('miniNav').addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space' && e.target === document.body) {
     e.preventDefault();
-    isPlaying ? pauseAudio() : (audioBuffer && playAudio());
+    if (ytIsCurrentSource) {
+      isPlaying ? pauseAudio() : playAudio();
+    } else {
+      isPlaying ? pauseAudio() : (audioBuffer && playAudio());
+    }
   }
 });
 
@@ -1227,9 +1475,108 @@ async function loadTrack(index, autoPlay) {
   prescanDone = false; // reset before loading new track
   stopAudio();
 
+  // Mark track as playing + reset votes for Twitch re-voting
+  votes = { fire: 0, up: 0, down: 0 };
+  updateVoteDisplay();
+  const qItem = playlist[index] && playlist[index].queueItem;
+  if (qItem && qItem.id) {
+    // Mark as playing (enables Twitch votes for this track)
+    fetch(`/api/player/now-playing/${qItem.id}`, { method: 'POST' }).catch(() => {});
+  }
+
+  const track = playlist[index];
+
+  // YouTube track: try to fetch real audio from Piped (client-side), fall back to IFrame
+  if (track.youtubeId) {
+    ytIsCurrentSource = false; // will be set true only if we need IFrame fallback
+    audioBuffer = null;
+    waveformData = [];
+    waveformSigned = [];
+
+    // Update track info immediately
+    updateTrackInfo(track.queueItem);
+    updateQueueCounter();
+
+    // FAST START: Launch YouTube IFrame immediately for instant playback,
+    // while fetching real audio from proxy in background for upgrade
+    ytIsCurrentSource = true;
+    applyPlayerSettings();
+
+    // Start IFrame playback right away
+    if (ytPlayer && ytReady) {
+      const cuePromise = new Promise((resolve) => {
+        const onStateChange = (e) => {
+          if (e.data === YT.PlayerState.CUED || e.data === YT.PlayerState.PLAYING) {
+            ytPlayer.removeEventListener('onStateChange', onStateChange);
+            resolve();
+          }
+        };
+        ytPlayer.addEventListener('onStateChange', onStateChange);
+        ytPlayer.cueVideoById(track.youtubeId);
+        setTimeout(resolve, 2000); // shorter timeout
+      });
+      await cuePromise;
+
+      ytDuration = ytPlayer.getDuration();
+      if (ytDuration <= 0) ytDuration = 180;
+
+      generateSyntheticWaveform(ytDuration, track.youtubeId);
+      resizeCanvases();
+      drawMiniWaveform();
+      pauseOffset = 0;
+      detectedBPM = 120;
+      if (autoPlay) {
+        ytPlayer.playVideo();
+        isPlaying = true;
+        playImg.style.display = 'none'; pauseImg.style.display = 'block';
+        startBeatSync();
+      }
+    }
+    loadingOverlay.classList.remove('visible');
+
+    // Background: try to upgrade to real audio (non-blocking)
+    const ytVideoId = track.youtubeId;
+    fetch(`/api/yt-audio/${ytVideoId}`, { signal: AbortSignal.timeout(12000) })
+      .then(async (audioRes) => {
+        if (!audioRes.ok) return;
+        const arrayBuffer = await audioRes.arrayBuffer();
+        if (arrayBuffer.byteLength <= 1000) return;
+        const realAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        console.log(`YouTube audio upgraded: ${realAudioBuffer.duration.toFixed(1)}s`);
+        // Only upgrade if we're still playing the same track
+        if (playlist[currentTrackIndex] && playlist[currentTrackIndex].youtubeId === ytVideoId) {
+          // Get current playback position from YT player
+          const currentPos = (ytPlayer && ytReady) ? ytPlayer.getCurrentTime() : 0;
+          const wasPlaying = isPlaying;
+
+          // Switch to real audio
+          audioBuffer = realAudioBuffer;
+          extractWaveformData(audioBuffer);
+          prescanTrackCriteria(audioBuffer);
+          detectedBPM = await detectBPM(audioBuffer);
+          console.log('YouTube upgraded BPM:', detectedBPM);
+          resizeCanvases();
+          drawMiniWaveform();
+
+          // Stop YouTube, start Web Audio from same position
+          if (ytPlayer && ytReady) ytPlayer.pauseVideo();
+          ytIsCurrentSource = false;
+          applyPlayerSettings();
+          pauseOffset = currentPos;
+          if (wasPlaying) playAudio();
+        }
+      })
+      .catch((e) => {
+        console.log('YouTube proxy upgrade skipped:', e.message);
+      });
+    return;
+  }
+
+  // Regular audio track
+  ytIsCurrentSource = false;
+  applyPlayerSettings(); // Refresh power block visibility for upload source
   try {
-    // decodeAudioData consumes the buffer, so we need a copy each time
-    const bufferCopy = playlist[index].arrayBuffer.slice(0);
+    const bufferCopy = track.arrayBuffer.slice(0);
     audioBuffer = await audioCtx.decodeAudioData(bufferCopy);
     extractWaveformData(audioBuffer);
     prescanTrackCriteria(audioBuffer);
@@ -1240,8 +1587,7 @@ async function loadTrack(index, autoPlay) {
     pauseOffset = 0;
     if (autoPlay) playAudio();
   } catch (err) {
-    console.error('Audio decode error:', err, 'Track:', playlist[index]?.name);
-    // Skip to next track instead of blocking with alert
+    console.error('Audio decode error:', err, 'Track:', track?.name);
     if (playlist.length > 1 && index + 1 < playlist.length) {
       loadingOverlay.classList.remove('visible');
       const next = index + 1;
@@ -1262,6 +1608,99 @@ async function loadTrack(index, autoPlay) {
     }
   } finally {
     loadingOverlay.classList.remove('visible');
+  }
+}
+
+// Generate synthetic waveform for YouTube tracks (no raw audio available)
+function generateSyntheticWaveform(duration, videoId) {
+  const sampleRate = 30;
+  const totalSamples = Math.floor(duration * sampleRate);
+  waveformData = [];
+  waveformSigned = [];
+
+  // Deterministic seed from videoId — same video always gets same waveform
+  let seed = 12345;
+  if (videoId) {
+    for (let i = 0; i < videoId.length; i++) {
+      seed = ((seed << 5) - seed + videoId.charCodeAt(i)) | 0;
+    }
+  }
+  seed = Math.abs(seed) || 1;
+  function rand() {
+    seed = (seed * 16807 + 12345) % 2147483647;
+    return (seed & 0x7fffffff) / 2147483647;
+  }
+
+  // Generate section structure from seed (each song has unique structure)
+  const secLen = 12 + rand() * 20; // 12-32s per section
+  const numSections = Math.max(3, Math.floor(duration / secLen));
+
+  // Musical energy templates
+  const templates = [
+    [0.25, 0.45, 0.85, 0.35, 0.50, 0.90, 0.30, 0.85], // EDM: intro→build→drop→break→build→drop→outro→drop
+    [0.30, 0.55, 0.70, 0.45, 0.75, 0.55, 0.80, 0.40], // Pop: verse→prechorus→chorus→verse→chorus→bridge→chorus→outro
+    [0.35, 0.60, 0.80, 0.40, 0.65, 0.85, 0.35, 0.75], // Rock: intro→verse→chorus→break→verse→chorus→bridge→chorus
+    [0.20, 0.40, 0.65, 0.30, 0.50, 0.70, 0.80, 0.25], // Hip-hop: intro→verse→hook→break→verse→hook→drop→outro
+  ];
+  const template = templates[Math.floor(rand() * templates.length)];
+
+  const sectionEnergies = [];
+  for (let s = 0; s < numSections; s++) {
+    const tIdx = s % template.length;
+    const base = template[tIdx];
+    // Add seed-based variation per section
+    sectionEnergies.push(Math.max(0.15, Math.min(0.95, base + (rand() - 0.5) * 0.15)));
+  }
+
+  // Derive BPM-like pulse from seed (100-160 BPM range)
+  const fakeBPM = 100 + rand() * 60;
+  const beatSamples = (60 / fakeBPM) * sampleRate; // samples per beat
+
+  // Energy variation curve (low-frequency modulation unique to this track)
+  const modFreq1 = 0.003 + rand() * 0.008;
+  const modFreq2 = 0.01 + rand() * 0.02;
+  const modPhase1 = rand() * Math.PI * 2;
+  const modPhase2 = rand() * Math.PI * 2;
+
+  for (let i = 0; i < totalSamples; i++) {
+    const t = i / totalSamples;
+
+    // Section interpolation (smooth crossfade between sections)
+    const rawIdx = t * numSections;
+    const sIdx = Math.min(numSections - 1, Math.floor(rawIdx));
+    const nIdx = Math.min(numSections - 1, sIdx + 1);
+    const blend = rawIdx - sIdx;
+    const smooth = blend * blend * (3 - 2 * blend); // smoothstep
+    const sectionLevel = sectionEnergies[sIdx] * (1 - smooth) + sectionEnergies[nIdx] * smooth;
+
+    // Beat-aligned energy pulses (simulates real kick/snare pattern)
+    const beatPos = (i % beatSamples) / beatSamples;
+    const kick = Math.exp(-beatPos * 8) * 0.20 * sectionLevel; // kick on downbeat
+    const halfBeat = ((i + beatSamples / 2) % beatSamples) / beatSamples;
+    const snare = Math.exp(-halfBeat * 6) * 0.10 * sectionLevel; // snare on upbeat
+
+    // Musical texture noise (multiple seeded layers)
+    const n1 = Math.sin(i * modFreq1 * 6.28 + modPhase1) * 0.08;
+    const n2 = Math.sin(i * modFreq2 * 6.28 + modPhase2) * 0.05;
+    const n3 = (rand() - 0.5) * 0.08 * sectionLevel; // micro-variation
+
+    // Occasional accent hits (every 4-8 beats, randomized)
+    const accentPeriod = beatSamples * (4 + Math.floor(rand() * 2) * 2);
+    const accentPos = (i % accentPeriod) / accentPeriod;
+    const accent = accentPos < 0.02 ? 0.15 * sectionLevel : 0;
+
+    const val = Math.max(0.04, Math.min(1, sectionLevel + kick + snare + n1 + n2 + n3 + accent));
+    waveformData.push(val);
+    waveformSigned.push(val);
+  }
+
+  // Normalize to 0-1
+  const maxVal = Math.max(...waveformData);
+  if (maxVal > 0) {
+    for (let i = 0; i < waveformData.length; i++) {
+      waveformData[i] /= maxVal;
+      waveformSigned[i] /= maxVal;
+    }
   }
 }
 
@@ -1299,10 +1738,9 @@ let votes = { fire: 0, up: 0, down: 0 };
 
 function updateVoteDisplay() {
   const total = votes.fire + votes.up + votes.down;
-  if (total === 0) return;
-  const pctFire = (votes.fire / total) * 100;
-  const pctUp = (votes.up / total) * 100;
-  const pctDown = (votes.down / total) * 100;
+  const pctFire = total > 0 ? (votes.fire / total) * 100 : 0;
+  const pctUp = total > 0 ? (votes.up / total) * 100 : 0;
+  const pctDown = total > 0 ? (votes.down / total) * 100 : 0;
 
   document.getElementById('chatPct1').textContent = Math.round(pctFire) + '%';
   document.getElementById('chatPct2').textContent = Math.round(pctUp) + '%';
@@ -1355,6 +1793,41 @@ setInterval(() => {
   loadVotesForCurrentTrack();
 }, 3000);
 
+// ===== MUR DES LÉGENDES =====
+let currentLegendUser = null;
+async function loadLegend() {
+  try {
+    const res = await fetch('/api/legend');
+    const data = await res.json();
+    const userEl = document.getElementById('legendUser');
+    const trackEl = document.getElementById('legendTrack');
+    const fireEl = document.getElementById('legendFire');
+    if (!userEl) return;
+    if (data && data.fire > 0) {
+      const newUser = data.submitted_by || 'Anonyme';
+      userEl.textContent = newUser;
+      trackEl.textContent = (data.title || 'Sans titre') + (data.artist ? ' \u2014 ' + data.artist : '');
+      fireEl.textContent = '\uD83D\uDD25 ' + data.fire + ' FIRE';
+      // Animate when legend changes
+      if (currentLegendUser !== null && currentLegendUser !== newUser) {
+        const card = document.getElementById('legendCard');
+        card.classList.add('legend-new');
+        setTimeout(() => card.classList.remove('legend-new'), 1500);
+      }
+      currentLegendUser = newUser;
+    } else {
+      userEl.textContent = 'En attente...';
+      trackEl.textContent = 'Le track avec le plus de \uD83D\uDD25 appara\u00eetra ici';
+      fireEl.textContent = '';
+      currentLegendUser = null;
+    }
+  } catch (e) {
+    // Silently fail
+  }
+}
+loadLegend();
+setInterval(loadLegend, 5000);
+
 // ===== EMOJI SPLASH EFFECT =====
 function showEmojiSplash(emoji, x, y) {
   const el = document.createElement('div');
@@ -1368,112 +1841,401 @@ function showEmojiSplash(emoji, x, y) {
 
 // Vote button listeners
 function skipToNext() {
-  if (playlist.length <= 1) return;
+  if (playlist.length === 0) return;
+  if (playlist.length === 1) {
+    // Only one track — reload it (will re-trigger from start)
+    loadTrack(0);
+    return;
+  }
   const next = (currentTrackIndex + 1) % playlist.length;
   loadTrack(next);
 }
 
 document.getElementById('btnDown').addEventListener('click', function () {
-  sendVote('down');
+  // Don't send vote to server — only Twitch chat counts in "avis du chat"
   const r = this.getBoundingClientRect();
   showEmojiSplash('\uD83D\uDC4E', r.left + r.width / 2 - 30, r.top - 20);
   skipToNext();
 });
 
 document.getElementById('btnUp').addEventListener('click', function () {
-  sendVote('up');
+  // Don't send vote to server — only Twitch chat counts in "avis du chat"
   const r = this.getBoundingClientRect();
   showEmojiSplash('\uD83D\uDC4D', r.left + r.width / 2 - 30, r.top - 20);
   skipToNext();
 });
 
-// ===== FIRE BUTTON =====
+// ===== FIRE BUTTON (FIRE MODE 10s + PARTICLES + SOUND) =====
 let fireTimeout = null;
 let fireFadeTimeout = null;
 
-function triggerFire() {
-  const overlay = document.getElementById('fireOverlay');
-  const flameBottom = document.getElementById('flameBottom');
-  const flameTop = document.getElementById('flameTop');
-  const emberContainer = document.getElementById('emberContainer');
-  const wrapper = document.getElementById('wrapper');
+// --- Fire mode state ---
+let fireMode = false;
+let fireModeStart = 0;
+const FIRE_MODE_DURATION = 10000; // 10 seconds
+let fireModeTimer = null;
+let fireModeIntensity = 0; // 0-1, used by waveform rendering
+let waveformFireRAF = null;
 
-  if (fireTimeout) clearTimeout(fireTimeout);
-  if (fireFadeTimeout) clearTimeout(fireFadeTimeout);
+// --- Canvas particle system ---
+const fireParticleCanvas = document.getElementById('fireParticleCanvas');
+const fpCtx = fireParticleCanvas.getContext('2d');
+let fireParticles = [];
+let fireParticleRAF = null;
 
-  flameBottom.innerHTML = '';
-  flameTop.innerHTML = '';
-  emberContainer.innerHTML = '';
+function resizeFireCanvas() {
+  fireParticleCanvas.width = window.innerWidth * devicePixelRatio;
+  fireParticleCanvas.height = window.innerHeight * devicePixelRatio;
+  fireParticleCanvas.style.width = window.innerWidth + 'px';
+  fireParticleCanvas.style.height = window.innerHeight + 'px';
+  fpCtx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+}
+resizeFireCanvas();
+window.addEventListener('resize', resizeFireCanvas);
 
-  // Set BPM-synced pulse speed
-  const bpm = detectedBPM || 120;
-  const beatDur = (60 / bpm) + 's';
-  overlay.style.setProperty('--beat-dur', beatDur);
-
-  createFlames(flameBottom, 45, 90, 300, 45, 170);
-  createFlames(flameTop, 20, 55, 170, 35, 110);
-
-  const types = ['ember-orange', 'ember-red', 'ember-yellow'];
-  for (let i = 0; i < 100; i++) {
-    const ember = document.createElement('div');
-    ember.className = 'ember ' + types[Math.floor(Math.random() * 3)];
-    ember.style.left = Math.random() * 100 + '%';
-    ember.style.animationDelay = Math.random() * 6 + 's';
-    ember.style.animationDuration = (3 + Math.random() * 6) + 's';
-    ember.style.setProperty('--drift', (Math.random() - .5) * 80 + 'px');
-    const size = 1.5 + Math.random() * 5;
-    ember.style.width = size + 'px';
-    ember.style.height = size + 'px';
-    emberContainer.appendChild(ember);
+function spawnFireParticles(cx, cy, count, intensity) {
+  // Hard cap: 60 total particles alive (was 80)
+  const maxAlive = 60;
+  if (fireParticles.length >= maxAlive) return;
+  count = Math.min(count, maxAlive - fireParticles.length);
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = (3 + Math.random() * 8) * intensity;
+    const size = 2 + Math.random() * 4 * intensity;
+    const life = 0.6 + Math.random() * 0.8;
+    const hue = 15 + Math.random() * 30;
+    const sat = 80 + Math.random() * 20;
+    const lum = 50 + Math.random() * 30 + intensity * 15;
+    const vx = Math.cos(angle) * speed + (Math.random() - .5) * 2;
+    const vy = Math.sin(angle) * speed - Math.random() * 3;
+    fireParticles.push({
+      x: cx, y: cy,
+      prevX: cx, prevY: cy,
+      vx, vy,
+      size, life, maxLife: life,
+      hue, sat, lum,
+      gravity: 0.15 + Math.random() * 0.1,
+      friction: 0.97 + Math.random() * 0.02,
+      type: Math.random() < 0.35 ? 'spark' : 'ember',
+    });
   }
-
-  overlay.style.transition = 'opacity .3s';
-  overlay.style.opacity = '';
-  overlay.classList.remove('on');
-  // Force reflow to restart animation
-  void overlay.offsetWidth;
-  overlay.classList.add('on');
-  wrapper.classList.add('shaking');
-
-  setTimeout(() => wrapper.classList.remove('shaking'), 600);
-
-  // Progressive fade-out: start dimming at 5s, fully gone at 8s
-  fireFadeTimeout = setTimeout(() => {
-    overlay.style.transition = 'opacity 3s ease-out';
-    overlay.style.opacity = '0';
-  }, 5000);
-
-  fireTimeout = setTimeout(() => {
-    overlay.classList.remove('on');
-    overlay.style.opacity = '';
-    overlay.style.transition = '';
-  }, 8000);
+  if (!fireParticleRAF) tickFireParticles();
 }
 
-document.getElementById('btnFire').addEventListener('click', function () {
-  sendVote('fire');
-  triggerFire();
+
+function tickFireParticles() {
+  fpCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+  for (let i = fireParticles.length - 1; i >= 0; i--) {
+    const p = fireParticles[i];
+    p.life -= 0.016;
+    if (p.life <= 0) { fireParticles.splice(i, 1); continue; }
+
+    p.prevX = p.x;
+    p.prevY = p.y;
+    p.vy += p.gravity;
+    p.vx *= p.friction;
+    p.vy *= p.friction;
+    p.x += p.vx;
+    p.y += p.vy;
+
+    const alpha = Math.min(1, p.life / (p.maxLife * 0.3));
+    const sizeNow = p.size * (0.3 + 0.7 * (p.life / p.maxLife));
+    const color = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${alpha})`;
+
+    if (p.type === 'spark') {
+      // Spark: line trail (single stroke, no extra fill)
+      const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+      const trailLen = Math.min(speed * 2.5, 16);
+      const invSpeed = 1 / (speed || 1);
+      fpCtx.beginPath();
+      fpCtx.moveTo(p.x, p.y);
+      fpCtx.lineTo(p.x - p.vx * invSpeed * trailLen, p.y - p.vy * invSpeed * trailLen);
+      fpCtx.strokeStyle = color;
+      fpCtx.lineWidth = sizeNow * 0.7;
+      fpCtx.lineCap = 'round';
+      fpCtx.stroke();
+    } else {
+      // Ember: single circle (no glow pass — saves 1 draw call per particle)
+      fpCtx.beginPath();
+      fpCtx.arc(p.x, p.y, sizeNow, 0, Math.PI * 2);
+      fpCtx.fillStyle = color;
+      fpCtx.fill();
+    }
+  }
+
+  if (fireParticles.length > 0) {
+    fireParticleRAF = requestAnimationFrame(tickFireParticles);
+  } else {
+    fireParticleRAF = null;
+  }
+}
+
+// --- Procedural fire sound via Web Audio API ---
+function playFireSound(level) {
+  const ctx = audioCtx;
+  const now = ctx.currentTime;
+  const intensity = Math.min(1, level / 10);
+
+  // Noise burst (whoosh)
+  const bufSize = ctx.sampleRate * 0.15;
+  const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const noise = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) {
+    noise[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.3));
+  }
+  const noiseNode = ctx.createBufferSource();
+  noiseNode.buffer = noiseBuf;
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'bandpass';
+  noiseFilter.frequency.value = 800 + intensity * 1200;
+  noiseFilter.Q.value = 0.8;
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.15 + intensity * 0.15, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+  noiseNode.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
+  noiseNode.start(now);
+  noiseNode.stop(now + 0.2);
+
+  // Sub-bass thump
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(80 + intensity * 40, now);
+  osc.frequency.exponentialRampToValueAtTime(30, now + 0.15);
+  const oscGain = ctx.createGain();
+  oscGain.gain.setValueAtTime(0.25 + intensity * 0.2, now);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+  osc.connect(oscGain).connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.25);
+
+  // High intensity: add rising tone
+  if (level >= 5) {
+    const riseOsc = ctx.createOscillator();
+    riseOsc.type = 'sawtooth';
+    riseOsc.frequency.setValueAtTime(200, now);
+    riseOsc.frequency.exponentialRampToValueAtTime(600 + level * 50, now + 0.1);
+    const riseGain = ctx.createGain();
+    riseGain.gain.setValueAtTime(0.06, now);
+    riseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    riseOsc.connect(riseGain).connect(ctx.destination);
+    riseOsc.start(now);
+    riseOsc.stop(now + 0.15);
+  }
+}
+
+// --- Shockwave effect — reuse 2 pre-existing DOM elements ---
+const fireShockwaveEl = document.getElementById('fireShockwave');
+// Create one secondary ring and keep it in the DOM
+const fireShockwaveRing = document.createElement('div');
+fireShockwaveRing.className = 'fire-shockwave-ring';
+fireShockwaveRing.style.display = 'none';
+document.body.appendChild(fireShockwaveRing);
+
+let swTimeout1 = 0, swTimeout2 = 0;
+
+function triggerShockwave(cx, cy) {
+  const x = (cx - 30) + 'px';
+  const y = (cy - 30) + 'px';
+
+  // Primary ring
+  clearTimeout(swTimeout1);
+  fireShockwaveEl.classList.remove('active');
+  fireShockwaveEl.style.left = x;
+  fireShockwaveEl.style.top = y;
+  void fireShockwaveEl.offsetWidth;
+  fireShockwaveEl.classList.add('active');
+  swTimeout1 = setTimeout(() => fireShockwaveEl.classList.remove('active'), 600);
+
+  // Secondary ring — reused, no DOM creation
+  clearTimeout(swTimeout2);
+  fireShockwaveRing.classList.remove('active');
+  fireShockwaveRing.style.display = '';
+  fireShockwaveRing.style.left = x;
+  fireShockwaveRing.style.top = y;
+  void fireShockwaveRing.offsetWidth;
+  fireShockwaveRing.classList.add('active');
+  swTimeout2 = setTimeout(() => {
+    fireShockwaveRing.classList.remove('active');
+    fireShockwaveRing.style.display = 'none';
+  }, 750);
+}
+
+// --- Button squish animation ---
+function squishButton(btn) {
+  btn.classList.remove('fire-spring', 'fire-settle');
+  btn.classList.add('fire-squish');
+  setTimeout(() => {
+    btn.classList.remove('fire-squish');
+    btn.classList.add('fire-spring');
+    setTimeout(() => {
+      btn.classList.remove('fire-spring');
+      btn.classList.add('fire-settle');
+      setTimeout(() => btn.classList.remove('fire-settle'), 300);
+    }, 150);
+  }, 50);
+}
+
+// --- Fire mode activation/deactivation ---
+function activateFireMode() {
+  fireMode = true;
+  fireModeStart = performance.now();
+  clearTimeout(fireModeTimer);
+  fireModeTimer = setTimeout(deactivateFireMode, FIRE_MODE_DURATION);
+  // Start waveform fire particle spawner
+  if (!waveformFireRAF) tickWaveformFireParticles();
+}
+
+function deactivateFireMode() {
+  fireMode = false;
+  fireModeIntensity = 0;
+  clearTimeout(fireModeTimer);
+  fireBtnEl.classList.remove('fire-forge');
+  fireHaloEl.classList.remove('visible');
+}
+
+// Update fire mode intensity each frame (called from animation loop)
+function updateFireModeIntensity() {
+  if (!fireMode) { fireModeIntensity = 0; return; }
+  const elapsed = performance.now() - fireModeStart;
+  const remaining = FIRE_MODE_DURATION - elapsed;
+  if (remaining <= 0) { fireModeIntensity = 0; return; }
+  // Full intensity for first 7s, then fade out over last 3s
+  const fadeStart = FIRE_MODE_DURATION - 3000;
+  if (elapsed < fadeStart) {
+    fireModeIntensity = 1;
+  } else {
+    fireModeIntensity = remaining / 3000;
+  }
+}
+
+// Spawn particles rising upward from the waveform area during fire mode
+function tickWaveformFireParticles() {
+  if (!fireMode) { waveformFireRAF = null; return; }
+  updateFireModeIntensity();
+  // Spawn embers rising from the waveform canvas area
+  const wfCanvas = document.getElementById('waveformCanvas');
+  if (wfCanvas && fireModeIntensity > 0.05) {
+    const rect = wfCanvas.getBoundingClientRect();
+    const count = Math.floor(2 + fireModeIntensity * 3);
+    for (let i = 0; i < count; i++) {
+      const cx = rect.left + Math.random() * rect.width;
+      const cy = rect.top + rect.height * (0.2 + Math.random() * 0.6);
+      const maxAlive = 60;
+      if (fireParticles.length >= maxAlive) break;
+      const hue = 10 + Math.random() * 40;
+      const speed = (1.5 + Math.random() * 3) * fireModeIntensity;
+      fireParticles.push({
+        x: cx, y: cy,
+        prevX: cx, prevY: cy,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: -speed, // upward
+        size: 1.5 + Math.random() * 2.5 * fireModeIntensity,
+        life: 0.8 + Math.random() * 0.8,
+        maxLife: 0.8 + Math.random() * 0.8,
+        hue, sat: 80 + Math.random() * 20, lum: 55 + Math.random() * 25,
+        gravity: -0.02, // slight upward drift
+        friction: 0.99,
+        type: Math.random() < 0.3 ? 'spark' : 'ember',
+      });
+    }
+    if (!fireParticleRAF) tickFireParticles();
+  }
+  waveformFireRAF = requestAnimationFrame(tickWaveformFireParticles);
+}
+
+// --- Screen flash — reuse single DOM element ---
+const flashEl = document.createElement('div');
+flashEl.className = 'fire-flash';
+flashEl.style.display = 'none';
+const flashInner = document.createElement('div');
+flashInner.className = 'fire-flash-inner';
+flashEl.appendChild(flashInner);
+document.body.appendChild(flashEl);
+let flashTimeout = 0;
+
+function triggerFlash(intensity) {
+  clearTimeout(flashTimeout);
+  intensity = Math.min(1, intensity);
+  flashInner.style.background = `radial-gradient(ellipse at center,
+    rgba(255, ${200 - intensity * 100 | 0}, ${150 - intensity * 100 | 0}, ${0.4 + intensity * 0.3}) 0%,
+    rgba(255, 60, 0, ${0.2 + intensity * 0.2}) 40%,
+    transparent 70%)`;
+  flashEl.style.display = '';
+  flashInner.style.animation = 'none';
+  void flashInner.offsetWidth;
+  flashInner.style.animation = '';
+  flashTimeout = setTimeout(() => { flashEl.style.display = 'none'; }, 400);
+}
+
+// --- Fire overlay disabled (removed for performance) ---
+
+// --- Main fire click handler ---
+// Pre-cache all DOM references
+const fireBtnEl = document.getElementById('btnFire');
+const wrapperEl = document.getElementById('wrapper');
+// Create halo once
+const fireHaloEl = document.createElement('div');
+fireHaloEl.className = 'fire-halo';
+fireBtnEl.parentElement.appendChild(fireHaloEl);
+
+let shakeTimeout = 0;
+let chromaticTimeout = 0;
+
+fireBtnEl.addEventListener('click', function () {
   const r = this.getBoundingClientRect();
   const cx = r.left + r.width / 2;
   const cy = r.top + r.height / 2;
 
-  // Flash bang
-  const flash = document.createElement('div');
-  flash.className = 'fire-flash';
-  document.body.appendChild(flash);
-  flash.addEventListener('animationend', () => flash.remove());
+  // 1. Button tremble (200ms intense vibration)
+  this.classList.remove('fire-tremble', 'fire-forge');
+  void this.offsetWidth;
+  this.classList.add('fire-tremble');
+  setTimeout(() => {
+    this.classList.remove('fire-tremble');
+    // 2. Forge effect — pulsing red-orange like heated metal (lasts for fire mode duration)
+    this.classList.add('fire-forge');
+  }, 200);
 
-  // Emoji explosion
-  for (let i = 0; i < 20; i++) {
-    setTimeout(() => {
-      showEmojiSplash('\uD83D\uDD25',
-        cx - 30 + (Math.random() - .5) * 300,
-        cy - 20 + (Math.random() - .5) * 200
-      );
-    }, i * 60);
-  }
+  // 3. Button squish
+  squishButton(this);
 
+  // 4. Procedural sound (max intensity)
+  playFireSound(8);
+
+  // 5. Shockwave
+  triggerShockwave(cx, cy);
+
+  // 6. Flash (strong)
+  triggerFlash(0.9);
+
+  // 7. Initial burst of particles from button
+  spawnFireParticles(cx, cy, 20, 1.1);
+
+  // 8. Screen shake
+  clearTimeout(shakeTimeout);
+  wrapperEl.classList.remove('shaking');
+  void wrapperEl.offsetWidth;
+  wrapperEl.classList.add('shaking');
+  shakeTimeout = setTimeout(() => wrapperEl.classList.remove('shaking'), 600);
+
+  // 9. Fire halo
+  fireHaloEl.style.setProperty('--halo-scale', 2.2);
+  fireHaloEl.classList.add('visible');
+
+  // 10. Chromatic aberration
+  clearTimeout(chromaticTimeout);
+  document.body.classList.add('chromatic-active');
+  chromaticTimeout = setTimeout(() => document.body.classList.remove('chromatic-active'), 300);
+
+  // 11. ACTIVATE FIRE MODE — 10 seconds of chaos
+  activateFireMode();
 });
+
+// (fire mode cleanup handled in deactivateFireMode)
 
 // ===== COMMUNITY QUEUE =====
 let currentSource = 'upload'; // 'upload' or 'youtube'
@@ -1527,6 +2289,16 @@ async function fetchAndLoadQueue(type) {
     loadingOverlay.classList.add('visible');
 
     const fetchPromises = serverQueue.map(async (item) => {
+      // YouTube tracks: extract video ID, no audio download needed
+      if (item.type === 'youtube' && item.source_url) {
+        const m = item.source_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|music\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/);
+        if (m) {
+          return { name: item.title, youtubeId: m[1], queueItem: item };
+        }
+        return null;
+      }
+
+      // Regular upload tracks: fetch audio from server
       try {
         const response = await fetch(`/api/audio/${item.id}`);
         if (!response.ok) {
@@ -1586,9 +2358,10 @@ loadTrack = async function(index, autoPlay) {
 
 // ===== WIPE ALL =====
 document.getElementById('wipeBtn').addEventListener('click', async () => {
-  if (!confirm('Supprimer TOUS les uploads ? Cette action est irréversible.')) return;
+  const label = currentSource === 'youtube' ? 'liens YouTube' : 'uploads';
+  if (!confirm(`Supprimer TOUS les ${label} ? Cette action est irréversible.`)) return;
   try {
-    const res = await fetch('/api/queue/wipe-all', { method: 'DELETE' });
+    const res = await fetch(`/api/queue/wipe-all?type=${currentSource}`, { method: 'DELETE' });
     if (res.ok) {
       stopAudio();
       serverQueue = [];
@@ -1609,6 +2382,39 @@ document.getElementById('wipeBtn').addEventListener('click', async () => {
     console.error('Wipe error:', e);
   }
 });
+
+// ===== ACTIVE SKIN =====
+async function loadActiveSkin() {
+  try {
+    const res = await fetch('/api/active-skin');
+    const skin = await res.json();
+    if (!skin || !skin.id) return; // default skin
+    const imgs = skin.images || {};
+
+    // HTML images
+    if (imgs.marteau) { const el = document.getElementById('hammerIcon'); if (el) el.src = imgs.marteau; }
+    if (imgs.play) { const el = document.getElementById('playImg'); if (el) el.src = imgs.play; }
+    if (imgs.pause) { const el = document.getElementById('pauseImg'); if (el) el.src = imgs.pause; }
+    if (imgs.fire) { const el = document.querySelector('.fire-img'); if (el) el.src = imgs.fire; }
+    if (imgs.pouce_rouge) { const el = document.querySelector('.vote-btn-red .vote-icon'); if (el) el.src = imgs.pouce_rouge; }
+    if (imgs.pouce_vert) { const el = document.querySelector('.vote-btn-green .vote-icon'); if (el) el.src = imgs.pouce_vert; }
+
+    // CSS background images
+    const style = document.createElement('style');
+    let css = '';
+    if (imgs.bg) css += `.bg { background-image: url('${imgs.bg}') !important; }\n`;
+    if (imgs.bloc_titre) css += `.user-card { background: url('${imgs.bloc_titre}') center / 100% 100% no-repeat !important; }\n`;
+    if (imgs.bloc_chat) css += `.chat-card { background: url('${imgs.bloc_chat}') center / 100% 100% no-repeat !important; }\n`;
+    if (imgs.murlegende) css += `.legend-card { background: url('${imgs.murlegende}') center / contain no-repeat !important; }\n`;
+    if (css) {
+      style.textContent = css;
+      document.head.appendChild(style);
+    }
+  } catch (e) {
+    // Silently use default skin
+  }
+}
+loadActiveSkin();
 
 // ===== INIT =====
 resizeCanvases();
