@@ -9,8 +9,8 @@ const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const gainNode = audioCtx.createGain();
 // Analyser for real-time intensity glow
 const analyser = audioCtx.createAnalyser();
-analyser.fftSize = 256;
-analyser.smoothingTimeConstant = 0.75;
+analyser.fftSize = 512;
+analyser.smoothingTimeConstant = 0.5;
 gainNode.connect(analyser);
 analyser.connect(audioCtx.destination);
 
@@ -102,13 +102,24 @@ function drawWaveform(currentTime) {
   const duration = getDuration();
   if (!duration || waveformData.length === 0) return;
 
-  // Get real-time audio intensity for glow
+  // Get real-time audio intensity for glow (bass-weighted for impact)
   let intensity = 0;
+  let bassIntensity = 0;
   if (isPlaying) {
     analyser.getByteFrequencyData(analyserData);
     let sum = 0;
-    for (let i = 0; i < analyserData.length; i++) sum += analyserData[i];
+    let bassSum = 0;
+    const bassEnd = Math.floor(analyserData.length * 0.15); // low frequencies
+    for (let i = 0; i < analyserData.length; i++) {
+      sum += analyserData[i];
+      if (i < bassEnd) bassSum += analyserData[i];
+    }
     intensity = sum / (analyserData.length * 255);
+    bassIntensity = bassSum / (bassEnd * 255);
+    // Amplify: square root to make differences more perceptible, then boost
+    intensity = Math.pow(intensity, 0.6) * 1.8;
+    bassIntensity = Math.pow(bassIntensity, 0.5) * 2.0;
+    intensity = Math.min(1.0, Math.max(intensity, bassIntensity));
   }
 
   const centerY = h / 2;
@@ -118,15 +129,28 @@ function drawWaveform(currentTime) {
   const step = barW + gap;
   const progress = currentTime / duration;
 
-  // Glow behind played portion
-  if (intensity > 0.05) {
+  // Glow behind played portion — very visible, reacts to intensity
+  if (intensity > 0.02) {
     const glowW = progress * w;
-    const glowGrad = ctx.createRadialGradient(glowW, centerY, 0, glowW, centerY, 100 + intensity * 200);
-    glowGrad.addColorStop(0, `rgba(232, 118, 42, ${intensity * 0.35})`);
-    glowGrad.addColorStop(0.5, `rgba(200, 80, 20, ${intensity * 0.15})`);
-    glowGrad.addColorStop(1, 'rgba(200, 80, 20, 0)');
+    const radius = 80 + intensity * 400;
+    const glowGrad = ctx.createRadialGradient(glowW, centerY, 0, glowW, centerY, radius);
+    glowGrad.addColorStop(0, `rgba(255, 140, 40, ${Math.min(1, intensity * 0.9)})`);
+    glowGrad.addColorStop(0.3, `rgba(255, 100, 20, ${intensity * 0.5})`);
+    glowGrad.addColorStop(0.6, `rgba(232, 80, 10, ${intensity * 0.25})`);
+    glowGrad.addColorStop(1, 'rgba(200, 60, 10, 0)');
     ctx.fillStyle = glowGrad;
     ctx.fillRect(0, 0, w, h);
+
+    // Additional wide ambient glow across played section during high intensity
+    if (intensity > 0.4) {
+      const ambientAlpha = (intensity - 0.4) * 0.3;
+      const ambGrad = ctx.createLinearGradient(0, 0, glowW, 0);
+      ambGrad.addColorStop(0, `rgba(255, 80, 0, 0)`);
+      ambGrad.addColorStop(0.7, `rgba(255, 120, 30, ${ambientAlpha * 0.3})`);
+      ambGrad.addColorStop(1, `rgba(255, 160, 50, ${ambientAlpha})`);
+      ctx.fillStyle = ambGrad;
+      ctx.fillRect(0, 0, glowW, h);
+    }
   }
 
   for (let i = 0; i < totalBars; i++) {
@@ -139,15 +163,16 @@ function drawWaveform(currentTime) {
     const isPast = frac <= progress;
 
     if (isPast) {
-      // Near playhead bars get intensity boost
-      const nearPlayhead = 1 - Math.min(1, Math.abs(frac - progress) * 15);
-      const boost = nearPlayhead * intensity * 0.4;
+      // Near playhead bars get strong intensity boost
+      const nearPlayhead = 1 - Math.min(1, Math.abs(frac - progress) * 10);
+      const boost = nearPlayhead * intensity * 1.2;
+      const baseAlpha = 0.5 + amp * 0.4;
       const grad = ctx.createLinearGradient(x, centerY - barH, x, centerY + barH);
-      grad.addColorStop(0, `rgba(200, ${100 + boost * 100}, 20, ${0.4 + amp * 0.3 + boost})`);
-      grad.addColorStop(0.4, `rgba(232, ${118 + boost * 80}, 42, ${0.6 + amp * 0.4 + boost})`);
-      grad.addColorStop(0.5, `rgba(240, ${160 + boost * 60}, 50, ${0.7 + amp * 0.3 + boost})`);
-      grad.addColorStop(0.6, `rgba(232, ${118 + boost * 80}, 42, ${0.6 + amp * 0.4 + boost})`);
-      grad.addColorStop(1, `rgba(200, ${100 + boost * 100}, 20, ${0.4 + amp * 0.3 + boost})`);
+      grad.addColorStop(0, `rgba(${200 + boost * 55}, ${100 + boost * 120}, 20, ${Math.min(1, baseAlpha + boost * 0.5)})`);
+      grad.addColorStop(0.4, `rgba(${232 + boost * 23}, ${118 + boost * 100}, 42, ${Math.min(1, baseAlpha + 0.15 + boost * 0.4)})`);
+      grad.addColorStop(0.5, `rgba(${240 + boost * 15}, ${160 + boost * 70}, 50, ${Math.min(1, baseAlpha + 0.2 + boost * 0.3)})`);
+      grad.addColorStop(0.6, `rgba(${232 + boost * 23}, ${118 + boost * 100}, 42, ${Math.min(1, baseAlpha + 0.15 + boost * 0.4)})`);
+      grad.addColorStop(1, `rgba(${200 + boost * 55}, ${100 + boost * 120}, 20, ${Math.min(1, baseAlpha + boost * 0.5)})`);
       ctx.fillStyle = grad;
     } else {
       ctx.fillStyle = `rgba(180, 140, 90, ${0.1 + amp * 0.12})`;
@@ -158,14 +183,14 @@ function drawWaveform(currentTime) {
     roundedBar(ctx, x, centerY + 1, barW, barH, r);
   }
 
-  // Playhead line with glow
+  // Playhead line with strong glow
   const px = progress * w;
-  if (intensity > 0.05) {
-    ctx.shadowBlur = 8 + intensity * 20;
-    ctx.shadowColor = `rgba(255, 180, 60, ${0.4 + intensity * 0.5})`;
+  if (intensity > 0.02) {
+    ctx.shadowBlur = 15 + intensity * 50;
+    ctx.shadowColor = `rgba(255, 160, 40, ${Math.min(1, 0.5 + intensity * 0.8)})`;
   }
-  ctx.fillStyle = `rgba(255, 200, 80, ${0.7 + intensity * 0.3})`;
-  ctx.fillRect(px - 0.75, 0, 1.5, h);
+  ctx.fillStyle = `rgba(255, 200, 80, ${Math.min(1, 0.7 + intensity * 0.5)})`;
+  ctx.fillRect(px - 1, 0, 2, h);
   ctx.shadowBlur = 0;
 }
 

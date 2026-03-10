@@ -307,16 +307,13 @@ body {
   left: 50%;
   transform: translateX(-50%);
   z-index: 90;
-  background: rgba(8, 6, 3, 0.8);
-  border: 1.5px solid rgba(200, 148, 62, 0.15);
+  background: transparent;
+  border: none;
   border-radius: 16px;
   padding: 18px 36px 14px;
   min-width: 500px;
   max-width: 900px;
   text-align: center;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
 }
 
 .track-title {
@@ -463,11 +460,8 @@ body {
   width: 250px;
   padding: 20px 22px;
   border-radius: 16px;
-  background: rgba(10, 8, 5, 0.8);
-  border: 1.5px solid rgba(200, 148, 62, 0.2);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  background: transparent;
+  border: none;
   z-index: 90;
 }
 
@@ -534,11 +528,8 @@ body {
   width: 260px;
   padding: 20px 22px;
   border-radius: 16px;
-  background: rgba(10, 8, 5, 0.8);
-  border: 1.5px solid rgba(200, 148, 62, 0.2);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  background: transparent;
+  border: none;
   z-index: 90;
 }
 
