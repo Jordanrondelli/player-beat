@@ -86,9 +86,12 @@ async function initDB() {
       id SERIAL PRIMARY KEY,
       title TEXT NOT NULL,
       artist TEXT DEFAULT '',
+      genre TEXT DEFAULT '',
+      message TEXT DEFAULT '',
       file_path TEXT NOT NULL,
       file_mimetype TEXT DEFAULT 'audio/mpeg',
       submitted_by TEXT DEFAULT 'Anonyme',
+      submitter_ip TEXT DEFAULT '',
       status TEXT DEFAULT 'pending',
       created_at TIMESTAMP DEFAULT NOW()
     );
@@ -100,6 +103,10 @@ async function initDB() {
       down INTEGER DEFAULT 0
     );
   `);
+  // Migrate: add new columns if missing
+  await pool.query(`ALTER TABLE on_ecoute_submissions ADD COLUMN IF NOT EXISTS genre TEXT DEFAULT ''`).catch(() => {});
+  await pool.query(`ALTER TABLE on_ecoute_submissions ADD COLUMN IF NOT EXISTS message TEXT DEFAULT ''`).catch(() => {});
+  await pool.query(`ALTER TABLE on_ecoute_submissions ADD COLUMN IF NOT EXISTS submitter_ip TEXT DEFAULT ''`).catch(() => {});
 
   // Skins system
   await pool.query(`
@@ -876,7 +883,7 @@ app.get('/api/twitch-votes', async (req, res) => {
 // Upload config for On Écoute: accepts .mp3 and .wav, stored on DISK (not DB)
 const onEcouteUpload = multer({
   dest: onEcouteDir,
-  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB max
+  limits: { fileSize: 40 * 1024 * 1024 }, // 40MB max
   fileFilter: (req, file, cb) => {
     const allowed = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav'];
     if (allowed.includes(file.mimetype)) {
@@ -887,20 +894,32 @@ const onEcouteUpload = multer({
   },
 });
 
-// Rate limit On Écoute submissions: 5 per hour per IP
+// Rate limit On Écoute submissions: 3 per hour per IP
 const onEcouteLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 5,
+  max: 3,
   message: { error: 'Trop de soumissions, réessaie plus tard' },
 });
+
+// Valid genres for On Écoute
+const ON_ECOUTE_GENRES = [
+  'Pop', 'Rock', 'Hip-Hop', 'Rap', 'Trap', 'Drill', 'R&B', 'Soul', 'Funk', 'Jazz', 'Blues',
+  'Reggae', 'Dancehall', 'Afrobeat', 'Amapiano', 'Reggaeton', 'Salsa', 'Merengue', 'Bachata',
+  'Techno', 'House', 'Deep House', 'Tech House', 'EDM', 'Dubstep', 'Drum and Bass', 'Trance',
+  'Hardstyle', 'Phonk', 'Hyperpop', 'K-Pop', 'J-Pop', 'Country', 'Folk', 'Indie', 'Alternative',
+  'Punk', 'Metal', 'Heavy Metal', 'Death Metal', 'Black Metal', 'Grindcore', 'Shoegaze',
+  'Synthwave', 'Disco', 'Lo-fi', 'Ambient', 'Classique', 'Opéra', 'Gospel', 'Ska', 'Rockabilly',
+  'Bossa Nova', 'Autre'
+];
 
 // Submit a track to On Écoute (public) — files stored on DISK
 app.post('/api/on-ecoute/submit', onEcouteLimiter, onEcouteUpload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Fichier audio requis (.mp3 ou .wav)' });
 
-    const { submitted_by } = req.body;
+    const { submitted_by, genre, message } = req.body;
     let { title, artist } = req.body;
+    const submitterIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '';
 
     if (submitted_by && submitted_by.length > 50) {
       fs.unlinkSync(req.file.path);
@@ -909,6 +928,23 @@ app.post('/api/on-ecoute/submit', onEcouteLimiter, onEcouteUpload.single('audio'
     if (title && title.length > 200) {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: 'Titre trop long (max 200 caractères)' });
+    }
+    if (message && message.length > 500) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Message trop long (max 500 caractères)' });
+    }
+
+    // Deduplication: only 1 submission per IP, delete the old one
+    if (submitterIp) {
+      const { rows: existing } = await pool.query(
+        "SELECT id, file_path FROM on_ecoute_submissions WHERE submitter_ip = $1 AND status IN ('pending', 'approved')",
+        [submitterIp]
+      );
+      for (const old of existing) {
+        const oldPath = path.join(onEcouteDir, old.file_path);
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        await pool.query('DELETE FROM on_ecoute_submissions WHERE id = $1', [old.id]);
+      }
     }
 
     const mimetype = req.file.mimetype || 'audio/mpeg';
@@ -930,15 +966,26 @@ app.post('/api/on-ecoute/submit', onEcouteLimiter, onEcouteUpload.single('audio'
     }
     if (!title) title = req.file.originalname.replace(/\.(mp3|wav)$/i, '');
 
+    const validGenre = genre && ON_ECOUTE_GENRES.includes(genre) ? genre : '';
+
     const { rows } = await pool.query(
-      'INSERT INTO on_ecoute_submissions (title, artist, file_path, file_mimetype, submitted_by) VALUES ($1, $2, $3, $4, $5) RETURNING id, title, artist, submitted_by, status, created_at',
-      [title, artist || '', finalName, mimetype, submitted_by || 'Anonyme']
+      `INSERT INTO on_ecoute_submissions (title, artist, genre, message, file_path, file_mimetype, submitted_by, submitter_ip)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, title, artist, genre, submitted_by, status, created_at`,
+      [title, artist || '', validGenre, (message || '').slice(0, 500), finalName, mimetype, submitted_by || 'Anonyme', submitterIp]
     );
 
     // Create vote row
     await pool.query('INSERT INTO on_ecoute_votes (submission_id) VALUES ($1)', [rows[0].id]);
 
-    res.json(rows[0]);
+    // If there were duplicates, inform the user
+    const hadDuplicates = submitterIp ? (await pool.query(
+      "SELECT COUNT(*) as c FROM on_ecoute_submissions WHERE submitter_ip = $1", [submitterIp]
+    )).rows[0].c > 1 : false;
+
+    const result = rows[0];
+    if (hadDuplicates) result.replaced = true;
+    res.json(result);
   } catch (err) {
     console.error('On Écoute submit error:', err);
     if (req.file && req.file.path && fs.existsSync(req.file.path)) {
@@ -958,7 +1005,7 @@ app.get('/api/on-ecoute/count', async (req, res) => {
 app.get('/api/on-ecoute/submissions', requireAdmin, async (req, res) => {
   const status = req.query.status || 'pending';
   const { rows } = await pool.query(
-    `SELECT s.id, s.title, s.artist, s.submitted_by, s.status, s.created_at, v.fire, v.up, v.down
+    `SELECT s.id, s.title, s.artist, s.genre, s.message, s.submitted_by, s.status, s.created_at, v.fire, v.up, v.down
      FROM on_ecoute_submissions s
      LEFT JOIN on_ecoute_votes v ON v.submission_id = s.id
      WHERE s.status = $1
@@ -966,6 +1013,38 @@ app.get('/api/on-ecoute/submissions', requireAdmin, async (req, res) => {
     [status]
   );
   res.json(rows);
+});
+
+// Random submission for admin (On Écoute radio mode)
+app.get('/api/on-ecoute/random', requireAdmin, async (req, res) => {
+  try {
+    const genre = req.query.genre || '';
+    const excludeId = req.query.exclude ? parseInt(req.query.exclude) : 0;
+    let query = `SELECT s.id, s.title, s.artist, s.genre, s.message, s.submitted_by, s.status, s.created_at, v.fire, v.up, v.down
+       FROM on_ecoute_submissions s
+       LEFT JOIN on_ecoute_votes v ON v.submission_id = s.id
+       WHERE s.status = 'pending'`;
+    const params = [];
+    if (genre) {
+      params.push(genre);
+      query += ` AND s.genre = $${params.length}`;
+    }
+    if (excludeId) {
+      params.push(excludeId);
+      query += ` AND s.id != $${params.length}`;
+    }
+    query += ' ORDER BY RANDOM() LIMIT 1';
+    const { rows } = await pool.query(query, params);
+    res.json(rows[0] || null);
+  } catch (err) {
+    console.error('On Écoute random error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// List genres endpoint for admin
+app.get('/api/on-ecoute/genres', requireAdmin, async (req, res) => {
+  res.json(ON_ECOUTE_GENRES);
 });
 
 // Update submission status (admin)
@@ -1048,7 +1127,7 @@ app.get('/api/on-ecoute/audio/:id', async (req, res) => {
 app.get('/api/on-ecoute/playlist', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT s.id, s.title, s.artist, s.submitted_by, s.status, s.created_at, v.fire, v.up, v.down
+      `SELECT s.id, s.title, s.artist, s.genre, s.message, s.submitted_by, s.status, s.created_at, v.fire, v.up, v.down
        FROM on_ecoute_submissions s
        LEFT JOIN on_ecoute_votes v ON v.submission_id = s.id
        WHERE s.status IN ('approved', 'playing')

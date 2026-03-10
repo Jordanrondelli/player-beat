@@ -230,13 +230,13 @@
 
   <div class="card">
     <h2>Propose ton morceau</h2>
-    <p>Fichiers acceptes : .mp3 et .wav uniquement (15 Mo max)</p>
+    <p>Fichiers acceptes : .mp3 et .wav uniquement (40 Mo max). Un seul son par personne !</p>
 
     <form id="submitForm" novalidate>
       <div class="dropzone" id="dropzone">
         <div class="dropzone-icon">&#x1F3B5;</div>
         <div class="dropzone-text">Glisse ton fichier ici ou <strong>clique pour choisir</strong></div>
-        <div class="dropzone-formats">.mp3 / .wav</div>
+        <div class="dropzone-formats">.mp3 / .wav &mdash; 40 Mo max</div>
         <input type="file" id="audioFile" accept=".mp3,.wav,audio/mpeg,audio/wav">
       </div>
 
@@ -252,6 +252,67 @@
       </div>
 
       <div class="field">
+        <label>Genre musical</label>
+        <select id="trackGenre" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,0.04);color:#fff;font-size:14px;font-family:inherit;outline:none;">
+          <option value="" style="background:#1a1510">-- Choisis un genre --</option>
+          <option value="Pop" style="background:#1a1510">Pop</option>
+          <option value="Rock" style="background:#1a1510">Rock</option>
+          <option value="Hip-Hop" style="background:#1a1510">Hip-Hop</option>
+          <option value="Rap" style="background:#1a1510">Rap</option>
+          <option value="Trap" style="background:#1a1510">Trap</option>
+          <option value="Drill" style="background:#1a1510">Drill</option>
+          <option value="R&amp;B" style="background:#1a1510">R&amp;B</option>
+          <option value="Soul" style="background:#1a1510">Soul</option>
+          <option value="Funk" style="background:#1a1510">Funk</option>
+          <option value="Jazz" style="background:#1a1510">Jazz</option>
+          <option value="Blues" style="background:#1a1510">Blues</option>
+          <option value="Reggae" style="background:#1a1510">Reggae</option>
+          <option value="Dancehall" style="background:#1a1510">Dancehall</option>
+          <option value="Afrobeat" style="background:#1a1510">Afrobeat</option>
+          <option value="Amapiano" style="background:#1a1510">Amapiano</option>
+          <option value="Reggaeton" style="background:#1a1510">Reggaeton</option>
+          <option value="Salsa" style="background:#1a1510">Salsa</option>
+          <option value="Merengue" style="background:#1a1510">Merengue</option>
+          <option value="Bachata" style="background:#1a1510">Bachata</option>
+          <option value="Techno" style="background:#1a1510">Techno</option>
+          <option value="House" style="background:#1a1510">House</option>
+          <option value="Deep House" style="background:#1a1510">Deep House</option>
+          <option value="Tech House" style="background:#1a1510">Tech House</option>
+          <option value="EDM" style="background:#1a1510">EDM</option>
+          <option value="Dubstep" style="background:#1a1510">Dubstep</option>
+          <option value="Drum and Bass" style="background:#1a1510">Drum and Bass</option>
+          <option value="Trance" style="background:#1a1510">Trance</option>
+          <option value="Hardstyle" style="background:#1a1510">Hardstyle</option>
+          <option value="Phonk" style="background:#1a1510">Phonk</option>
+          <option value="Hyperpop" style="background:#1a1510">Hyperpop</option>
+          <option value="K-Pop" style="background:#1a1510">K-Pop</option>
+          <option value="J-Pop" style="background:#1a1510">J-Pop</option>
+          <option value="Country" style="background:#1a1510">Country</option>
+          <option value="Folk" style="background:#1a1510">Folk</option>
+          <option value="Indie" style="background:#1a1510">Indie</option>
+          <option value="Alternative" style="background:#1a1510">Alternative</option>
+          <option value="Punk" style="background:#1a1510">Punk</option>
+          <option value="Metal" style="background:#1a1510">Metal</option>
+          <option value="Heavy Metal" style="background:#1a1510">Heavy Metal</option>
+          <option value="Death Metal" style="background:#1a1510">Death Metal</option>
+          <option value="Black Metal" style="background:#1a1510">Black Metal</option>
+          <option value="Grindcore" style="background:#1a1510">Grindcore</option>
+          <option value="Shoegaze" style="background:#1a1510">Shoegaze</option>
+          <option value="Synthwave" style="background:#1a1510">Synthwave</option>
+          <option value="Disco" style="background:#1a1510">Disco</option>
+          <option value="Lo-fi" style="background:#1a1510">Lo-fi</option>
+          <option value="Ambient" style="background:#1a1510">Ambient</option>
+          <option value="Classique" style="background:#1a1510">Classique</option>
+          <option value="Op&eacute;ra" style="background:#1a1510">Op&eacute;ra</option>
+          <option value="Gospel" style="background:#1a1510">Gospel</option>
+          <option value="Ska" style="background:#1a1510">Ska</option>
+          <option value="Rockabilly" style="background:#1a1510">Rockabilly</option>
+          <option value="Bossa Nova" style="background:#1a1510">Bossa Nova</option>
+          <option value="Autre" style="background:#1a1510">Autre</option>
+        </select>
+      </div>
+
+      <div class="field">
         <label>Titre du morceau (optionnel)</label>
         <input type="text" id="trackTitle" placeholder="Sera detecte automatiquement si vide" maxlength="200">
       </div>
@@ -259,6 +320,12 @@
       <div class="field">
         <label>Artiste (optionnel)</label>
         <input type="text" id="trackArtist" placeholder="Sera detecte automatiquement si vide" maxlength="200">
+      </div>
+
+      <div class="field">
+        <label>Un petit mot sur toi / ton son (optionnel)</label>
+        <textarea id="trackMessage" placeholder="Dis-nous quelque chose..." maxlength="500" rows="3"
+          style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,0.04);color:#fff;font-size:14px;font-family:inherit;outline:none;resize:vertical;"></textarea>
       </div>
 
       <button type="submit" class="submit-btn" id="submitBtn" disabled>ENVOYER MON SON</button>
@@ -308,8 +375,8 @@
         showToast('Seuls les fichiers .mp3 et .wav sont acceptes', 'error');
         return;
       }
-      if (file.size > 15 * 1024 * 1024) {
-        showToast('Fichier trop lourd (max 15 Mo)', 'error');
+      if (file.size > 40 * 1024 * 1024) {
+        showToast('Fichier trop lourd (max 40 Mo)', 'error');
         return;
       }
       selectedFile = file;
@@ -339,6 +406,8 @@
       formData.append('submitted_by', document.getElementById('submittedBy').value.trim() || 'Anonyme');
       formData.append('title', document.getElementById('trackTitle').value.trim());
       formData.append('artist', document.getElementById('trackArtist').value.trim());
+      formData.append('genre', document.getElementById('trackGenre').value);
+      formData.append('message', document.getElementById('trackMessage').value.trim());
 
       try {
         const res = await fetch('/api/on-ecoute/submit', {
@@ -348,7 +417,11 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Erreur');
 
-        showToast('Ton son a ete envoye ! Il sera review par l\'equipe.', 'success');
+        if (data.replaced) {
+          showToast('Ton ancien son a ete remplace par celui-ci !', 'success');
+        } else {
+          showToast('Ton son a ete envoye ! Il sera review par l\'equipe.', 'success');
+        }
         // Reset form
         selectedFile = null;
         fileInput.value = '';
@@ -357,6 +430,8 @@
         document.getElementById('submittedBy').value = '';
         document.getElementById('trackTitle').value = '';
         document.getElementById('trackArtist').value = '';
+        document.getElementById('trackGenre').value = '';
+        document.getElementById('trackMessage').value = '';
         loadCount();
       } catch (err) {
         showToast(err.message || 'Erreur lors de l\'envoi', 'error');

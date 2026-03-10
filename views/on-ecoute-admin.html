@@ -474,7 +474,9 @@
               <div class="track-meta">
                 ${item.artist ? escapeHtml(item.artist) + ' &middot; ' : ''}
                 par <span class="by">${escapeHtml(item.submitted_by || 'Anonyme')}</span>
+                ${item.genre ? ' &middot; <span style="color:#e8b94a">' + escapeHtml(item.genre) + '</span>' : ''}
               </div>
+              ${item.message ? '<div class="track-meta" style="font-style:italic;margin-top:4px;color:rgba(255,255,255,0.35)">&laquo; ' + escapeHtml(item.message) + ' &raquo;</div>' : ''}
               <div class="track-date">${date}</div>
             </div>
             <div class="track-votes">

@@ -343,6 +343,79 @@
     }
     .create-skin-row input:focus { border-color: rgba(255,120,60,.4); }
 
+    /* On Écoute card */
+    .oe-card {
+      border-radius: 16px;
+      background: linear-gradient(165deg, rgba(200,148,62,.08) 0%, rgba(12,20,55,.4) 100%);
+      border: 1px solid rgba(200,148,62,.2);
+      padding: 28px;
+    }
+    .oe-genre-badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, rgba(200,148,62,.2), rgba(200,148,62,.1));
+      color: #e8b94a;
+      font-size: 12px; font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 14px;
+    }
+    .oe-title {
+      font-family: 'Bangers', cursive;
+      font-size: 26px; letter-spacing: 2px;
+      margin-bottom: 4px;
+    }
+    .oe-artist {
+      font-size: 14px; color: rgba(255,255,255,.5);
+      margin-bottom: 12px;
+    }
+    .oe-submitter {
+      font-size: 13px; color: rgba(200,148,62,.8);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .oe-message {
+      font-size: 13px;
+      color: rgba(255,255,255,.5);
+      font-style: italic;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: rgba(255,255,255,.03);
+      border-left: 3px solid rgba(200,148,62,.3);
+      margin-top: 12px;
+      line-height: 1.5;
+    }
+    .oe-preview-row {
+      display: flex; align-items: center; gap: 12px;
+      margin-top: 16px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: rgba(0,0,0,.2);
+    }
+    .oe-preview-btn {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      border: 2px solid rgba(200,148,62,.4);
+      background: none;
+      color: #e8b94a;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .2s;
+      flex-shrink: 0;
+    }
+    .oe-preview-btn:hover {
+      background: rgba(200,148,62,.15);
+      border-color: #e8b94a;
+    }
+    .oe-preview-btn.active {
+      animation: pulse-gold 1.5s infinite;
+    }
+    @keyframes pulse-gold {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(200,148,62,.3); }
+      50% { box-shadow: 0 0 0 8px rgba(200,148,62,0); }
+    }
+
     @media (max-width: 600px) {
       .settings-grid { grid-template-columns: 1fr; }
       .admin-header { flex-direction: column; gap: 12px; text-align: center; }
@@ -370,6 +443,7 @@
     <!-- Tab navigation -->
     <div class="tab-nav">
       <button class="tab-btn active" data-tab="queue">&#128203; File d'attente</button>
+      <button class="tab-btn" data-tab="on-ecoute">&#127911; On &Eacute;coute</button>
       <button class="tab-btn" data-tab="settings">&#9881; R&eacute;glages</button>
       <button class="tab-btn" data-tab="skins">&#127912; Skins</button>
       <button class="tab-btn" data-tab="history">&#9989; Historique</button>
@@ -400,6 +474,39 @@
     </div>
 
     </div><!-- end tab-queue -->
+
+    <!-- TAB: On Écoute -->
+    <div class="tab-content" id="tab-on-ecoute">
+    <div class="admin-section">
+      <div class="section-title">&#127911; ON &Eacute;COUTE &mdash; MODE RADIO <span class="count" id="oeCount"></span></div>
+      <div class="panel">
+
+        <!-- Genre filter -->
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:20px; flex-wrap:wrap">
+          <label style="font-size:11px; font-weight:700; color:rgba(255,255,255,.4); text-transform:uppercase; letter-spacing:1.5px">Filtrer par genre :</label>
+          <select id="oeGenreFilter" class="setting-input" style="flex:1; min-width:180px; max-width:300px">
+            <option value="">Tous les genres</option>
+          </select>
+          <a href="/on-ecoute/admin" target="_blank" class="q-btn" style="text-decoration:none; font-size:11px">Voir admin complet</a>
+        </div>
+
+        <!-- Current random submission card -->
+        <div id="oeCurrentCard" style="min-height:200px">
+          <div class="queue-empty">Chargement...</div>
+        </div>
+
+        <!-- Navigation -->
+        <div style="display:flex; gap:10px; margin-top:16px">
+          <button class="save-btn" id="oeSkipBtn" style="flex:1; background:linear-gradient(135deg,rgba(255,255,255,.1),rgba(255,255,255,.06)); box-shadow:none; color:rgba(255,255,255,.7)">&#x23ED; SKIP &mdash; SUIVANT</button>
+          <button class="save-btn" id="oePlayBtn" style="flex:1">&#9654; JOUER DANS LE PLAYER</button>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:8px">
+          <button class="q-btn reject" id="oeRejectBtn" style="flex:1; text-align:center; padding:10px">&#10005; REJETER</button>
+          <button class="q-btn" id="oeDeleteBtn" style="flex:1; text-align:center; padding:10px; border-color:rgba(255,60,40,.3); color:#ff4040">&#128465; SUPPRIMER</button>
+        </div>
+      </div>
+    </div>
+    </div><!-- end tab-on-ecoute -->
 
     <!-- TAB: Settings -->
     <div class="tab-content" id="tab-settings">
@@ -884,6 +991,149 @@
     document.getElementById('newSkinName').addEventListener('keydown', e => {
       if (e.key === 'Enter') createSkin();
     });
+
+    // ===== ON ÉCOUTE =====
+    let oeCurrentSubmission = null;
+    let oePreviewAudio = new Audio();
+    let oePreviewing = false;
+
+    async function oeLoadGenres() {
+      try {
+        const res = await fetch('/api/on-ecoute/genres');
+        const genres = await res.json();
+        const sel = document.getElementById('oeGenreFilter');
+        genres.forEach(g => {
+          const opt = document.createElement('option');
+          opt.value = g;
+          opt.textContent = g;
+          sel.appendChild(opt);
+        });
+      } catch {}
+    }
+
+    async function oeLoadRandom() {
+      try {
+        const genre = document.getElementById('oeGenreFilter').value;
+        const excludeId = oeCurrentSubmission ? oeCurrentSubmission.id : 0;
+        const url = `/api/on-ecoute/random?genre=${encodeURIComponent(genre)}&exclude=${excludeId}`;
+        const res = await fetch(url);
+        const item = await res.json();
+        oeCurrentSubmission = item;
+        oeRenderCard(item);
+        // Update count
+        const countRes = await fetch('/api/on-ecoute/count');
+        const countData = await countRes.json();
+        document.getElementById('oeCount').textContent = `(${countData.count} en attente)`;
+      } catch (err) {
+        console.error('OE load error:', err);
+      }
+    }
+
+    function oeRenderCard(item) {
+      const el = document.getElementById('oeCurrentCard');
+      if (!item) {
+        el.innerHTML = '<div class="queue-empty">Aucune soumission disponible</div>';
+        return;
+      }
+      el.innerHTML = `
+        <div class="oe-card">
+          ${item.genre ? `<div class="oe-genre-badge">${esc(item.genre)}</div>` : ''}
+          <div class="oe-title">${esc(item.title)}</div>
+          <div class="oe-artist">${item.artist ? esc(item.artist) : 'Artiste inconnu'}</div>
+          <div class="oe-submitter">Propos\u00e9 par ${esc(item.submitted_by || 'Anonyme')}</div>
+          ${item.message ? `<div class="oe-message">\u00ab ${esc(item.message)} \u00bb</div>` : ''}
+          <div class="oe-preview-row">
+            <button class="oe-preview-btn" id="oePreviewBtn" onclick="oeTogglePreview()">&#9654;</button>
+            <div style="flex:1">
+              <div style="font-size:12px;color:rgba(255,255,255,.4)">Pr\u00e9-\u00e9coute</div>
+              <div style="font-size:11px;color:rgba(255,255,255,.2)" id="oePreviewTime">0:00</div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function oeTogglePreview() {
+      if (!oeCurrentSubmission) return;
+      const btn = document.getElementById('oePreviewBtn');
+      if (oePreviewing) {
+        oePreviewAudio.pause();
+        oePreviewing = false;
+        if (btn) { btn.innerHTML = '&#9654;'; btn.classList.remove('active'); }
+      } else {
+        oePreviewAudio.src = `/api/on-ecoute/audio/${oeCurrentSubmission.id}`;
+        oePreviewAudio.play();
+        oePreviewing = true;
+        if (btn) { btn.innerHTML = '&#9208;'; btn.classList.add('active'); }
+      }
+    }
+
+    oePreviewAudio.addEventListener('ended', () => {
+      oePreviewing = false;
+      const btn = document.getElementById('oePreviewBtn');
+      if (btn) { btn.innerHTML = '&#9654;'; btn.classList.remove('active'); }
+    });
+
+    oePreviewAudio.addEventListener('timeupdate', () => {
+      const timeEl = document.getElementById('oePreviewTime');
+      if (timeEl && oePreviewAudio.duration) {
+        const cur = Math.floor(oePreviewAudio.currentTime);
+        const tot = Math.floor(oePreviewAudio.duration);
+        timeEl.textContent = `${Math.floor(cur/60)}:${String(cur%60).padStart(2,'0')} / ${Math.floor(tot/60)}:${String(tot%60).padStart(2,'0')}`;
+      }
+    });
+
+    document.getElementById('oeGenreFilter').addEventListener('change', () => {
+      oeCurrentSubmission = null;
+      oePreviewAudio.pause();
+      oePreviewing = false;
+      oeLoadRandom();
+    });
+
+    document.getElementById('oeSkipBtn').addEventListener('click', () => {
+      oePreviewAudio.pause();
+      oePreviewing = false;
+      oeLoadRandom();
+    });
+
+    document.getElementById('oePlayBtn').addEventListener('click', async () => {
+      if (!oeCurrentSubmission) return;
+      oePreviewAudio.pause();
+      oePreviewing = false;
+      // Approve the submission and mark it as playing in On Écoute overlay
+      await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'playing' }),
+      });
+      const btn = document.getElementById('oePlayBtn');
+      btn.textContent = '\u2713 ENVOY\u00c9 AU PLAYER';
+      setTimeout(() => { btn.innerHTML = '&#9654; JOUER DANS LE PLAYER'; }, 2000);
+      oeLoadRandom();
+    });
+
+    document.getElementById('oeRejectBtn').addEventListener('click', async () => {
+      if (!oeCurrentSubmission) return;
+      oePreviewAudio.pause();
+      oePreviewing = false;
+      await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected' }),
+      });
+      oeLoadRandom();
+    });
+
+    document.getElementById('oeDeleteBtn').addEventListener('click', async () => {
+      if (!oeCurrentSubmission) return;
+      if (!confirm('Supprimer cette soumission ?')) return;
+      oePreviewAudio.pause();
+      oePreviewing = false;
+      await fetch(`/api/on-ecoute/submissions/${oeCurrentSubmission.id}`, { method: 'DELETE' });
+      oeLoadRandom();
+    });
+
+    oeLoadGenres();
+    oeLoadRandom();
 
     // ===== INIT =====
     loadQueue();
