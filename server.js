@@ -103,6 +103,17 @@ async function initDB() {
       down INTEGER DEFAULT 0
     );
   `);
+  // Twitch votes for On Écoute: 1 vote per user per submission
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS on_ecoute_twitch_votes (
+      id SERIAL PRIMARY KEY,
+      submission_id INTEGER REFERENCES on_ecoute_submissions(id) ON DELETE CASCADE,
+      twitch_user TEXT NOT NULL,
+      vote_type TEXT NOT NULL,
+      UNIQUE(submission_id, twitch_user)
+    );
+  `);
+
   // Migrate: add new columns if missing
   await pool.query(`ALTER TABLE on_ecoute_submissions ADD COLUMN IF NOT EXISTS genre TEXT DEFAULT ''`).catch(() => {});
   await pool.query(`ALTER TABLE on_ecoute_submissions ADD COLUMN IF NOT EXISTS message TEXT DEFAULT ''`).catch(() => {});
@@ -815,7 +826,31 @@ async function startTwitchBot() {
     else return;
 
     try {
-      // Only vote on the currently PLAYING track
+      // Try ON ÉCOUTE first (priority: if an OE track is playing, vote goes there)
+      const { rows: oePlaying } = await pool.query(
+        "SELECT id FROM on_ecoute_submissions WHERE status = 'playing' LIMIT 1"
+      );
+      if (oePlaying.length > 0) {
+        const submissionId = oePlaying[0].id;
+        // 1 vote per user per submission (UNIQUE constraint prevents duplicates)
+        const { rowCount } = await pool.query(
+          'INSERT INTO on_ecoute_twitch_votes (submission_id, twitch_user, vote_type) VALUES ($1, $2, $3) ON CONFLICT (submission_id, twitch_user) DO NOTHING',
+          [submissionId, user, voteType]
+        );
+        if (rowCount > 0) {
+          await pool.query(
+            `UPDATE on_ecoute_votes SET
+              fire = fire + CASE WHEN $1 = 'fire' THEN 1 ELSE 0 END,
+              up = up + CASE WHEN $1 = 'up' THEN 1 ELSE 0 END,
+              down = down + CASE WHEN $1 = 'down' THEN 1 ELSE 0 END
+            WHERE submission_id = $2`,
+            [voteType, submissionId]
+          );
+        }
+        return;
+      }
+
+      // Fallback: vote on main player queue track
       const { rows: playing } = await pool.query(
         "SELECT id FROM queue WHERE status = 'playing' LIMIT 1"
       );
@@ -1143,9 +1178,14 @@ app.get('/api/on-ecoute/playlist', async (req, res) => {
 // Mark as now playing (overlay calls this)
 app.post('/api/on-ecoute/now-playing/:id', async (req, res) => {
   const { id } = req.params;
-  await pool.query("UPDATE on_ecoute_submissions SET status = 'approved' WHERE status = 'playing'");
+  // Previous playing track → "played" (déjà écouté), votes stay as final result
+  await pool.query("UPDATE on_ecoute_submissions SET status = 'played' WHERE status = 'playing'");
+  // New track starts playing
   await pool.query("UPDATE on_ecoute_submissions SET status = 'playing' WHERE id = $1", [id]);
+  // Reset vote counts for this new track
   await pool.query('UPDATE on_ecoute_votes SET fire = 0, up = 0, down = 0 WHERE submission_id = $1', [id]);
+  // Clear twitch votes for this submission so everyone can vote fresh
+  await pool.query('DELETE FROM on_ecoute_twitch_votes WHERE submission_id = $1', [id]);
   res.json({ success: true });
 });
 
