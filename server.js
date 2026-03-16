@@ -633,8 +633,12 @@ app.get('/api/yt-audio/:videoId', ytProxyLimiter, async (req, res) => {
     tryPiped('https://pipedapi.kavin.rocks'),
     tryPiped('https://pipedapi.adminforge.de'),
     tryPiped('https://piped-api.codespace.cz'),
+    tryPiped('https://pipedapi.darkness.services'),
+    tryPiped('https://pipedapi.drgns.space'),
     tryInvidious('https://inv.nadeko.net'),
     tryInvidious('https://yewtu.be'),
+    tryInvidious('https://invidious.nerdvpn.de'),
+    tryInvidious('https://invidious.privacyredirect.com'),
   ];
 
   // Promise.any resolves with the first fulfilled promise
@@ -705,6 +709,7 @@ app.get('/api/yt-audio/:videoId', ytProxyLimiter, async (req, res) => {
   const cobaltProviders = [
     tryCobaltV10('https://api.cobalt.tools'),
     tryCobaltV10('https://cobalt-api.ayo.tf'),
+    tryCobaltV10('https://cobalt-backend.canine.tools'),
     tryCobaltV7('https://cobaltapi.clebootin.com'),
     tryCobaltV7('https://ca.haloz.at'),
     tryCobaltV7('https://nyc1.coapi.ggtyler.dev'),
@@ -717,10 +722,33 @@ app.get('/api/yt-audio/:videoId', ytProxyLimiter, async (req, res) => {
     res.set({ 'Content-Type': result.mime, 'Content-Length': result.buf.length, 'Cache-Control': 'public, max-age=86400' });
     return res.send(result.buf);
   } catch (e) {
-    console.log('YT proxy: all Cobalt instances failed too');
+    console.log('YT proxy: all Cobalt instances failed too, trying ytdl-core...');
   }
 
-  res.status(502).json({ error: 'Audio YouTube indisponible' });
+  // Final fallback: ytdl-core direct download
+  try {
+    console.log(`YT proxy ytdl-core: trying ${videoId}`);
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    const info = await ytdl.getInfo(url);
+    const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
+    if (!format || !format.url) throw new Error('no audio format found');
+    const audioRes = await fetch(format.url, {
+      signal: AbortSignal.timeout(30000),
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!audioRes.ok) throw new Error(`download HTTP ${audioRes.status}`);
+    const buf = Buffer.from(await audioRes.arrayBuffer());
+    if (buf.length < 1000) throw new Error('too small');
+    const mime = format.mimeType?.split(';')[0] || 'audio/webm';
+    console.log(`YT proxy: success via ytdl-core! ${buf.length} bytes (${mime})`);
+    pool.query("UPDATE queue SET file_data = $1, file_mimetype = $2 WHERE source_url LIKE $3 AND file_data IS NULL", [buf, mime, `%${videoId}%`]).catch(() => {});
+    res.set({ 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400' });
+    return res.send(buf);
+  } catch (e) {
+    console.log(`YT proxy ytdl-core failed: ${e.message}`);
+  }
+
+  res.status(502).json({ error: 'Audio YouTube indisponible — tous les providers ont échoué' });
 });
 
 // ===== PLAYER PLAYLIST (public) =====
